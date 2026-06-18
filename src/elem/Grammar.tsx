@@ -47,6 +47,7 @@ export default function Grammar({ student, onBack }: GrammarProps) {
   const [score, setScore] = useState(0);
   const [monthlyRankings, setMonthlyRankings] = useState<RankingItem[]>([]);
 
+  // 💡 [수정 완료] 구글 시트 업데이트 지연 방어 로직이 적용된 함수
   const fetchGlobalRankings = async () => {
     try {
       const response = await fetch(`${GOOGLE_SHEET_RANKING_CSV_URL}&_nocache=${Date.now()}`);
@@ -98,6 +99,22 @@ export default function Grammar({ student, onBack }: GrammarProps) {
         }
       });
       
+      // 💡 구글 시트 업데이트 지연 방어 로직 추가 부분
+      const localCacheStr = localStorage.getItem('global_rankings_cache');
+      if (localCacheStr) {
+        const localCache = JSON.parse(localCacheStr) as RankingItem[];
+        const myLocalData = localCache.find(p => p.name === student.name);
+        
+        if (myLocalData) {
+          if (!accumulatedScoresMap[student.name]) {
+            accumulatedScoresMap[student.name] = { ...myLocalData };
+          } else if (accumulatedScoresMap[student.name].score < myLocalData.score) {
+            // 시트에서 가져온 점수보다 로컬 점수가 더 높다면 (시트 갱신 지연 중) 로컬 점수 유지
+            accumulatedScoresMap[student.name].score = myLocalData.score;
+          }
+        }
+      }
+
       const sortedList = Object.values(accumulatedScoresMap)
         .sort((a, b) => b.score - a.score)
         .slice(0, 5);
@@ -353,7 +370,6 @@ export default function Grammar({ student, onBack }: GrammarProps) {
     sendScoreToGoogleSheet(score, currentLevel);
   };
 
-  // 💡 강제 종료 및 뒤로가기 시 점수 보존을 위한 함수 추가
   const handleExit = () => {
     if ((gameState === 'playing' || gameState === 'levelUp') && score > 0) {
       saveAndLoadRankings();
@@ -373,7 +389,6 @@ export default function Grammar({ student, onBack }: GrammarProps) {
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f0f4f8', fontFamily: 'Pretendard, sans-serif' }}>
       <div style={{ background: 'white', padding: '40px', borderRadius: '24px', textAlign: 'center', width: '380px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)', position: 'relative' }}>
         
-        {/* 💡 뒤로가기 버튼에 handleExit 함수 연결 */}
         <button 
           onClick={handleExit} 
           style={{ position: 'absolute', top: '24px', left: '24px', background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', zIndex: 10, color: '#333' }}
