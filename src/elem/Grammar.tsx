@@ -6,9 +6,9 @@ interface GrammarProps {
 }
 
 interface SheetItem {
-  bookId: string;    // 1열: book_id
-  english: string;   // 5열: english
-  korean: string;    // 6열: korean
+  bookId: string;
+  english: string;
+  korean: string;
 }
 
 interface Question {
@@ -25,13 +25,8 @@ interface RankingItem {
   date: string;
 }
 
-// 🌐 1. 문장 데이터 전송용 TSV 주소
 const GOOGLE_SHEET_TSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe/pub?gid=752237439&single=true&output=tsv";
-
-// 🚀 2. 점수 누적용 구글 웹 앱 URL 
 const GOOGLE_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyOAbzxggopAl9QhrG2VHSmo0yCEcdIi89xhgvT5nOWkk9sZbiTtB-XjQd4GVhV4MhE/exec";
-
-// 🏆 3. 랭킹 데이터 CSV 주소 (원장님 최신 주소 적용 완료)
 const GOOGLE_SHEET_RANKING_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe/pub?gid=1601616668&single=true&output=csv";
 
 export default function Grammar({ student, onBack }: GrammarProps) {
@@ -44,7 +39,7 @@ export default function Grammar({ student, onBack }: GrammarProps) {
   
   const [sentenceDeck, setSentenceDeck] = useState<SheetItem[]>([]);
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
-  const [usedSentences, setUsedSentences] = useState<Set<string>>(new Set()); // 💡 중복 방지용 기억 장치
+  const [usedSentences, setUsedSentences] = useState<Set<string>>(new Set()); 
   
   const [round, setRound] = useState(1);
   const [timeLeft, setTimeLeft] = useState(10);
@@ -52,7 +47,6 @@ export default function Grammar({ student, onBack }: GrammarProps) {
   const [score, setScore] = useState(0);
   const [monthlyRankings, setMonthlyRankings] = useState<RankingItem[]>([]);
 
-  // 🛠️ 랭킹 데이터 불러오기 로직 (누적 합산 적용)
   const fetchGlobalRankings = async () => {
     try {
       const response = await fetch(`${GOOGLE_SHEET_RANKING_CSV_URL}&_nocache=${Date.now()}`);
@@ -60,7 +54,7 @@ export default function Grammar({ student, onBack }: GrammarProps) {
       const text = await response.text();
       
       if (text.trim().startsWith('<')) {
-        setMonthlyRankings([{ name: "⚠️ CSV가 아닌 일반 주소 입력됨", score: 0, grade: "웹게시확인", date: "" }]);
+        setMonthlyRankings([{ name: "⚠️ CSV 에러", score: 0, grade: "", date: "" }]);
         return;
       }
       
@@ -69,7 +63,6 @@ export default function Grammar({ student, onBack }: GrammarProps) {
       const currentYear = now.getFullYear();
       const currentMonth = now.getMonth() + 1;
       
-      // 💡 여기서부터 누적 합산을 위한 맵
       const accumulatedScoresMap: { [studentName: string]: RankingItem } = {};
       
       rows.forEach((row, index) => {
@@ -95,7 +88,6 @@ export default function Grammar({ student, onBack }: GrammarProps) {
              isCurrentMonth = true; 
           }
           
-          // 💡 최고 득점 갱신이 아닌, 이름이 같으면 점수를 계속 더합니다 (누적 득점)
           if (isCurrentMonth) {
             if (!accumulatedScoresMap[name]) {
               accumulatedScoresMap[name] = { name, score: scoreNum, grade, date: timestamp };
@@ -115,7 +107,6 @@ export default function Grammar({ student, onBack }: GrammarProps) {
         localStorage.setItem('global_rankings_cache', JSON.stringify(sortedList));
       }
     } catch (error) {
-      console.error("동기화 실패:", error);
       const localCache = localStorage.getItem('global_rankings_cache');
       if (localCache) {
           setMonthlyRankings(JSON.parse(localCache));
@@ -188,11 +179,8 @@ export default function Grammar({ student, onBack }: GrammarProps) {
     return filtered.length > 0 ? filtered : dbData;
   };
 
-  // 💡 중복 문장 필터링 적용
   const createShuffledDeck = (level: number, currentUsed: Set<string>): SheetItem[] => {
     let pool = getSentencesForStage(level).filter(s => !currentUsed.has(s.english));
-    
-    // 만약 해당 단계의 모든 문장을 다 소진했다면, 리셋하여 다시 불러옵니다.
     if (pool.length === 0) {
         pool = getSentencesForStage(level);
     }
@@ -271,7 +259,6 @@ export default function Grammar({ student, onBack }: GrammarProps) {
     let triggerLevelUp = false;
 
     if (isCorrect) {
-      // 💡 스피드 보너스 적용: 남은 시간이 많을수록 점수 상승
       setScore((prev) => prev + 10 + timeLeft);
       nextCorrectCount += 1;
       
@@ -281,7 +268,6 @@ export default function Grammar({ student, onBack }: GrammarProps) {
           nextLevel = currentLevel + 1;
           triggerLevelUp = true;
         } else {
-          // 💡 10단계 초과 시 무한 모드 (레벨업 화면 없이 계속 진행)
           nextLevel = 10;
         }
       }
@@ -344,11 +330,27 @@ export default function Grammar({ student, onBack }: GrammarProps) {
       });
       setTimeout(fetchGlobalRankings, 3000); 
     } catch (error) {
-      console.error("구글 시트 전송 실패:", error);
+      console.error("전송 실패:", error);
     }
   };
 
   const saveAndLoadRankings = () => {
+    // 💡 구글 시트 반영 전, 화면에 내 점수 즉시 합산 처리 (UX 최적화)
+    setMonthlyRankings(prev => {
+      const newRankings = [...prev];
+      const existingMe = newRankings.find(p => p.name === student.name);
+      
+      if (existingMe) {
+        existingMe.score += score;
+      } else {
+        newRankings.push({ name: student.name, score: score, grade: student.grade, date: '' });
+      }
+      
+      const sorted = newRankings.sort((a, b) => b.score - a.score).slice(0, 5);
+      localStorage.setItem('global_rankings_cache', JSON.stringify(sorted));
+      return sorted;
+    });
+
     sendScoreToGoogleSheet(score, currentLevel);
   };
 
@@ -481,7 +483,28 @@ export default function Grammar({ student, onBack }: GrammarProps) {
             </p>
 
             <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', marginBottom: '24px', textAlign: 'left' }}>
-              <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#64748b', fontWeight: 'bold', textAlign: 'center' }}>🏆 {new Date().getMonth() + 1}월 누적 득점 현황 (동기화 중...)</h4>
+              <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#64748b', fontWeight: 'bold', textAlign: 'center' }}>🏆 {new Date().getMonth() + 1}월 누적 득점 TOP 5</h4>
+              {monthlyRankings.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {monthlyRankings.map((player, idx) => {
+                    const isMe = player.name === student.name;
+                    return (
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', backgroundColor: isMe ? '#e0f2fe' : 'transparent', borderRadius: '8px' }}>
+                        <span style={{ fontWeight: isMe ? '700' : '500', fontSize: '14px', color: player.name.includes("⚠️") ? '#ef4444' : (isMe ? '#0369a1' : '#334155') }}>
+                          {player.name.includes("⚠️") ? player.name : `${idx + 1}. ${player.name}`}
+                        </span>
+                        <span style={{ fontWeight: '700', fontSize: '14px', color: isMe ? '#0369a1' : '#475569' }}>
+                          {player.score > 0 ? `${player.score.toLocaleString()}점` : player.grade}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '10px', color: '#94a3b8', fontSize: '14px', fontWeight: '500' }}>
+                  동기화 중입니다... 🚀
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: '12px' }}>
