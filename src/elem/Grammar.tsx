@@ -48,12 +48,17 @@ export default function Grammar({ student, onBack }: GrammarProps) {
   const [score, setScore] = useState(0);
   const [monthlyRankings, setMonthlyRankings] = useState<RankingItem[]>([]);
 
-  // 🚀 앱 시작 시 저장된 랭킹 정보 불러오기
+  // 🚀 앱 시작 시 저장된 랭킹 정보 불러오기 (안전 처리 추가)
   useEffect(() => {
     const key = getMonthlyStorageKey();
     const existingRaw = localStorage.getItem(key);
     if (existingRaw) {
-      setMonthlyRankings(JSON.parse(existingRaw));
+      try {
+        setMonthlyRankings(JSON.parse(existingRaw));
+      } catch (error) {
+        console.error("랭킹 데이터 로드 오류:", error);
+        localStorage.removeItem(key); // 데이터 꼬임 방지를 위해 초기화
+      }
     }
   }, []);
 
@@ -286,7 +291,15 @@ export default function Grammar({ student, onBack }: GrammarProps) {
   const saveAndLoadRankings = () => {
     const key = getMonthlyStorageKey();
     const existingRaw = localStorage.getItem(key);
-    const list: RankingItem[] = existingRaw ? JSON.parse(existingRaw) : [];
+    let list: RankingItem[] = [];
+    
+    if (existingRaw) {
+      try {
+        list = JSON.parse(existingRaw);
+      } catch (error) {
+        list = [];
+      }
+    }
 
     const newRecord: RankingItem = {
       name: student.name,
@@ -300,7 +313,7 @@ export default function Grammar({ student, onBack }: GrammarProps) {
     localStorage.setItem(key, JSON.stringify(sortedList));
     setMonthlyRankings(sortedList);
 
-    // ⭐ 방금 만든 구글 시트 전송 함수를 여기서 실행합니다!
+    // ⭐ 구글 시트 전송
     sendScoreToGoogleSheet(score, currentLevel);
   };
 
@@ -332,9 +345,11 @@ export default function Grammar({ student, onBack }: GrammarProps) {
               생각 랭킹전
             </h2>
             
-            {monthlyRankings.length > 0 && (
-              <div style={{ width: '100%', background: '#f8fafc', borderRadius: '16px', padding: '16px', marginBottom: '24px', textAlign: 'left', border: '1px solid #e2e8f0' }}>
-                <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#64748b', fontWeight: 'bold', textAlign: 'center' }}>🏆 {new Date().getMonth() + 1}월 TOP 5 랭킹</h4>
+            {/* 항상 랭킹창이 보이도록 수정된 부분 */}
+            <div style={{ width: '100%', background: '#f8fafc', borderRadius: '16px', padding: '16px', marginBottom: '24px', textAlign: 'left', border: '1px solid #e2e8f0' }}>
+              <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#64748b', fontWeight: 'bold', textAlign: 'center' }}>🏆 {new Date().getMonth() + 1}월 TOP 5 랭킹</h4>
+              
+              {monthlyRankings.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {monthlyRankings.map((player, idx) => {
                     const isMe = player.name === student.name;
@@ -348,8 +363,12 @@ export default function Grammar({ student, onBack }: GrammarProps) {
                     );
                   })}
                 </div>
-              </div>
-            )}
+              ) : (
+                <div style={{ textAlign: 'center', padding: '10px', color: '#94a3b8', fontSize: '14px', fontWeight: '500' }}>
+                  아직 이번 달 기록이 없습니다.<br/>첫 번째 랭커에 도전하세요! 🚀
+                </div>
+              )}
+            </div>
 
             <button 
               onClick={startGame} 
@@ -427,19 +446,26 @@ export default function Grammar({ student, onBack }: GrammarProps) {
 
             <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', marginBottom: '24px', textAlign: 'left' }}>
               <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#64748b', fontWeight: 'bold' }}>🗓️ {new Date().getMonth() + 1}월 실시간 TOP 5 랭킹</h4>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {monthlyRankings.map((player, idx) => {
-                  const isMe = player.name === student.name;
-                  return (
-                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: isMe ? '#e0f2fe' : 'transparent', borderRadius: '8px', border: isMe ? '1px solid #7dd3fc' : 'none' }}>
-                      <span style={{ fontWeight: isMe ? '700' : '500', fontSize: '14px', color: isMe ? '#0369a1' : '#334155' }}>
-                        {idx + 1}등. {player.name} ({player.grade})
-                      </span>
-                      <span style={{ fontWeight: '700', fontSize: '14px', color: isMe ? '#0369a1' : '#475569' }}>{player.score}점</span>
-                    </div>
-                  );
-                })}
-              </div>
+              
+              {monthlyRankings.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {monthlyRankings.map((player, idx) => {
+                    const isMe = player.name === student.name;
+                    return (
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: isMe ? '#e0f2fe' : 'transparent', borderRadius: '8px', border: isMe ? '1px solid #7dd3fc' : 'none' }}>
+                        <span style={{ fontWeight: isMe ? '700' : '500', fontSize: '14px', color: isMe ? '#0369a1' : '#334155' }}>
+                          {idx + 1}등. {player.name} ({player.grade})
+                        </span>
+                        <span style={{ fontWeight: '700', fontSize: '14px', color: isMe ? '#0369a1' : '#475569' }}>{player.score}점</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '10px', color: '#94a3b8', fontSize: '14px', fontWeight: '500' }}>
+                  이번 달 첫 번째 랭커가 되어보세요! 🚀
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: '12px' }}>
