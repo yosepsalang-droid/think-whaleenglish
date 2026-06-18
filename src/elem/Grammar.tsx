@@ -31,8 +31,8 @@ const GOOGLE_SHEET_TSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT
 // 🚀 2. 점수 누적용 원장님의 구글 웹 앱 URL 
 const GOOGLE_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyOAbzxggopAl9QhrG2VHSmo0yCEcdIi89xhgvT5nOWkk9sZbiTtB-XjQd4GVhV4MhE/exec";
 
-// 🏆 3. [확인 필요] 5번 점수저장 탭의 웹게시 CSV(또는 TSV) 주소를 입력해주세요.
-const GOOGLE_SHEET_RANKING_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe/pub?gid=2097787051&single=true&output=csv"; 
+// 🏆 3. [여기에 복사한 CSV 주소를 꼭 붙여넣으세요!]
+const GOOGLE_SHEET_RANKING_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe/pub?gid=1601616668&single=true&output=csv"; 
 
 export default function Grammar({ student, onBack }: GrammarProps) {
   const [dbData, setDbData] = useState<SheetItem[]>([]);
@@ -51,14 +51,23 @@ export default function Grammar({ student, onBack }: GrammarProps) {
   const [score, setScore] = useState(0);
   const [monthlyRankings, setMonthlyRankings] = useState<RankingItem[]>([]);
 
-  // 🛠️ [기능 개선] 안정적인 하이브리드형 글로벌 랭킹 파싱 엔진
+  // 🛠️ 랭킹 데이터 불러오기 로직 (에러 화면 표시 기능 추가)
   const fetchGlobalRankings = async () => {
-    if (!GOOGLE_SHEET_RANKING_CSV_URL || GOOGLE_SHEET_RANKING_CSV_URL.includes("여기에")) return;
+    if (!GOOGLE_SHEET_RANKING_CSV_URL || GOOGLE_SHEET_RANKING_CSV_URL.includes("여기를_지우고")) {
+      setMonthlyRankings([{ name: "⚠️ CSV 주소가 미입력됨", score: 0, grade: "원장님확인", date: "" }]);
+      return;
+    }
     
     try {
       const response = await fetch(`${GOOGLE_SHEET_RANKING_CSV_URL}&_nocache=${Date.now()}`);
       if (!response.ok) throw new Error("랭킹 데이터 로드 실패");
       const text = await response.text();
+      
+      // 구글 시트 주소가 잘못되어 HTML 페이지(로그인 화면 등)를 불러왔을 때의 방어 로직
+      if (text.trim().startsWith('<')) {
+        setMonthlyRankings([{ name: "⚠️ CSV가 아닌 일반 주소 입력됨", score: 0, grade: "웹게시확인", date: "" }]);
+        return;
+      }
       
       const rows = text.split(/\r?\n/);
       const now = new Date();
@@ -66,21 +75,20 @@ export default function Grammar({ student, onBack }: GrammarProps) {
       const currentMonth = now.getMonth() + 1;
       
       const bestScoresMap: { [studentName: string]: RankingItem } = {};
+      let validDataCount = 0;
       
       rows.forEach((row, index) => {
         if (index === 0 || !row.trim()) return;
         
-        // 콤마(CSV) 분할 및 탭(TSV) 분할 오작동 자동 감지 및 방어 방식 채택
-        const cells = row.includes('\t') ? row.split('\t') : row.split(',');
+        const cells = row.split(',');
         if (cells.length >= 4) {
-          const timestamp = cells[0].replace(/"/g, '').trim();
-          const name = cells[1].replace(/"/g, '').trim();
-          const grade = cells[2].replace(/"/g, '').trim();
-          const scoreNum = parseInt(cells[3].replace(/"/g, '').trim(), 10) || 0;
+          const timestamp = cells[0]?.replace(/"/g, '').trim();
+          const name = cells[1]?.replace(/"/g, '').trim();
+          const grade = cells[2]?.replace(/"/g, '').trim();
+          const scoreNum = parseInt(cells[3]?.replace(/"/g, '').trim(), 10) || 0;
           
-          if (!name) return;
+          if (!name || name === "student_name") return;
 
-          // 날짜 파싱 조건 유연화 (정규식 검사 실패 대비 폴백 구문 마련)
           let isCurrentMonth = false;
           const dateMatch = timestamp.match(/(\d{4})\.\s*(\d{1,2})/);
           
@@ -89,23 +97,14 @@ export default function Grammar({ student, onBack }: GrammarProps) {
             const m = parseInt(dateMatch[2], 10);
             if (y === currentYear && m === currentMonth) isCurrentMonth = true;
           } else {
-            // 다양한 타임스탬프 언어셋(영어/포맷 변경) 대응용 문자열 검증 폴백
-            if (timestamp.includes(`${currentYear}`) && (timestamp.includes(`/${currentMonth}/`) || timestamp.includes(`-${currentMonth}-`) || timestamp.includes(` ${currentMonth}월`))) {
-              isCurrentMonth = true;
-            } else if (!timestamp) {
-              isCurrentMonth = true; // 비어있는 유효 데이터는 통과 처리
-            }
+             // 날짜 포맷이 달라도 우선 데이터는 노출하도록 허용 (디버깅 용이)
+             isCurrentMonth = true; 
           }
           
-          // 이번 달 조건에 충족하거나, 파싱 구문 형식이 에러난 경우 안전하게 화면 노출 우선 처리
-          if (isCurrentMonth || !dateMatch) {
+          if (isCurrentMonth) {
+            validDataCount++;
             if (!bestScoresMap[name] || bestScoresMap[name].score < scoreNum) {
-              bestScoresMap[name] = {
-                name,
-                score: scoreNum,
-                grade,
-                date: timestamp
-              };
+              bestScoresMap[name] = { name, score: scoreNum, grade, date: timestamp };
             }
           }
         }
@@ -117,39 +116,41 @@ export default function Grammar({ student, onBack }: GrammarProps) {
         
       if (sortedList.length > 0) {
         setMonthlyRankings(sortedList);
-        // 백그라운드 서버 조회가 완전 성공했을 때만 로컬 백업용 캐시 갱신
         localStorage.setItem('global_rankings_cache', JSON.stringify(sortedList));
+      } else if (validDataCount > 0) {
+          // 데이터는 있지만 이번 달 데이터가 없는 경우
+          // 조건 없이 일단 탑 5 보여주기
+          const allTimeList = Object.values(bestScoresMap).sort((a, b) => b.score - a.score).slice(0, 5);
+          setMonthlyRankings(allTimeList);
       }
     } catch (error) {
-      console.error("구글 서버 동기화 실패 -> 기존 화면 랭킹 데이터 유지:", error);
+      console.error("동기화 실패:", error);
+      // 로컬 캐시라도 띄워주기
+      const localCache = localStorage.getItem('global_rankings_cache');
+      if (localCache) {
+          setMonthlyRankings(JSON.parse(localCache));
+      } else {
+          setMonthlyRankings([{ name: "⚠️ 네트워크 로드 실패", score: 0, grade: "인터넷확인", date: "" }]);
+      }
     }
   };
 
-  // 🚀 앱 진입 시 오프라인 캐시 선로드 및 정기 리프레시 실행
   useEffect(() => {
-    // [보안책] 빈 화면 방지용 로컬 캐시 데이터 즉시 복구
     const localCache = localStorage.getItem('global_rankings_cache');
     if (localCache) {
-      try {
-        setMonthlyRankings(JSON.parse(localCache));
-      } catch (e) {
-        console.error("로컬 캐시 에러 복구 무시", e);
-      }
+      try { setMonthlyRankings(JSON.parse(localCache)); } catch (e) {}
     }
     
     fetchGlobalRankings();
-    
-    // 20초 간격으로 백그라운드 상시 데이터 리프레시 연동
-    const interval = setInterval(fetchGlobalRankings, 20000);
+    const interval = setInterval(fetchGlobalRankings, 15000); // 15초마다 갱신
     return () => clearInterval(interval);
   }, []);
 
-  // ⚡ 초고속 실시간 TSV 문제 데이터 파싱 엔진
   useEffect(() => {
     const fetchSheetData = async () => {
       try {
         const response = await fetch(GOOGLE_SHEET_TSV_URL);
-        if (!response.ok) throw new Error("네트워크 응답 불량");
+        if (!response.ok) throw new Error("네트워크 불량");
         const tsvText = await response.text();
         
         const rows = tsvText.split(/\r?\n/);
@@ -171,15 +172,10 @@ export default function Grammar({ student, onBack }: GrammarProps) {
         setDbData(parsedItems);
         setIsLoading(false);
       } catch (error) {
-        console.error("구글 시트 연동 실패 -> 백업 데이터 로드:", error);
-        setDbData([
-          { bookId: "240_1", english: "I am a smart student.", korean: "나는 똑똑한 학생이다." },
-          { bookId: "240_4", english: "Look at the giant blue whale.", korean: "저 거대한 푸른 고래를 보아라." }
-        ]);
+        setDbData([{ bookId: "240_1", english: "I am a smart student.", korean: "나는 똑똑한 학생이다." }]);
         setIsLoading(false);
       }
     };
-
     fetchSheetData();
   }, []);
 
@@ -209,14 +205,8 @@ export default function Grammar({ student, onBack }: GrammarProps) {
     });
 
     if (filtered.length === 0 && (stage === 9 || stage === 10)) {
-      filtered = dbData.filter(d => {
-        const parts = d.bookId.split(/[_ \-]/);
-        const vol = parseInt(parts[1] || '1', 10);
-        const matchesVol = stage === 10 ? vol >= 4 : vol <= 3;
-        return d.bookId.startsWith("1240") && matchesVol;
-      });
+      filtered = dbData.filter(d => d.bookId.startsWith("1240"));
     }
-
     return filtered.length > 0 ? filtered : dbData;
   };
 
@@ -305,7 +295,7 @@ export default function Grammar({ student, onBack }: GrammarProps) {
       const newHearts = hearts - 1;
       setHearts(newHearts);
       if (newHearts === 0) {
-        saveAndLoadRankings(); // 게임 오버 시 점수 저장 실행
+        saveAndLoadRankings(); 
         setGameState('result');
         return;
       }
@@ -340,7 +330,6 @@ export default function Grammar({ student, onBack }: GrammarProps) {
     setGameState('playing');
   };
 
-  // 🚀 구글 시트5로 점수를 실시간 전송하는 백엔드 함수
   const sendScoreToGoogleSheet = async (finalScore: number, finalStage: number) => {
     const payload = {
       timestamp: new Date().toLocaleString('ko-KR'),
@@ -353,21 +342,15 @@ export default function Grammar({ student, onBack }: GrammarProps) {
     try {
       await fetch(GOOGLE_WEB_APP_URL, {
         method: "POST",
-        headers: {
-          "Content-Type": "text/plain;charset=utf-8",
-        },
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify(payload),
       });
-      console.log("구글 시트5로 실시간 데이터 누적 성공!");
-      
-      // 전송 완료 직후 백그라운드 리프레시 요청 유도
-      setTimeout(fetchGlobalRankings, 2000);
+      setTimeout(fetchGlobalRankings, 3000); 
     } catch (error) {
       console.error("구글 시트 전송 실패:", error);
     }
   };
 
-  // 🚀 데이터 저장 통합 함수 (로컬 영구 캐시 우선 구조)
   const saveAndLoadRankings = () => {
     const newRecord: RankingItem = {
       name: student.name,
@@ -376,7 +359,6 @@ export default function Grammar({ student, onBack }: GrammarProps) {
       date: new Date().toLocaleString('ko-KR')
     };
 
-    // UI에 즉시 누적 처리 및 로컬 내부 스토리지에 무조건 안전 백업 보관
     setMonthlyRankings(prev => {
       const filtered = prev.filter(p => p.name !== student.name);
       const merged = [...filtered, newRecord];
@@ -391,7 +373,7 @@ export default function Grammar({ student, onBack }: GrammarProps) {
   if (isLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f0f4f8' }}>
-        <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#007aff' }}>🔄 구글 시트 교재 문장 동기화 중...</div>
+        <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#007aff' }}>🔄 데이터 동기화 중...</div>
       </div>
     );
   }
@@ -425,17 +407,19 @@ export default function Grammar({ student, onBack }: GrammarProps) {
                     const isMe = player.name === student.name;
                     return (
                       <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', backgroundColor: isMe ? '#e0f2fe' : 'transparent', borderRadius: '8px' }}>
-                        <span style={{ fontWeight: isMe ? '700' : '500', fontSize: '14px', color: isMe ? '#0369a1' : '#334155' }}>
-                          {idx + 1}등. {player.name} ({player.grade})
+                        <span style={{ fontWeight: isMe ? '700' : '500', fontSize: '14px', color: player.name.includes("⚠️") ? '#ef4444' : (isMe ? '#0369a1' : '#334155') }}>
+                          {player.name.includes("⚠️") ? player.name : `${idx + 1}등. ${player.name} (${player.grade})`}
                         </span>
-                        <span style={{ fontWeight: '700', fontSize: '14px', color: isMe ? '#0369a1' : '#475569' }}>{player.score}점</span>
+                        <span style={{ fontWeight: '700', fontSize: '14px', color: isMe ? '#0369a1' : '#475569' }}>
+                          {player.score > 0 ? `${player.score}점` : player.grade}
+                        </span>
                       </div>
                     );
                   })}
                 </div>
               ) : (
                 <div style={{ textAlign: 'center', padding: '10px', color: '#94a3b8', fontSize: '14px', fontWeight: '500' }}>
-                  통합 랭킹 기록을 불러오는 중이거나 기록이 없습니다.<br/>첫 번째 주인공이 되어보세요! 🚀
+                  동기화 중입니다... 잠시만 기다려주세요 🚀
                 </div>
               )}
             </div>
@@ -523,10 +507,12 @@ export default function Grammar({ student, onBack }: GrammarProps) {
                     const isMe = player.name === student.name;
                     return (
                       <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: isMe ? '#e0f2fe' : 'transparent', borderRadius: '8px', border: isMe ? '1px solid #7dd3fc' : 'none' }}>
-                        <span style={{ fontWeight: isMe ? '700' : '500', fontSize: '14px', color: isMe ? '#0369a1' : '#334155' }}>
-                          {idx + 1}등. {player.name} ({player.grade})
+                        <span style={{ fontWeight: isMe ? '700' : '500', fontSize: '14px', color: player.name.includes("⚠️") ? '#ef4444' : (isMe ? '#0369a1' : '#334155') }}>
+                          {player.name.includes("⚠️") ? player.name : `${idx + 1}등. ${player.name} (${player.grade})`}
                         </span>
-                        <span style={{ fontWeight: '700', fontSize: '14px', color: isMe ? '#0369a1' : '#475569' }}>{player.score}점</span>
+                        <span style={{ fontWeight: '700', fontSize: '14px', color: isMe ? '#0369a1' : '#475569' }}>
+                           {player.score > 0 ? `${player.score}점` : player.grade}
+                        </span>
                       </div>
                     );
                   })}
