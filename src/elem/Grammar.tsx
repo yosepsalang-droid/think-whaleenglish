@@ -335,7 +335,6 @@ export default function Grammar({ student, onBack }: GrammarProps) {
   };
 
   const saveAndLoadRankings = () => {
-    // 💡 구글 시트 반영 전, 화면에 내 점수 즉시 합산 처리 (UX 최적화)
     setMonthlyRankings(prev => {
       const newRankings = [...prev];
       const existingMe = newRankings.find(p => p.name === student.name);
@@ -354,6 +353,14 @@ export default function Grammar({ student, onBack }: GrammarProps) {
     sendScoreToGoogleSheet(score, currentLevel);
   };
 
+  // 💡 강제 종료 및 뒤로가기 시 점수 보존을 위한 함수 추가
+  const handleExit = () => {
+    if ((gameState === 'playing' || gameState === 'levelUp') && score > 0) {
+      saveAndLoadRankings();
+    }
+    onBack();
+  };
+
   if (isLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f0f4f8' }}>
@@ -366,8 +373,9 @@ export default function Grammar({ student, onBack }: GrammarProps) {
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f0f4f8', fontFamily: 'Pretendard, sans-serif' }}>
       <div style={{ background: 'white', padding: '40px', borderRadius: '24px', textAlign: 'center', width: '380px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)', position: 'relative' }}>
         
+        {/* 💡 뒤로가기 버튼에 handleExit 함수 연결 */}
         <button 
-          onClick={onBack} 
+          onClick={handleExit} 
           style={{ position: 'absolute', top: '24px', left: '24px', background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', zIndex: 10, color: '#333' }}
         >
           ◀
