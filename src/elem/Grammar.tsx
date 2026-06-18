@@ -31,9 +31,8 @@ const GOOGLE_SHEET_TSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT
 // 🚀 2. 점수 누적용 원장님의 구글 웹 앱 URL 
 const GOOGLE_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyOAbzxggopAl9QhrG2VHSmo0yCEcdIi89xhgvT5nOWkk9sZbiTtB-XjQd4GVhV4MhE/exec";
 
-// 🏆 3. [핵심 추가] 5번 점수저장 탭의 웹게시 CSV 주소를 여기에 넣어주세요!
+// 🏆 3. [확인 필요] 5번 점수저장 탭의 웹게시 CSV(또는 TSV) 주소를 입력해주세요.
 const GOOGLE_SHEET_RANKING_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe/pub?gid=2097787051&single=true&output=csv"; 
-// 💡 위 GID 주소는 예시이므로 반드시 원장님 시트의 5번 응답탭 GID를 확인 후 교체해주세요.
 
 export default function Grammar({ student, onBack }: GrammarProps) {
   const [dbData, setDbData] = useState<SheetItem[]>([]);
@@ -52,73 +51,96 @@ export default function Grammar({ student, onBack }: GrammarProps) {
   const [score, setScore] = useState(0);
   const [monthlyRankings, setMonthlyRankings] = useState<RankingItem[]>([]);
 
-  // 🛠️ [기능 개선] 구글 시트 5번 탭에서 전 기기 공통 실시간 랭킹 가져오기
+  // 🛠️ [기능 개선] 안정적인 하이브리드형 글로벌 랭킹 파싱 엔진
   const fetchGlobalRankings = async () => {
     if (!GOOGLE_SHEET_RANKING_CSV_URL || GOOGLE_SHEET_RANKING_CSV_URL.includes("여기에")) return;
     
     try {
-      const response = await fetch(`${GOOGLE_SHEET_RANKING_CSV_URL}&_nocache=${Date.now()}`); // 캐싱 방지
-      if (!response.ok) throw new Error("랭킹 로드 실패");
-      const csvText = await response.text();
+      const response = await fetch(`${GOOGLE_SHEET_RANKING_CSV_URL}&_nocache=${Date.now()}`);
+      if (!response.ok) throw new Error("랭킹 데이터 로드 실패");
+      const text = await response.text();
       
-      const rows = csvText.split(/\r?\n/);
+      const rows = text.split(/\r?\n/);
       const now = new Date();
       const currentYear = now.getFullYear();
       const currentMonth = now.getMonth() + 1;
       
-      // 학생별 최고 점수만 기록할 맵 (도배 방지용 딕셔너리)
       const bestScoresMap: { [studentName: string]: RankingItem } = {};
       
       rows.forEach((row, index) => {
-        if (index === 0 || !row.trim()) return; // 헤더 및 빈 행 제외
+        if (index === 0 || !row.trim()) return;
         
-        // 쉼표 분할 (타임스탬프, 이름, 학년, 점수, 단계순)
-        const cells = row.split(',');
+        // 콤마(CSV) 분할 및 탭(TSV) 분할 오작동 자동 감지 및 방어 방식 채택
+        const cells = row.includes('\t') ? row.split('\t') : row.split(',');
         if (cells.length >= 4) {
           const timestamp = cells[0].replace(/"/g, '').trim();
           const name = cells[1].replace(/"/g, '').trim();
           const grade = cells[2].replace(/"/g, '').trim();
           const scoreNum = parseInt(cells[3].replace(/"/g, '').trim(), 10) || 0;
           
-          // 날짜 텍스트에서 연도와 월 추출하기 안전 장치 (정규식 검사)
+          if (!name) return;
+
+          // 날짜 파싱 조건 유연화 (정규식 검사 실패 대비 폴백 구문 마련)
+          let isCurrentMonth = false;
           const dateMatch = timestamp.match(/(\d{4})\.\s*(\d{1,2})/);
+          
           if (dateMatch) {
             const y = parseInt(dateMatch[1], 10);
             const m = parseInt(dateMatch[2], 10);
-            
-            // 이번 달 데이터인 경우에만 랭킹 산정 처리
-            if (y === currentYear && m === currentMonth) {
-              // 해당 학생의 기존 기록이 없거나, 기존 점수보다 더 높은 점수가 나온 경우 갱신
-              if (!bestScoresMap[name] || bestScoresMap[name].score < scoreNum) {
-                bestScoresMap[name] = {
-                  name,
-                  score: scoreNum,
-                  grade,
-                  date: timestamp
-                };
-              }
+            if (y === currentYear && m === currentMonth) isCurrentMonth = true;
+          } else {
+            // 다양한 타임스탬프 언어셋(영어/포맷 변경) 대응용 문자열 검증 폴백
+            if (timestamp.includes(`${currentYear}`) && (timestamp.includes(`/${currentMonth}/`) || timestamp.includes(`-${currentMonth}-`) || timestamp.includes(` ${currentMonth}월`))) {
+              isCurrentMonth = true;
+            } else if (!timestamp) {
+              isCurrentMonth = true; // 비어있는 유효 데이터는 통과 처리
+            }
+          }
+          
+          // 이번 달 조건에 충족하거나, 파싱 구문 형식이 에러난 경우 안전하게 화면 노출 우선 처리
+          if (isCurrentMonth || !dateMatch) {
+            if (!bestScoresMap[name] || bestScoresMap[name].score < scoreNum) {
+              bestScoresMap[name] = {
+                name,
+                score: scoreNum,
+                grade,
+                date: timestamp
+              };
             }
           }
         }
       });
       
-      // 맵 데이터를 배열로 변환 후 점수 내림차순 정렬하여 TOP 5만 슬라이싱
       const sortedList = Object.values(bestScoresMap)
         .sort((a, b) => b.score - a.score)
         .slice(0, 5);
         
-      setMonthlyRankings(sortedList);
+      if (sortedList.length > 0) {
+        setMonthlyRankings(sortedList);
+        // 백그라운드 서버 조회가 완전 성공했을 때만 로컬 백업용 캐시 갱신
+        localStorage.setItem('global_rankings_cache', JSON.stringify(sortedList));
+      }
     } catch (error) {
-      console.error("구글 시트 랭킹 동기화 실패:", error);
+      console.error("구글 서버 동기화 실패 -> 기존 화면 랭킹 데이터 유지:", error);
     }
   };
 
-  // 🚀 앱 시작 시 구글 시트에서 실시간 글로벌 랭킹 동기화 실행
+  // 🚀 앱 진입 시 오프라인 캐시 선로드 및 정기 리프레시 실행
   useEffect(() => {
+    // [보안책] 빈 화면 방지용 로컬 캐시 데이터 즉시 복구
+    const localCache = localStorage.getItem('global_rankings_cache');
+    if (localCache) {
+      try {
+        setMonthlyRankings(JSON.parse(localCache));
+      } catch (e) {
+        console.error("로컬 캐시 에러 복구 무시", e);
+      }
+    }
+    
     fetchGlobalRankings();
     
-    // 30초마다 백그라운드에서 실시간으로 랭킹 자동 리프레시 진행
-    const interval = setInterval(fetchGlobalRankings, 30000);
+    // 20초 간격으로 백그라운드 상시 데이터 리프레시 연동
+    const interval = setInterval(fetchGlobalRankings, 20000);
     return () => clearInterval(interval);
   }, []);
 
@@ -149,7 +171,7 @@ export default function Grammar({ student, onBack }: GrammarProps) {
         setDbData(parsedItems);
         setIsLoading(false);
       } catch (error) {
-        console.error("구글 시트 연동 실패 -> 백업 디펜스 데이터 로드:", error);
+        console.error("구글 시트 연동 실패 -> 백업 데이터 로드:", error);
         setDbData([
           { bookId: "240_1", english: "I am a smart student.", korean: "나는 똑똑한 학생이다." },
           { bookId: "240_4", english: "Look at the giant blue whale.", korean: "저 거대한 푸른 고래를 보아라." }
@@ -338,16 +360,15 @@ export default function Grammar({ student, onBack }: GrammarProps) {
       });
       console.log("구글 시트5로 실시간 데이터 누적 성공!");
       
-      // 구글 시트에 전송 완료 후, 서버 데이터에 내 데이터가 동기화되도록 1.5초 딜레이 리프레시 실행
-      setTimeout(fetchGlobalRankings, 1500);
+      // 전송 완료 직후 백그라운드 리프레시 요청 유도
+      setTimeout(fetchGlobalRankings, 2000);
     } catch (error) {
       console.error("구글 시트 전송 실패:", error);
     }
   };
 
-  // 🚀 데이터 저장 통합 함수 (서버 기반 낙관적 즉시 업데이트 반영)
+  // 🚀 데이터 저장 통합 함수 (로컬 영구 캐시 우선 구조)
   const saveAndLoadRankings = () => {
-    // 1️⃣ 네트워크 속도로 인한 딜레이 체감을 없애기 위해 내 점수를 화면 리스트에 실시간 선반영(Optimistic Update)
     const newRecord: RankingItem = {
       name: student.name,
       score: score,
@@ -355,13 +376,15 @@ export default function Grammar({ student, onBack }: GrammarProps) {
       date: new Date().toLocaleString('ko-KR')
     };
 
+    // UI에 즉시 누적 처리 및 로컬 내부 스토리지에 무조건 안전 백업 보관
     setMonthlyRankings(prev => {
-      const filtered = prev.filter(p => p.name !== student.name); // 중복 방지 기존 아이디 제거
+      const filtered = prev.filter(p => p.name !== student.name);
       const merged = [...filtered, newRecord];
-      return merged.sort((a, b) => b.score - a.score).slice(0, 5);
+      const sorted = merged.sort((a, b) => b.score - a.score).slice(0, 5);
+      localStorage.setItem('global_rankings_cache', JSON.stringify(sorted));
+      return sorted;
     });
 
-    // 2️⃣ 서버(구글 시트)로 최종 저장 요청 발송
     sendScoreToGoogleSheet(score, currentLevel);
   };
 
@@ -393,7 +416,6 @@ export default function Grammar({ student, onBack }: GrammarProps) {
               생각 랭킹전
             </h2>
             
-            {/* 전 기기 동기화된 리얼타임 구글 DB형 랭킹창 */}
             <div style={{ width: '100%', background: '#f8fafc', borderRadius: '16px', padding: '16px', marginBottom: '24px', textAlign: 'left', border: '1px solid #e2e8f0' }}>
               <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#64748b', fontWeight: 'bold', textAlign: 'center' }}>🏆 {new Date().getMonth() + 1}월 통합 TOP 5 랭킹</h4>
               
@@ -413,7 +435,7 @@ export default function Grammar({ student, onBack }: GrammarProps) {
                 </div>
               ) : (
                 <div style={{ textAlign: 'center', padding: '10px', color: '#94a3b8', fontSize: '14px', fontWeight: '500' }}>
-                  이번 달 통합 랭킹 기록을 불러오는 중이거나 기록이 없습니다.<br/>첫 번째 주인공이 되어보세요! 🚀
+                  통합 랭킹 기록을 불러오는 중이거나 기록이 없습니다.<br/>첫 번째 주인공이 되어보세요! 🚀
                 </div>
               )}
             </div>
@@ -482,7 +504,7 @@ export default function Grammar({ student, onBack }: GrammarProps) {
           </div>
         )}
 
-        {/* 4. 결과 및 월간 명예의 전당 화면 */}
+        {/* 4. 결과 화면 */}
         {gameState === 'result' && (
           <div style={{ marginTop: '30px' }}>
             <div style={{ fontSize: '50px', marginBottom: '8px' }}>💀</div>
