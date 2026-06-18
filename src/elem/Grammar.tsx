@@ -25,11 +25,15 @@ interface RankingItem {
   date: string;
 }
 
-// 🌐 데이터 왜곡과 CORS 차단이 없는 구글 공식 TSV 파일 주소
+// 🌐 1. 문장 데이터 전송용 TSV 주소
 const GOOGLE_SHEET_TSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe/pub?gid=752237439&single=true&output=tsv";
 
-// 🚀 원장님의 구글 웹 앱 URL 
+// 🚀 2. 점수 누적용 원장님의 구글 웹 앱 URL 
 const GOOGLE_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyOAbzxggopAl9QhrG2VHSmo0yCEcdIi89xhgvT5nOWkk9sZbiTtB-XjQd4GVhV4MhE/exec";
+
+// 🏆 3. [핵심 추가] 5번 점수저장 탭의 웹게시 CSV 주소를 여기에 넣어주세요!
+const GOOGLE_SHEET_RANKING_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe/pub?gid=2097787051&single=true&output=csv"; 
+// 💡 위 GID 주소는 예시이므로 반드시 원장님 시트의 5번 응답탭 GID를 확인 후 교체해주세요.
 
 export default function Grammar({ student, onBack }: GrammarProps) {
   const [dbData, setDbData] = useState<SheetItem[]>([]);
@@ -48,21 +52,77 @@ export default function Grammar({ student, onBack }: GrammarProps) {
   const [score, setScore] = useState(0);
   const [monthlyRankings, setMonthlyRankings] = useState<RankingItem[]>([]);
 
-  // 🚀 앱 시작 시 저장된 랭킹 정보 불러오기 (안전 처리 추가)
-  useEffect(() => {
-    const key = getMonthlyStorageKey();
-    const existingRaw = localStorage.getItem(key);
-    if (existingRaw) {
-      try {
-        setMonthlyRankings(JSON.parse(existingRaw));
-      } catch (error) {
-        console.error("랭킹 데이터 로드 오류:", error);
-        localStorage.removeItem(key); // 데이터 꼬임 방지를 위해 초기화
-      }
+  // 🛠️ [기능 개선] 구글 시트 5번 탭에서 전 기기 공통 실시간 랭킹 가져오기
+  const fetchGlobalRankings = async () => {
+    if (!GOOGLE_SHEET_RANKING_CSV_URL || GOOGLE_SHEET_RANKING_CSV_URL.includes("여기에")) return;
+    
+    try {
+      const response = await fetch(`${GOOGLE_SHEET_RANKING_CSV_URL}&_nocache=${Date.now()}`); // 캐싱 방지
+      if (!response.ok) throw new Error("랭킹 로드 실패");
+      const csvText = await response.text();
+      
+      const rows = csvText.split(/\r?\n/);
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth() + 1;
+      
+      // 학생별 최고 점수만 기록할 맵 (도배 방지용 딕셔너리)
+      const bestScoresMap: { [studentName: string]: RankingItem } = {};
+      
+      rows.forEach((row, index) => {
+        if (index === 0 || !row.trim()) return; // 헤더 및 빈 행 제외
+        
+        // 쉼표 분할 (타임스탬프, 이름, 학년, 점수, 단계순)
+        const cells = row.split(',');
+        if (cells.length >= 4) {
+          const timestamp = cells[0].replace(/"/g, '').trim();
+          const name = cells[1].replace(/"/g, '').trim();
+          const grade = cells[2].replace(/"/g, '').trim();
+          const scoreNum = parseInt(cells[3].replace(/"/g, '').trim(), 10) || 0;
+          
+          // 날짜 텍스트에서 연도와 월 추출하기 안전 장치 (정규식 검사)
+          const dateMatch = timestamp.match(/(\d{4})\.\s*(\d{1,2})/);
+          if (dateMatch) {
+            const y = parseInt(dateMatch[1], 10);
+            const m = parseInt(dateMatch[2], 10);
+            
+            // 이번 달 데이터인 경우에만 랭킹 산정 처리
+            if (y === currentYear && m === currentMonth) {
+              // 해당 학생의 기존 기록이 없거나, 기존 점수보다 더 높은 점수가 나온 경우 갱신
+              if (!bestScoresMap[name] || bestScoresMap[name].score < scoreNum) {
+                bestScoresMap[name] = {
+                  name,
+                  score: scoreNum,
+                  grade,
+                  date: timestamp
+                };
+              }
+            }
+          }
+        }
+      });
+      
+      // 맵 데이터를 배열로 변환 후 점수 내림차순 정렬하여 TOP 5만 슬라이싱
+      const sortedList = Object.values(bestScoresMap)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5);
+        
+      setMonthlyRankings(sortedList);
+    } catch (error) {
+      console.error("구글 시트 랭킹 동기화 실패:", error);
     }
+  };
+
+  // 🚀 앱 시작 시 구글 시트에서 실시간 글로벌 랭킹 동기화 실행
+  useEffect(() => {
+    fetchGlobalRankings();
+    
+    // 30초마다 백그라운드에서 실시간으로 랭킹 자동 리프레시 진행
+    const interval = setInterval(fetchGlobalRankings, 30000);
+    return () => clearInterval(interval);
   }, []);
 
-  // 1. ⚡ 초고속 실시간 TSV 데이터 파싱 엔진
+  // ⚡ 초고속 실시간 TSV 문제 데이터 파싱 엔진
   useEffect(() => {
     const fetchSheetData = async () => {
       try {
@@ -100,11 +160,6 @@ export default function Grammar({ student, onBack }: GrammarProps) {
 
     fetchSheetData();
   }, []);
-
-  const getMonthlyStorageKey = (): string => {
-    const now = new Date();
-    return `ranking_${now.getFullYear()}_${now.getMonth() + 1}`;
-  };
 
   const getSentencesForStage = (stage: number): SheetItem[] => {
     let targetPrefix = "";
@@ -263,7 +318,7 @@ export default function Grammar({ student, onBack }: GrammarProps) {
     setGameState('playing');
   };
 
-  // 🚀 [핵심 추가] 구글 시트5로 점수를 실시간 전송하는 백엔드 함수
+  // 🚀 구글 시트5로 점수를 실시간 전송하는 백엔드 함수
   const sendScoreToGoogleSheet = async (finalScore: number, finalStage: number) => {
     const payload = {
       timestamp: new Date().toLocaleString('ko-KR'),
@@ -282,38 +337,31 @@ export default function Grammar({ student, onBack }: GrammarProps) {
         body: JSON.stringify(payload),
       });
       console.log("구글 시트5로 실시간 데이터 누적 성공!");
+      
+      // 구글 시트에 전송 완료 후, 서버 데이터에 내 데이터가 동기화되도록 1.5초 딜레이 리프레시 실행
+      setTimeout(fetchGlobalRankings, 1500);
     } catch (error) {
       console.error("구글 시트 전송 실패:", error);
     }
   };
 
-  // 🚀 데이터 저장 통합 함수 (로컬 저장 + 구글 시트 전송)
+  // 🚀 데이터 저장 통합 함수 (서버 기반 낙관적 즉시 업데이트 반영)
   const saveAndLoadRankings = () => {
-    const key = getMonthlyStorageKey();
-    const existingRaw = localStorage.getItem(key);
-    let list: RankingItem[] = [];
-    
-    if (existingRaw) {
-      try {
-        list = JSON.parse(existingRaw);
-      } catch (error) {
-        list = [];
-      }
-    }
-
+    // 1️⃣ 네트워크 속도로 인한 딜레이 체감을 없애기 위해 내 점수를 화면 리스트에 실시간 선반영(Optimistic Update)
     const newRecord: RankingItem = {
       name: student.name,
       score: score,
       grade: student.grade,
-      date: new Date().toISOString()
+      date: new Date().toLocaleString('ko-KR')
     };
-    list.push(newRecord);
 
-    const sortedList = list.sort((a, b) => b.score - a.score).slice(0, 5);
-    localStorage.setItem(key, JSON.stringify(sortedList));
-    setMonthlyRankings(sortedList);
+    setMonthlyRankings(prev => {
+      const filtered = prev.filter(p => p.name !== student.name); // 중복 방지 기존 아이디 제거
+      const merged = [...filtered, newRecord];
+      return merged.sort((a, b) => b.score - a.score).slice(0, 5);
+    });
 
-    // ⭐ 구글 시트 전송
+    // 2️⃣ 서버(구글 시트)로 최종 저장 요청 발송
     sendScoreToGoogleSheet(score, currentLevel);
   };
 
@@ -345,9 +393,9 @@ export default function Grammar({ student, onBack }: GrammarProps) {
               생각 랭킹전
             </h2>
             
-            {/* 항상 랭킹창이 보이도록 수정된 부분 */}
+            {/* 전 기기 동기화된 리얼타임 구글 DB형 랭킹창 */}
             <div style={{ width: '100%', background: '#f8fafc', borderRadius: '16px', padding: '16px', marginBottom: '24px', textAlign: 'left', border: '1px solid #e2e8f0' }}>
-              <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#64748b', fontWeight: 'bold', textAlign: 'center' }}>🏆 {new Date().getMonth() + 1}월 TOP 5 랭킹</h4>
+              <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#64748b', fontWeight: 'bold', textAlign: 'center' }}>🏆 {new Date().getMonth() + 1}월 통합 TOP 5 랭킹</h4>
               
               {monthlyRankings.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -356,7 +404,7 @@ export default function Grammar({ student, onBack }: GrammarProps) {
                     return (
                       <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', backgroundColor: isMe ? '#e0f2fe' : 'transparent', borderRadius: '8px' }}>
                         <span style={{ fontWeight: isMe ? '700' : '500', fontSize: '14px', color: isMe ? '#0369a1' : '#334155' }}>
-                          {idx + 1}등. {player.name}
+                          {idx + 1}등. {player.name} ({player.grade})
                         </span>
                         <span style={{ fontWeight: '700', fontSize: '14px', color: isMe ? '#0369a1' : '#475569' }}>{player.score}점</span>
                       </div>
@@ -365,7 +413,7 @@ export default function Grammar({ student, onBack }: GrammarProps) {
                 </div>
               ) : (
                 <div style={{ textAlign: 'center', padding: '10px', color: '#94a3b8', fontSize: '14px', fontWeight: '500' }}>
-                  아직 이번 달 기록이 없습니다.<br/>첫 번째 랭커에 도전하세요! 🚀
+                  이번 달 통합 랭킹 기록을 불러오는 중이거나 기록이 없습니다.<br/>첫 번째 주인공이 되어보세요! 🚀
                 </div>
               )}
             </div>
@@ -445,7 +493,7 @@ export default function Grammar({ student, onBack }: GrammarProps) {
             </p>
 
             <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', marginBottom: '24px', textAlign: 'left' }}>
-              <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#64748b', fontWeight: 'bold' }}>🗓️ {new Date().getMonth() + 1}월 실시간 TOP 5 랭킹</h4>
+              <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#64748b', fontWeight: 'bold', textAlign: 'center' }}>🗓️ {new Date().getMonth() + 1}월 실시간 TOP 5 랭킹</h4>
               
               {monthlyRankings.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -463,7 +511,7 @@ export default function Grammar({ student, onBack }: GrammarProps) {
                 </div>
               ) : (
                 <div style={{ textAlign: 'center', padding: '10px', color: '#94a3b8', fontSize: '14px', fontWeight: '500' }}>
-                  이번 달 첫 번째 랭커가 되어보세요! 🚀
+                  동기화 중입니다... 🚀
                 </div>
               )}
             </div>
