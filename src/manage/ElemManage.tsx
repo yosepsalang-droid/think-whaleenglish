@@ -5,7 +5,7 @@ interface Student {
   name: string;
   currentBook: string;
   progress: string; // 예: "Unit1 Day1"
-  grade: string;       // 예: "초1", "초2"
+  grade: string;      // 예: "초1", "초2"
 }
 
 export default function ElemManage() {
@@ -112,4 +112,90 @@ export default function ElemManage() {
   // 선택된 학년 탭에 맞게 학생 목록 실시간 필터링
   const filteredStudents = students.filter(student => {
     if (selectedGrade === '전체') return true;
-    return student
+    return student.grade === selectedGrade; // 💡 여기서 괄호를 정상적으로 닫았습니다.
+  });
+
+  return (
+    <div style={{ padding: '24px', fontFamily: 'sans-serif' }}>
+      <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '20px' }}>초등부 관리</h2>
+      
+      {/* 탭 버튼 영역 */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
+        {gradeTabs.map(grade => (
+          <button
+            key={grade}
+            onClick={() => setSelectedGrade(grade)}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: 'none',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              backgroundColor: selectedGrade === grade ? '#007aff' : '#f1f5f9',
+              color: selectedGrade === grade ? 'white' : '#475569',
+            }}
+          >
+            {grade}
+          </button>
+        ))}
+      </div>
+
+      {/* 학생 목록 테이블 영역 */}
+      {isLoading ? (
+        <div style={{ padding: '20px', color: '#64748b' }}>학생 데이터를 불러오는 중입니다...</div>
+      ) : (
+        <div style={{ backgroundColor: 'white', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <thead style={{ backgroundColor: '#f8fafc' }}>
+              <tr>
+                <th style={{ padding: '16px', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>이름</th>
+                <th style={{ padding: '16px', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>학년</th>
+                <th style={{ padding: '16px', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>현재 교재</th>
+                <th style={{ padding: '16px', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>현재 진도</th>
+                <th style={{ padding: '16px', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>상태</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredStudents.length > 0 ? (
+                filteredStudents.map(student => {
+                  const { unit, day } = parseProgress(student.progress);
+                  return (
+                    <tr key={student.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '16px', fontWeight: 'bold' }}>{student.name}</td>
+                      <td style={{ padding: '16px', color: '#64748b' }}>{student.grade}</td>
+                      <td style={{ padding: '16px' }}>{student.currentBook}</td>
+                      <td style={{ padding: '16px' }}>{student.progress}</td>
+                      <td style={{ padding: '16px' }}>
+                        <button
+                          onClick={() => handleApplyToSheet(student.id, student.currentBook, unit, day)}
+                          disabled={savingId === student.id}
+                          style={{
+                            padding: '8px 16px',
+                            backgroundColor: savingId === student.id ? '#cbd5e1' : '#10b981',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: savingId === student.id ? 'not-allowed' : 'pointer',
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          {savingId === student.id ? '저장 중...' : '저장'}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: '#94a3b8' }}>
+                    조건에 맞는 학생이 없습니다.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}

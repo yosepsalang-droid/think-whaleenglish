@@ -1,0 +1,354 @@
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+
+interface VocaProps {
+  onBack: () => void;
+}
+
+interface WordItem {
+  book: string;
+  eng: string;
+  kor: string;
+}
+
+interface Question {
+  id: number;
+  type: 'eng2kor' | 'kor2eng';
+  eng: string;
+  kor: string;
+}
+
+// 🌐 구글 시트 4번 탭 (워드타파) CSV 주소 변환 적용
+const GOOGLE_SHEET_VOCA_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe/pub?gid=8529494&single=true&output=csv";
+
+export default function Voca({ onBack }: VocaProps) {
+  const [allWords, setAllWords] = useState<WordItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  const [selectedBook, setSelectedBook] = useState('');
+  
+  const [gameState, setGameState] = useState<'intro' | 'playing' | 'result'>('intro');
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [score, setScore] = useState(0);
+  
+  const [userInput, setUserInput] = useState('');
+  const [feedback, setFeedback] = useState<{ isCorrect: boolean; msg: string } | null>(null);
+  
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // CSV 파서 (쉼표 및 따옴표 보호)
+  const parseCSVRow = (row: string): string[] => {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < row.length; i++) {
+      const char = row[i];
+      if (char === '"') inQuotes = !inQuotes;
+      else if (char === ',' && !inQuotes) {
+        result.push(current.trim());
+        current = '';
+      } else current += char;
+    }
+    result.push(current.trim());
+    return result;
+  };
+
+  useEffect(() => {
+    const fetchWords = async () => {
+      try {
+        const response = await fetch(`${GOOGLE_SHEET_VOCA_CSV_URL}&_nocache=${Date.now()}`);
+        if (!response.ok) throw new Error("단어장 로드 실패");
+        const text = await response.text();
+        const rows = text.split(/\r?\n/);
+        
+        const parsed: WordItem[] = [];
+        rows.forEach((row, index) => {
+          if (index === 0 || !row.trim()) return; // 헤더 제외
+          const cells = parseCSVRow(row);
+          if (cells.length >= 5) {
+            const book = cells[0].replace(/"/g, '').trim();
+            const eng = cells[3].replace(/"/g, '').trim();
+            const kor = cells[4].replace(/"/g, '').trim();
+            if (book && eng && kor && book !== 'Book') {
+              parsed.push({ book, eng, kor });
+            }
+          }
+        });
+        
+        setAllWords(parsed);
+        setIsLoading(false);
+      } catch (error) {
+        console.error("구글 시트 연동 실패:", error);
+        alert("단어장 데이터를 불러오지 못했습니다.");
+        setIsLoading(false);
+      }
+    };
+    fetchWords();
+  }, []);
+
+  // 시트에서 교재 목록만 중복 없이 자동 추출
+  const books = useMemo(() => {
+    return Array.from(new Set(allWords.map(w => w.book))).sort();
+  }, [allWords]);
+
+  // 발음 재생 함수
+  const speakWord = (text: string) => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'en-US';
+      utterance.rate = 0.9;
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  // 게임 시작 로직 (100문제 랜덤 추출 및 반반 나누기)
+  const startGame = () => {
+    if (!selectedBook) {
+      alert("교재를 선택해주세요.");
+      return;
+    }
+
+    const filtered = allWords.filter(w => w.book === selectedBook);
+    if (filtered.length === 0) {
+      alert("해당 교재에 등록된 단어가 없습니다.");
+      return;
+    }
+
+    // 단어 무작위 셔플 후 최대 100개 추출
+    const shuffled = [...filtered].sort(() => Math.random() - 0.5);
+    const selectedWords = shuffled.slice(0, 100);
+    const totalQuestions = selectedWords.length;
+    
+    // 절반은 영->한, 절반은 한->영
+    const halfIndex = Math.floor(totalQuestions / 2);
+    
+    const generatedQuestions: Question[] = selectedWords.map((w, idx) => ({
+      id: idx + 1,
+      type: idx < halfIndex ? 'eng2kor' : 'kor2eng',
+      eng: w.eng,
+      kor: w.kor
+    }));
+
+    setQuestions(generatedQuestions);
+    setCurrentIndex(0);
+    setScore(0);
+    setUserInput('');
+    setFeedback(null);
+    setGameState('playing');
+  };
+
+  const currentQ = questions[currentIndex];
+
+  // 문제 전환 시 자동 포커스 및 영어->한글 모드일 때 자동 발음 재생
+  useEffect(() => {
+    if (gameState === 'playing' && currentQ) {
+      setUserInput('');
+      setFeedback(null);
+      
+      if (currentQ.type === 'eng2kor') {
+        speakWord(currentQ.eng);
+      }
+
+      const timer = setTimeout(() => {
+        if (inputRef.current) inputRef.current.focus();
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [currentIndex, gameState, currentQ]);
+
+  // 스마트 정답 체크 함수
+  const checkAnswer = (user: string, q: Question) => {
+    if (q.type === 'eng2kor') {
+      // 💡 [한글 뜻 체크]: "걸음; 단계" -> 걸음이나 단계 중 하나만 맞아도 정답 처리
+      const u = user.replace(/\s+/g, '').toLowerCase();
+      const targets = q.kor.split(/[;,/]/).map(s => s.replace(/\s+/g, '').toLowerCase());
+      return targets.includes(u);
+    } else {
+      // 💡 [영어 스펠링 체크]: 대소문자 무시, 공백 무시 완벽 일치
+      return user.trim().toLowerCase() === q.eng.trim().toLowerCase();
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentQ || !userInput.trim() || feedback !== null) return;
+
+    const isCorrect = checkAnswer(userInput, currentQ);
+
+    if (isCorrect) {
+      setScore(prev => prev + 1);
+      setFeedback({ isCorrect: true, msg: '정답입니다! 👍' });
+      // 영어를 맞췄을 경우 확인용으로 한 번 더 읽어줌
+      if (currentQ.type === 'kor2eng') speakWord(currentQ.eng);
+    } else {
+      setFeedback({ 
+        isCorrect: false, 
+        msg: `오답! 정답: [ ${currentQ.type === 'eng2kor' ? currentQ.kor : currentQ.eng} ]` 
+      });
+      // 오답일 경우 영어를 들려줌
+      speakWord(currentQ.eng);
+    }
+
+    // 1.5초 후 다음 문제로
+    setTimeout(() => {
+      if (currentIndex + 1 < questions.length) {
+        setCurrentIndex(prev => prev + 1);
+      } else {
+        setGameState('result');
+      }
+    }, 1500);
+  };
+
+  const preventCheating = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+  };
+
+  if (isLoading) {
+    return (
+      <div style={{ textAlign: 'center', marginTop: '100px', fontFamily: 'Pretendard, sans-serif' }}>
+        <h2>🐋 단어장 데이터를 동기화 중입니다...</h2>
+      </div>
+    );
+  }
+
+  return (
+    <div 
+      translate="no" 
+      className="notranslate"
+      onContextMenu={preventCheating}
+      onSelectStart={preventCheating}
+      onDragStart={preventCheating}
+      style={{ fontFamily: 'Pretendard, sans-serif', padding: '20px', maxWidth: '500px', margin: '0 auto', boxSizing: 'border-box', userSelect: 'none', WebkitUserSelect: 'none' }}
+    >
+      {/* 상단 헤더 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <button onClick={onBack} style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #ccc', backgroundColor: 'white', cursor: 'pointer', fontWeight: 'bold' }}>
+          ◀ 홈으로
+        </button>
+        <span style={{ fontWeight: 'bold', color: '#007aff', fontSize: '18px' }}>
+          주관식 타이핑 마스터 ⌨️
+        </span>
+      </div>
+
+      {/* 1. 대기/설정 화면 */}
+      {gameState === 'intro' && (
+        <div style={{ padding: '30px 20px', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', textAlign: 'center' }}>
+          <div style={{ fontSize: '60px', marginBottom: '16px' }}>📝</div>
+          <h2 style={{ margin: '0 0 20px 0', color: '#1e293b' }}>교재를 선택하세요</h2>
+          
+          <select 
+            value={selectedBook} 
+            onChange={(e) => setSelectedBook(e.target.value)}
+            style={{ width: '100%', padding: '16px', borderRadius: '12px', border: '2px solid #cbd5e1', fontSize: '16px', marginBottom: '24px', outline: 'none', textAlign: 'center', fontWeight: 'bold' }}
+          >
+            <option value="">-- 교재 선택 --</option>
+            {books.map(b => <option key={b} value={b}>{b}</option>)}
+          </select>
+
+          <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '12px', marginBottom: '24px', textAlign: 'left', fontSize: '14px', color: '#475569', lineHeight: '1.6' }}>
+            <strong>💡 훈련 규칙</strong><br/>
+            • 총 <strong>최대 100문제</strong>가 출제됩니다.<br/>
+            • <strong>[1부]</strong> 영어를 보고 뜻 적기 (절반)<br/>
+            • <strong>[2부]</strong> 한글을 보고 영어 스펠링 적기 (절반)<br/>
+            • 뜻이 여러 개일 경우 <strong>하나만 적어도 정답</strong> 처리!
+          </div>
+
+          <button 
+            onClick={startGame}
+            style={{ width: '100%', padding: '18px', backgroundColor: '#007aff', color: 'white', border: 'none', borderRadius: '14px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', transition: '0.2s' }}
+          >
+            타이핑 훈련 시작!
+          </button>
+        </div>
+      )}
+
+      {/* 2. 게임 진행 화면 */}
+      {gameState === 'playing' && currentQ && (
+        <div style={{ padding: '30px 20px', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', textAlign: 'center' }}>
+          
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', color: '#64748b', fontWeight: 'bold' }}>
+            <span>{currentQ.type === 'eng2kor' ? '📝 뜻 적기 모드' : '🔤 스펠링 모드'}</span>
+            <span>{currentIndex + 1} / {questions.length}</span>
+          </div>
+
+          <div style={{ marginBottom: '30px' }}>
+            <h2 style={{ fontSize: '36px', color: '#0f172a', margin: '0 0 16px 0', wordBreak: 'keep-all' }}>
+              {currentQ.type === 'eng2kor' ? currentQ.eng : currentQ.kor}
+            </h2>
+            
+            <button 
+              onClick={() => speakWord(currentQ.eng)}
+              style={{ padding: '10px 20px', backgroundColor: '#f1f5f9', border: 'none', borderRadius: '20px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold', color: '#007aff' }}
+            >
+              🔊 {currentQ.type === 'eng2kor' ? '발음 다시 듣기' : '영어 소리 힌트 듣기'}
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit}>
+            <input 
+              ref={inputRef}
+              type="text" 
+              value={userInput}
+              onChange={(e) => setUserInput(e.target.value)}
+              disabled={feedback !== null}
+              placeholder={currentQ.type === 'eng2kor' ? "한글 뜻을 입력하세요" : "영어 단어를 입력하세요"} 
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck="false"
+              style={{ 
+                width: '100%', padding: '18px', fontSize: '20px', fontWeight: 'bold',
+                borderRadius: '12px', border: '2px solid #007aff', textAlign: 'center',
+                boxSizing: 'border-box', outline: 'none', marginBottom: '20px',
+                backgroundColor: feedback ? '#f8fafc' : 'white',
+                imeMode: currentQ.type === 'eng2kor' ? 'active' : 'inactive' // 한영 자동전환 보조
+              }}
+            />
+            
+            <button 
+              type="submit"
+              disabled={feedback !== null || !userInput.trim()} 
+              style={{ 
+                width: '100%', padding: '18px', fontSize: '18px', fontWeight: 'bold', color: 'white',
+                backgroundColor: (feedback || !userInput.trim()) ? '#cbd5e1' : '#1e293b', 
+                border: 'none', borderRadius: '12px', cursor: 'pointer' 
+              }}
+            >
+              제출 (Enter)
+            </button>
+          </form>
+
+          {feedback && (
+            <div style={{ marginTop: '24px', padding: '16px', borderRadius: '12px', fontWeight: 'bold', fontSize: '18px', textAlign: 'center', backgroundColor: feedback.isCorrect ? '#dcfce7' : '#fee2e2', color: feedback.isCorrect ? '#15803d' : '#b91c1c' }}>
+              {feedback.msg}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 3. 결과 화면 */}
+      {gameState === 'result' && (
+        <div style={{ padding: '40px 20px', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', textAlign: 'center' }}>
+          <div style={{ fontSize: '60px', marginBottom: '16px' }}>🏆</div>
+          <h2 style={{ margin: '0 0 10px 0', color: '#1e293b' }}>타이핑 훈련 완료!</h2>
+          <p style={{ fontSize: '20px', color: '#475569', marginBottom: '30px' }}>
+            총 {questions.length}문제 중 <strong style={{ color: '#007aff', fontSize: '28px' }}>{score}</strong>개 정답
+          </p>
+          
+          <button 
+            onClick={() => setGameState('intro')}
+            style={{ width: '100%', padding: '18px', backgroundColor: '#e2e8f0', color: '#475569', border: 'none', borderRadius: '14px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', marginBottom: '12px' }}
+          >
+            다른 교재 풀기
+          </button>
+          <button 
+            onClick={onBack}
+            style={{ width: '100%', padding: '18px', backgroundColor: '#007aff', color: 'white', border: 'none', borderRadius: '14px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer' }}
+          >
+            메인으로 돌아가기
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
