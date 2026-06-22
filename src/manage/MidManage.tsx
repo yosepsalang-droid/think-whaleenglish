@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-// 💡 1. 방금 만든 Voca.tsx 파일을 불러오는 코드입니다.
+// 💡 1. Voca 컴포넌트를 불러옵니다.
 import Voca from './Voca'; 
 
 interface Student { id: string; name: string; currentBook: string; progress: string; grade: string; }
@@ -7,12 +7,10 @@ interface Student { id: string; name: string; currentBook: string; progress: str
 export default function MidManage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedGrade, setSelectedGrade] = useState<string>('전체');
   const [savingId, setSavingId] = useState<string | null>(null);
 
-  // 💡 2. 화면을 '메인(학생목록)'으로 보여줄지 '단어장(voca)'으로 보여줄지 결정하는 스위치
+  // 💡 2. 화면 스위치와 교재 정보
   const [currentView, setCurrentView] = useState<'main' | 'voca'>('main');
-  // 💡 3. 선택한 학생의 교재 이름을 저장해 단어장으로 넘겨주기 위한 변수
   const [selectedBook, setSelectedBook] = useState<string>('');
 
   const fetchMiddleStudents = async () => {
@@ -47,13 +45,58 @@ export default function MidManage() {
     setSavingId(null);
   };
 
-  // 💡 4. 단어 테스트 버튼을 눌렀을 때 실행되는 함수
   const handleStartVoca = (book: string) => {
-    setSelectedBook(book); // 해당 학생의 교재를 세팅
-    setCurrentView('voca'); // 화면을 Voca로 전환
+    setSelectedBook(book);
+    setCurrentView('voca');
   };
 
-  // 💡 5. 스위치가 'voca'일 때는 목록 대신 단어장 화면을 보여줍니다.
+  // 💡 3. Voca 컴포넌트 호출 부분을 올바르게 닫았습니다.
   if (currentView === 'voca') {
     return (
-      <Voca
+      <Voca 
+        onBack={() => setCurrentView('main')} 
+        currentBook={selectedBook} 
+      />
+    );
+  }
+
+  // 💡 4. 메인 대시보드 화면
+  return (
+    <div style={{ padding: '24px' }}>
+      <h3>📘 중등부 학생 관리</h3>
+      {isLoading ? <p>로딩 중...</p> : (
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ backgroundColor: '#f8fafc' }}>
+              <th style={{ padding: '12px', border: '1px solid #e2e8f0' }}>이름</th>
+              <th style={{ padding: '12px', border: '1px solid #e2e8f0' }}>교재/진도</th>
+              <th style={{ padding: '12px', border: '1px solid #e2e8f0' }}>액션</th>
+            </tr>
+          </thead>
+          <tbody>
+            {students.map(s => (
+              <tr key={s.id}>
+                <td style={{ padding: '12px', border: '1px solid #e2e8f0' }}>{s.name}</td>
+                <td style={{ padding: '12px', border: '1px solid #e2e8f0' }}>{s.currentBook} / {s.progress}</td>
+                <td style={{ padding: '12px', border: '1px solid #e2e8f0' }}>
+                  <button 
+                    onClick={() => handleStartVoca(s.currentBook)}
+                    style={{ marginRight: '8px', padding: '6px 12px', background: '#007aff', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                  >
+                    📝 단어 테스트
+                  </button>
+                  <button 
+                    onClick={() => handleApplyToSheet(s.id, s.currentBook, s.progress)}
+                    style={{ padding: '6px 12px', background: 'white', border: '1px solid #ccc', borderRadius: '4px', cursor: 'pointer' }}
+                  >
+                    {savingId === s.id ? '적용중...' : '적용'}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
