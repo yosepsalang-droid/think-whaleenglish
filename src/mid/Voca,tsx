@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 
 interface VocaProps { 
   onBack: () => void; 
-  currentBook?: string; // 학생의 배정 교재를 받아오기 위한 변수
+  currentBook?: string;
 }
 interface WordItem { book: string; eng: string; kor: string; }
 interface Question { id: number; type: 'eng2kor' | 'kor2eng'; eng: string; kor: string; options: string[]; answer: string; }
@@ -15,14 +15,10 @@ export default function Voca({ onBack, currentBook }: VocaProps) {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [score, setScore] = useState(0);
-  
-  // 💡 구글 시트 명단에서 가져온 학생의 교재가 있다면 기본값으로 세팅합니다.
   const [selectedBook, setSelectedBook] = useState(currentBook || '');
 
   useEffect(() => {
-    if (currentBook) {
-      setSelectedBook(currentBook);
-    }
+    if (currentBook) setSelectedBook(currentBook);
   }, [currentBook]);
 
   useEffect(() => {
@@ -46,28 +42,89 @@ export default function Voca({ onBack, currentBook }: VocaProps) {
 
   const books = useMemo(() => Array.from(new Set(allWords.map(w => w.book))), [allWords]);
 
+  // 🔊 기기 기본 음성 합성(TTS) 기능
+  const speakText = (text: string) => {
+    if ('speechSynthesis' in window) {
+      // 진행 중인 음성이 있으면 취소
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'en-US'; // 영어 발음
+      utterance.rate = 0.9; // 발음 속도 살짝 늦춤
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
   const startGame = () => {
     if (!selectedBook) return alert("교재를 선택해주세요.");
     const filtered = allWords.filter(w => w.book === selectedBook);
     if (filtered.length === 0) return alert("선택하신 교재의 단어 데이터가 시트에 없습니다.");
     
-    const shuffled = [...filtered].sort(() => Math.random() - 0.5).slice(0, 20);
+    // 💡 1. 섞어서 최대 100단어 추출
+    const shuffledWords = [...filtered].sort(() => Math.random() - 0.5).slice(0, 100);
     
-    const qs = shuffled.map((w, i) => {
-      const isEng2Kor = Math.random() > 0.5;
+    // 💡 2. 절반(50문제)은 영어->한글, 절반(50문제)은 한글->영어
+    const halfLength = Math.ceil(shuffledWords.length / 2);
+    
+    let generatedQuestions = shuffledWords.map((w, i) => {
+      const isEng2Kor = i < halfLength; 
       const correct = isEng2Kor ? w.kor : w.eng;
       const options = [correct];
+      
+      // 오답 보기 3개 추가 (총 4지 선다형)
       while (options.length < 4) {
         const rand = allWords[Math.floor(Math.random() * allWords.length)];
         const item = isEng2Kor ? rand.kor : rand.eng;
-        if (!options.includes(item)) options.push(item);
+        if (!options.includes(item) && item !== undefined) options.push(item);
       }
-      return { id: i, type: isEng2Kor ? 'eng2kor' : 'kor2eng', eng: w.eng, kor: w.kor, options: options.sort(() => Math.random() - 0.5), answer: correct };
+      
+      return { 
+        id: i, 
+        type: isEng2Kor ? 'eng2kor' : 'kor2eng', 
+        eng: w.eng, 
+        kor: w.kor, 
+        options: options.sort(() => Math.random() - 0.5), 
+        answer: correct 
+      } as Question;
     });
-    setQuestions(qs);
+
+    // 만들어진 문제들을 다시 한번 무작위로 섞음 (영-한, 한-영 번갈아가며 나오게)
+    generatedQuestions = generatedQuestions.sort(() => Math.random() - 0.5);
+
+    setQuestions(generatedQuestions);
     setGameState('playing');
     setCurrentIndex(0);
     setScore(0);
+  };
+
+  // 💡 3. 영어가 문제로 나올 때 자동 발음 재생
+  useEffect(() => {
+    if (gameState === 'playing' && questions.length > 0) {
+      const currentQ = questions[currentIndex];
+      if (currentQ.type === 'eng2kor') {
+        speakText(currentQ.eng);
+      }
+    }
+  }, [currentIndex, gameState, questions]);
+
+  const handleOptionClick = (opt: string) => {
+    const currentQ = questions[currentIndex];
+    
+    // 💡 4. 보기가 영어일 때(한글->영어 문제) 클릭 시 발음 재생
+    if (currentQ.type === 'kor2eng') {
+      speakText(opt);
+    }
+
+    const isCorrect = opt === currentQ.answer;
+    if (isCorrect) setScore(s => s + 1);
+
+    // 발음을 들을 수 있도록 0.6초 딜레이 후 다음 문제로 넘어감
+    setTimeout(() => {
+      if (currentIndex + 1 < questions.length) {
+        setCurrentIndex(i => i + 1);
+      } else {
+        setGameState('result');
+      }
+    }, 600);
   };
 
   return (
@@ -78,8 +135,8 @@ export default function Voca({ onBack, currentBook }: VocaProps) {
 
       {gameState === 'intro' && (
         <div style={{ textAlign: 'center', background: 'white', padding: '32px', borderRadius: '24px', boxShadow: '0 8px 24px rgba(0,0,0,0.05)' }}>
-          <h2 style={{ margin: '0 0 8px', fontSize: '24px', fontWeight: '800' }}>📘 중등부 단어 훈련</h2>
-          <p style={{ color: '#666', fontSize: '14px', marginBottom: '24px' }}>구글시트 배정 교재: <strong style={{ color: '#007aff' }}>{currentBook || '없음'}</strong></p>
+          <h2 style={{ margin: '0 0 8px', fontSize: '24px', fontWeight: '800' }}>📘 단어 훈련</h2>
+          <p style={{ color: '#666', fontSize: '14px', marginBottom: '24px' }}>배정 교재: <strong style={{ color: '#007aff' }}>{currentBook || '없음'}</strong></p>
           
           <select value={selectedBook} onChange={(e) => setSelectedBook(e.target.value)} style={{ width: '100%', padding: '16px', borderRadius: '12px', border: '1px solid #ccc', fontSize: '16px', marginBottom: '20px', boxSizing: 'border-box' }}>
             <option value="">교재 변경/선택</option>
@@ -95,18 +152,17 @@ export default function Voca({ onBack, currentBook }: VocaProps) {
       {gameState === 'playing' && questions.length > 0 && (
         <div style={{ textAlign: 'center', background: 'white', padding: '32px', borderRadius: '24px', boxShadow: '0 8px 24px rgba(0,0,0,0.05)' }}>
           <p style={{ color: '#8e8e93', fontSize: '14px', fontWeight: '700', margin: '0 0 16px' }}>{currentIndex + 1} / {questions.length}</p>
+          
+          {/* 문제 표시 영역 */}
           <h2 style={{ fontSize: '32px', fontWeight: '800', margin: '0 0 32px', color: '#111' }}>
             {questions[currentIndex].type === 'eng2kor' ? questions[currentIndex].eng : questions[currentIndex].kor}
           </h2>
+          
+          {/* 객관식 보기 4개 영역 */}
           {questions[currentIndex].options.map((opt, i) => (
             <button 
               key={i} 
-              onClick={() => {
-                const isCorrect = opt === questions[currentIndex].answer;
-                if (isCorrect) setScore(s => s + 1);
-                if (currentIndex + 1 < questions.length) setCurrentIndex(i => i + 1);
-                else setGameState('result');
-              }} 
+              onClick={() => handleOptionClick(opt)} 
               style={{ display: 'block', width: '100%', margin: '12px 0', padding: '16px', fontSize: '16px', fontWeight: '600', borderRadius: '14px', border: '1px solid #e5e5e5', background: '#f5f5f7', cursor: 'pointer' }}
             >
               {opt}
