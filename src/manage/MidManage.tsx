@@ -29,7 +29,7 @@ export default function MidManage() {
   const handleApplyToSheet = async (studentId: string, book: string, progress: string) => {
     setSavingId(studentId);
     // 💡 아래 주소만 원장님의 웹앱 주소로 바꾸면 됩니다!
-    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyOAbzxggopAl9QhrG2VHSmo0yCEcdIi89xhgvT5nOWkk9sZbiTtB-XjQd4GVhV4MhE/exec;
+    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyOAbzxggopAl9QhrG2VHSmo0yCEcdIi89xhgvT5nOWkk9sZbiTtB-XjQd4GVhV4MhE/exec';
     
     await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
