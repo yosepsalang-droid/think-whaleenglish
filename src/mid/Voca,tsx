@@ -2,14 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 
 interface VocaProps { onBack: () => void; }
 interface WordItem { book: string; eng: string; kor: string; }
-interface Question { 
-  id: number; 
-  type: 'eng2kor' | 'kor2eng'; 
-  eng: string; 
-  kor: string; 
-  options: string[]; 
-  answer: string; 
-}
+interface Question { id: number; type: 'eng2kor' | 'kor2eng'; eng: string; kor: string; options: string[]; answer: string; }
 
 const GOOGLE_SHEET_VOCA_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe/pub?gid=8529494&single=true&output=csv";
 
@@ -29,9 +22,11 @@ export default function Voca({ onBack }: VocaProps) {
         const text = await response.text();
         const rows = text.split(/\r?\n/).slice(1);
         const parsed = rows.map(row => {
-          const cells = row.split(',');
+          const cells = row.split(','); // 구글 시트 CSV 구조에 맞춰 분리
           return { book: cells[0]?.trim(), eng: cells[3]?.trim(), kor: cells[4]?.trim() };
         }).filter(w => w.book && w.eng && w.kor);
+        
+        if (parsed.length === 0) alert("데이터가 없습니다. 구글 시트 공유 설정을 확인하세요.");
         setAllWords(parsed);
       } catch (e) { alert("데이터 로드 실패"); }
     };
@@ -39,13 +34,6 @@ export default function Voca({ onBack }: VocaProps) {
   }, []);
 
   const books = useMemo(() => Array.from(new Set(allWords.map(w => w.book))), [allWords]);
-
-  const speak = (text: string) => {
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'en-US';
-    window.speechSynthesis.speak(u);
-  };
 
   const startGame = () => {
     if (!selectedBook) return alert("교재를 선택해주세요.");
@@ -69,47 +57,35 @@ export default function Voca({ onBack }: VocaProps) {
     setScore(0);
   };
 
-  const handleAnswer = (opt: string) => {
-    if (feedback) return;
-    const isCorrect = opt === questions[currentIndex].answer;
-    if (isCorrect) {
-      setScore(s => s + 1);
-      setFeedback('정답! 👍');
-    } else {
-      setFeedback(`오답! 정답: ${questions[currentIndex].answer}`);
-    }
-    
-    setTimeout(() => {
-      setFeedback(null);
-      if (currentIndex + 1 < questions.length) setCurrentIndex(i => i + 1);
-      else setGameState('result');
-    }, 1000);
-  };
-
   return (
     <div style={{ padding: '20px', maxWidth: '500px', margin: '0 auto', fontFamily: 'Pretendard' }}>
-      <button onClick={onBack}>◀ 홈으로</button>
+      <button onClick={onBack} style={{ marginBottom: '20px' }}>◀ 로그아웃</button>
       {gameState === 'intro' && (
-        <div style={{ textAlign: 'center', marginTop: '50px' }}>
-          <h2>📘 중등부 객관식 테스트</h2>
-          <select onChange={(e) => setSelectedBook(e.target.value)} style={{ width: '100%', padding: '15px', borderRadius: '10px' }}>
+        <div style={{ textAlign: 'center' }}>
+          <h2>📘 중등부 단어 훈련</h2>
+          <select onChange={(e) => setSelectedBook(e.target.value)} style={{ width: '100%', padding: '15px' }}>
             <option value="">교재 선택</option>
             {books.map(b => <option key={b} value={b}>{b}</option>)}
           </select>
-          <button onClick={startGame} style={{ width: '100%', marginTop: '20px', padding: '15px', background: '#007aff', color: 'white', border: 'none', borderRadius: '10px' }}>시작하기</button>
+          <button onClick={startGame} style={{ width: '100%', marginTop: '20px', padding: '15px', background: '#007aff', color: 'white', border: 'none', borderRadius: '10px' }}>테스트 시작</button>
         </div>
       )}
       {gameState === 'playing' && (
-        <div style={{ marginTop: '30px', textAlign: 'center' }}>
-          <h2 style={{ fontSize: '32px' }}>{questions[currentIndex].type === 'eng2kor' ? questions[currentIndex].eng : questions[currentIndex].kor}</h2>
+        <div style={{ textAlign: 'center' }}>
+          <p>{currentIndex + 1} / {questions.length}</p>
+          <h2 style={{ fontSize: '28px', margin: '20px 0' }}>{questions[currentIndex].type === 'eng2kor' ? questions[currentIndex].eng : questions[currentIndex].kor}</h2>
           {questions[currentIndex].options.map((opt, i) => (
-            <button key={i} onClick={() => handleAnswer(opt)} style={{ display: 'block', width: '100%', margin: '10px 0', padding: '15px', borderRadius: '10px', border: '1px solid #ccc' }}>{opt}</button>
+            <button key={i} onClick={() => {
+              const isCorrect = opt === questions[currentIndex].answer;
+              if (isCorrect) setScore(s => s + 1);
+              if (currentIndex + 1 < questions.length) setCurrentIndex(i => i + 1);
+              else setGameState('result');
+            }} style={{ display: 'block', width: '100%', margin: '10px 0', padding: '15px' }}>{opt}</button>
           ))}
-          {feedback && <div style={{ marginTop: '20px', fontWeight: 'bold' }}>{feedback}</div>}
         </div>
       )}
       {gameState === 'result' && (
-        <div style={{ textAlign: 'center', marginTop: '50px' }}>
+        <div style={{ textAlign: 'center' }}>
           <h2>결과: {score} / {questions.length}</h2>
           <button onClick={() => setGameState('intro')}>다시 하기</button>
         </div>

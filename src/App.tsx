@@ -52,8 +52,10 @@ export default function App() {
     if (foundStudent) {
       setLoggedInStudent(foundStudent);
       setIsLoggedIn(true);
-      const isElementary = cleanId.startsWith('uthinks') || foundStudent.grade?.includes('초');
-      setStudentMode(isElementary ? 'elementary' : 'middle');
+      
+      // [로직 개선] 중등부 판별 강화: ID에 'm'이 포함되거나 학년에 '중' 글자가 있으면 middle 모드
+      const isMiddle = cleanId.toLowerCase().includes('m') || foundStudent.grade?.includes('중');
+      setStudentMode(isMiddle ? 'middle' : 'elementary');
     } else {
       alert('등록되지 않은 아이디입니다.');
     }
@@ -64,19 +66,7 @@ export default function App() {
       return <Lms onBack={() => { setIsLoggedIn(false); setIsAdmin(false); setId(''); }} />;
     }
 
-    if (loggedInStudent && studentMode === 'elementary') {
-      return (
-        <div>
-          {currentMenu === 'home' && <Home student={loggedInStudent} onNavigate={setCurrentMenu} onLogout={() => { setIsLoggedIn(false); setId(''); setStudentMode(null); }} />}
-          {currentMenu === 'word' && <Word onBack={() => setCurrentMenu('home')} />}
-          {currentMenu === 'sentence' && <Sentence onBack={() => setCurrentMenu('home')} />}
-          {currentMenu === 'chat' && <WhaleChat onBack={() => setCurrentMenu('home')} />}
-          {currentMenu === 'grammar' && <Grammar student={loggedInStudent} onBack={() => setCurrentMenu('home')} />}
-        </div>
-      );
-    }
-
-    // 📘 중등부 학생 화면 (연결 완료)
+    // 📘 중등부 전용 화면 (Voca로 직행)
     if (loggedInStudent && studentMode === 'middle') {
       return (
         <Voca 
@@ -86,6 +76,19 @@ export default function App() {
             setStudentMode(null);
           }} 
         />
+      );
+    }
+
+    // 🧸 초등부 화면
+    if (loggedInStudent && studentMode === 'elementary') {
+      return (
+        <div>
+          {currentMenu === 'home' && <Home student={loggedInStudent} onNavigate={setCurrentMenu} onLogout={() => { setIsLoggedIn(false); setId(''); setStudentMode(null); }} />}
+          {currentMenu === 'word' && <Word onBack={() => setCurrentMenu('home')} />}
+          {currentMenu === 'sentence' && <Sentence onBack={() => setCurrentMenu('home')} />}
+          {currentMenu === 'chat' && <WhaleChat onBack={() => setCurrentMenu('home')} />}
+          {currentMenu === 'grammar' && <Grammar student={loggedInStudent} onBack={() => setCurrentMenu('home')} />}
+        </div>
       );
     }
   }
