@@ -18,7 +18,7 @@ export default function Voca({ onBack, currentBook }: VocaProps) {
   const [selectedBook, setSelectedBook] = useState(currentBook || '');
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
 
-  // 💡 오답 재시험 및 도전 회차 추적을 위한 상태 추가
+  // 오답 재시험 및 도전 회차 추적을 위한 상태
   const [wrongQuestions, setWrongQuestions] = useState<Question[]>([]);
   const [attemptCount, setAttemptCount] = useState(1);
   const [isRetestMode, setIsRetestMode] = useState(false);
@@ -36,7 +36,6 @@ export default function Voca({ onBack, currentBook }: VocaProps) {
         
         const parsed = rows.map(row => {
           const cells = row.split(','); 
-          // 💡 1. 글자 앞뒤에 남아있는 불필요한 쌍따옴표(")를 완벽히 제거하는 정제 함수
           const cleanText = (str: string) => str ? str.replace(/"/g, '').trim() : '';
           return { 
             book: cleanText(cells[0]), 
@@ -65,7 +64,6 @@ export default function Voca({ onBack, currentBook }: VocaProps) {
     }
   };
 
-  // 💡 첫 테스트 시작 함수
   const startGame = () => {
     if (!selectedBook) return alert("교재를 선택해주세요.");
     const filtered = allWords.filter(w => w.book === selectedBook);
@@ -107,14 +105,11 @@ export default function Voca({ onBack, currentBook }: VocaProps) {
     setSelectedOption(null);
   };
 
-  // 💡 틀린 것만 골라서 재시험 보는 함수
   const handleStartRetest = () => {
-    // 오답 리스트를 무작위로 다시 섞어서 출제
     const shuffledWrong = [...wrongQuestions].sort(() => Math.random() - 0.5);
-    
     setQuestions(shuffledWrong);
-    setWrongQuestions([]); // 다음 라운드를 위해 오답 보관함 초기화
-    setAttemptCount(prev => prev + 1); // 회차 추가
+    setWrongQuestions([]); 
+    setAttemptCount(prev => prev + 1); 
     setIsRetestMode(true);
     setGameState('playing');
     setCurrentIndex(0);
@@ -145,7 +140,6 @@ export default function Voca({ onBack, currentBook }: VocaProps) {
     if (isCorrect) {
       setScore(s => s + 1);
     } else {
-      // 💡 틀린 문제를 오답 보관함에 담아둡니다 (중복 방지)
       setWrongQuestions(prev => {
         if (prev.some(q => q.id === currentQ.id)) return prev;
         return [...prev, currentQ];
@@ -162,16 +156,25 @@ export default function Voca({ onBack, currentBook }: VocaProps) {
     }, 1500);
   };
 
-  // 💡 보기 글자 수에 따라 폰트 크기를 자동으로 축소해 주는 함수
+  // 💡 보기 칸 내부의 글자 크기를 조절하는 함수 (칸은 고정, 글자만 변함)
   const getDynamicFontSize = (text: string) => {
-    if (text.length > 14) return '12px';
-    if (text.length > 8) return '14px';
-    if (text.length > 5) return '16px';
-    return '18px';
+    const len = text.length;
+    if (len > 25) return '13px';
+    if (len > 18) return '15px';
+    if (len > 10) return '18px';
+    return '22px'; // 짧은 단어는 시원하게 크게
+  };
+
+  // 💡 메인 문제(질문) 영역의 글자 크기를 조절하는 함수
+  const getQuestionFontSize = (text: string) => {
+    const len = text.length;
+    if (len > 25) return '24px';
+    if (len > 15) return '30px';
+    return '38px';
   };
 
   return (
-    <div style={{ padding: '20px', maxWidth: '480px', margin: '0 auto', fontFamily: 'Pretendard, sans-serif' }}>
+    <div style={{ padding: '20px', width: '100%', maxWidth: '520px', boxSizing: 'border-box', margin: '0 auto', fontFamily: 'Pretendard, sans-serif' }}>
       
       {/* 뒤로가기 버튼 */}
       <button onClick={onBack} style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', background: 'white', border: '1px solid #eaeaea', borderRadius: '12px', fontWeight: '700', cursor: 'pointer', color: '#555', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
@@ -202,31 +205,38 @@ export default function Voca({ onBack, currentBook }: VocaProps) {
       )}
 
       {gameState === 'playing' && questions.length > 0 && (
-        <div style={{ background: 'white', padding: '32px 24px', borderRadius: '24px', boxShadow: '0 12px 32px rgba(0,0,0,0.06)' }}>
+        <div style={{ background: 'white', padding: '32px 24px', borderRadius: '24px', width: '100%', boxSizing: 'border-box', boxShadow: '0 12px 32px rgba(0,0,0,0.06)' }}>
           
           {/* 진행률 바 */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <span style={{ fontSize: '14px', fontWeight: '700', color: '#007aff' }}>
+            <span style={{ fontSize: '15px', fontWeight: '800', color: '#007aff' }}>
               {isRetestMode ? `🔥 오답 재시험 (${attemptCount}회차)` : `Question ${currentIndex + 1}`}
             </span>
-            <span style={{ fontSize: '14px', fontWeight: '600', color: '#8e8e93' }}>{currentIndex + 1} / {questions.length}</span>
+            <span style={{ fontSize: '15px', fontWeight: '700', color: '#8e8e93' }}>{currentIndex + 1} / {questions.length}</span>
           </div>
           <div style={{ width: '100%', height: '8px', backgroundColor: '#f0f0f5', borderRadius: '4px', marginBottom: '32px', overflow: 'hidden' }}>
             <div style={{ width: `${((currentIndex + 1) / questions.length) * 100}%`, height: '100%', backgroundColor: '#007aff', borderRadius: '4px', transition: 'width 0.3s ease' }}></div>
           </div>
           
-          {/* 💡 2. 문제 영역: 최소 높이(minHeight)를 주어 단어 길이에 상관없이 화면 크기를 고정함 */}
-          <div style={{ textAlign: 'center', minHeight: '130px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', marginBottom: '24px' }}>
-            <span style={{ display: 'inline-block', padding: '6px 12px', backgroundColor: '#eef6ff', color: '#007aff', borderRadius: '8px', fontSize: '13px', fontWeight: '700', marginBottom: '12px' }}>
+          {/* 💡 문제 영역: height를 완전히 고정하여 위아래로 흔들리지 않게 합니다. */}
+          <div style={{ textAlign: 'center', height: '160px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', marginBottom: '32px' }}>
+            <span style={{ display: 'inline-block', padding: '6px 14px', backgroundColor: '#eef6ff', color: '#007aff', borderRadius: '8px', fontSize: '14px', fontWeight: '800', marginBottom: '16px' }}>
               {questions[currentIndex].type === 'eng2kor' ? '🇺🇸 영어를 우리말로' : '🇰🇷 우리말을 영어로'}
             </span>
-            <h2 style={{ fontSize: '34px', fontWeight: '800', margin: '0', color: '#111', wordBreak: 'keep-all', lineHeight: '1.3' }}>
+            <h2 style={{ 
+              fontSize: getQuestionFontSize(questions[currentIndex].type === 'eng2kor' ? questions[currentIndex].eng : questions[currentIndex].kor), 
+              fontWeight: '800', 
+              margin: '0', 
+              color: '#111', 
+              wordBreak: 'keep-all', 
+              lineHeight: '1.3' 
+            }}>
               {questions[currentIndex].type === 'eng2kor' ? questions[currentIndex].eng : questions[currentIndex].kor}
             </h2>
           </div>
           
-          {/* 💡 3. 객관식 보기 영역: 두 칸 두 줄(2x2 Grid) 구조로 완전히 대칭 고정 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          {/* 💡 객관식 보기 영역: 그리드와 버튼의 너비/높이를 100% 고정합니다. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', width: '100%' }}>
             {questions[currentIndex].options.map((opt, i) => {
               const isSelected = selectedOption === opt;
               const isCorrectAnswer = opt === questions[currentIndex].answer;
@@ -251,12 +261,12 @@ export default function Voca({ onBack, currentBook }: VocaProps) {
                   disabled={!!selectedOption} 
                   style={{ 
                     width: '100%', 
-                    height: '84px', // 💡 모든 보기의 칸 크기를 완전히 동일하게 고정
+                    height: '100px', // 💡 버튼 높이 절대 고정
                     boxSizing: 'border-box',
                     position: 'relative',
-                    padding: '10px 12px', 
-                    fontSize: getDynamicFontSize(opt), // 💡 글자 수에 맞추어 폰트 크기 자동 조절
-                    fontWeight: '700', 
+                    padding: '12px', 
+                    fontSize: getDynamicFontSize(opt), // 💡 길면 자동으로 작아짐
+                    fontWeight: '800', 
                     textAlign: 'center',
                     borderRadius: '16px', 
                     border: `2px solid ${borderColor}`, 
@@ -269,13 +279,13 @@ export default function Voca({ onBack, currentBook }: VocaProps) {
                     justifyContent: 'center',
                     alignItems: 'center',
                     wordBreak: 'keep-all',
-                    lineHeight: '1.3'
+                    lineHeight: '1.3',
+                    overflow: 'hidden' // 텍스트가 삐져나가지 않도록
                   }}
                 >
                   {opt}
-                  {/* 정오답 기호가 글자를 밀어내지 않도록 절대 좌표 배치 */}
-                  {selectedOption && isCorrectAnswer && <span style={{ position: 'absolute', right: '10px', top: '10px', fontSize: '14px' }}>⭕</span>}
-                  {selectedOption && isSelected && !isCorrectAnswer && <span style={{ position: 'absolute', right: '10px', top: '10px', fontSize: '14px' }}>❌</span>}
+                  {selectedOption && isCorrectAnswer && <span style={{ position: 'absolute', right: '12px', top: '12px', fontSize: '16px' }}>⭕</span>}
+                  {selectedOption && isSelected && !isCorrectAnswer && <span style={{ position: 'absolute', right: '12px', top: '12px', fontSize: '16px' }}>❌</span>}
                 </button>
               );
             })}
@@ -286,15 +296,13 @@ export default function Voca({ onBack, currentBook }: VocaProps) {
       {gameState === 'result' && (
         <div style={{ textAlign: 'center', background: 'white', padding: '48px 24px', borderRadius: '24px', boxShadow: '0 12px 32px rgba(0,0,0,0.06)' }}>
           
-          {/* 💡 4. 통과 여부에 따른 동적 스코어 및 결과 메시지창 구성 */}
           {wrongQuestions.length === 0 ? (
             <>
               <div style={{ fontSize: '56px', marginBottom: '16px' }}>🏆</div>
               <h2 style={{ fontSize: '28px', fontWeight: '800', margin: '0 0 12px', color: '#111' }}>최종 테스트 통과!</h2>
               
               <div style={{ backgroundColor: '#e8f5e9', borderRadius: '20px', padding: '24px', marginBottom: '32px' }}>
-                {/* 원장님이 말씀하신 "몇회 중 통과" 알림 문구 */}
-                <span style={{ fontSize: '15px', fontWeight: '700', color: '#2e7d32', display: 'block', marginBottom: '4px' }}>PASS MISSION 🐋</span>
+                <span style={{ fontSize: '15px', fontWeight: '800', color: '#2e7d32', display: 'block', marginBottom: '6px' }}>PASS MISSION 🐋</span>
                 <span style={{ fontSize: '24px', fontWeight: '800', color: '#1b5e20' }}>
                   {attemptCount}회차 시험 만에 통과!
                 </span>
@@ -312,17 +320,16 @@ export default function Voca({ onBack, currentBook }: VocaProps) {
               
               <div style={{ backgroundColor: '#fff5f5', borderRadius: '20px', padding: '24px', marginBottom: '32px', border: '1px solid #ffebeb' }}>
                 <div style={{ marginBottom: '12px' }}>
-                  <span style={{ fontSize: '14px', fontWeight: '700', color: '#8e8e93', display: 'block' }}>이번 회차 맞춘 문제</span>
-                  <span style={{ fontSize: '32px', fontWeight: '800', color: '#ff3b30' }}>{score}</span>
-                  <span style={{ fontSize: '18px', fontWeight: '700', color: '#111' }}> / {questions.length}</span>
+                  <span style={{ fontSize: '14px', fontWeight: '800', color: '#8e8e93', display: 'block', marginBottom: '4px' }}>이번 회차 맞춘 문제</span>
+                  <span style={{ fontSize: '36px', fontWeight: '800', color: '#ff3b30' }}>{score}</span>
+                  <span style={{ fontSize: '20px', fontWeight: '800', color: '#111' }}> / {questions.length}</span>
                 </div>
-                <div style={{ borderTop: '1px solid #ffe5e5', paddingTop: '12px', fontSize: '14px', fontWeight: '700', color: '#e53935' }}>
-                  남은 오답 개수: {wrongQuestions.length}개 (현재 {attemptCount}회차 진행완료)
+                <div style={{ borderTop: '1px solid #ffe5e5', paddingTop: '16px', fontSize: '15px', fontWeight: '800', color: '#e53935' }}>
+                  남은 오답 개수: {wrongQuestions.length}개 (현재 {attemptCount}회차 완료)
                 </div>
               </div>
 
-              {/* 💡 틀린 문항만 가지고 다음 회차로 이어지는 버튼 */}
-              <button onClick={handleStartRetest} style={{ width: '100%', padding: '18px', background: 'linear-gradient(135deg, #ff3b30, #c62828)', color: 'white', border: 'none', borderRadius: '16px', fontSize: '18px', fontWeight: '700', cursor: 'pointer', boxShadow: '0 6px 16px rgba(255,59,48,0.2)' }}>
+              <button onClick={handleStartRetest} style={{ width: '100%', padding: '18px', background: 'linear-gradient(135deg, #ff3b30, #c62828)', color: 'white', border: 'none', borderRadius: '16px', fontSize: '18px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 6px 16px rgba(255,59,48,0.2)' }}>
                 ❌ 틀린 단어 재시험 보기 ({attemptCount + 1}회차 도전)
               </button>
             </>
