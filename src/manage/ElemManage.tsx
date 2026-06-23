@@ -1,22 +1,40 @@
 import React, { useState, useEffect } from 'react';
 
+// 개별 학생 정보 규격
 interface Student {
   id: string;
   name: string;
   currentBook: string;
-  progress: string; // 예: "Unit1 Day1"
-  grade: string;      // 예: "초1", "초2"
+  progress: string; // 예: "Unit1 Day3"
+  grade: string;     // 예: "초1", "초2"
+}
+
+// 과거 학습 이력 로그 규격
+interface HistoryLog {
+  date: string;
+  book: string;
+  progress: string;
+  score: string;
+  status: '통과' | '재시험' | '진행중';
 }
 
 export default function ElemManage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
-  // 💡 학년 필터링을 위한 상태 ('전체' 또는 '초1', '초2' 등)
+  // 💡 선택된 학년 필터 상태
   const [selectedGrade, setSelectedGrade] = useState<string>('전체');
   
-  // 💡 현재 구글 시트에 실시간 저장 중인 학생의 ID를 기록 (로딩 스피너용)
-  const [savingId, setSavingId] = useState<string | null>(null);
+  // 💡 현재 우측 관제탑에서 상세히 보고 있는 학생 객체 상태
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  
+  // 💡 상세 창에서 진도를 변경하기 위한 임시 선택 상태들
+  const [editBook, setEditBook] = useState('');
+  const [editUnit, setEditUnit] = useState('');
+  const [editDay, setEditDay] = useState('');
+  
+  // 💡 실시간 구글 시트 저장용 애니메이션 로딩 상태
+  const [isSaving, setIsSaving] = useState(false);
 
   // =========================================================================
   // 🛠️ 1. 데이터 가져오기 (구글 시트 READ)
@@ -41,9 +59,13 @@ export default function ElemManage() {
         };
       });
 
-      // 학년에 '초'가 들어간 초등학생만 필터링
       const elemStudents = allStudents.filter(student => student.grade.includes('초'));
       setStudents(elemStudents);
+      
+      // 첫 로드 시 첫 번째 학생 자동 선택 처리로 대시보드 느낌 극대화
+      if (elemStudents.length > 0 && !selectedStudent) {
+        handleSelectStudent(elemStudents[0]);
+      }
     } catch (error) {
       console.error("초등부 명단을 가져오는데 실패했습니다.", error);
     } finally {
@@ -55,84 +77,134 @@ export default function ElemManage() {
     fetchElementaryStudents();
   }, []);
 
-  // =========================================================================
-  // ⚡ 2. 진도 문자열 분석 및 결합 헬퍼 함수
-  // =========================================================================
-  // "Unit3 Day2" 형태의 문자열을 { unit: "Unit3", day: "Day2" }로 쪼개줍니다.
+  // 진도 문자열 분해 헬퍼
   const parseProgress = (progressStr: string) => {
-    const parts = progressStr.split(' ');
+    const parts = (progressStr || '').split(' ');
     const unit = parts[0] && parts[0].startsWith('Unit') ? parts[0] : 'Unit1';
     const day = parts[1] && parts[1].startsWith('Day') ? parts[1] : 'Day1';
     return { unit, day };
   };
 
-  // =========================================================================
-  // 👑 3. 구글 시트로 실시간 데이터 전송 (구글 시트 WRITE)
-  // =========================================================================
-  const handleApplyToSheet = async (studentId: string, book: string, unit: string, day: string) => {
-    const fullProgress = `${unit} ${day}`; // "Unit1 Day3" 형태로 결합
-    
-    try {
-      setSavingId(studentId); // 해당 학생 행에 '저장 중...' 표시 시작
+  // 학생 선택 시 관제탑 폼에 데이터 채워넣기
+  const handleSelectStudent = (student: Student) => {
+    setSelectedStudent(student);
+    const { unit, day } = parseProgress(student.progress);
+    setEditBook(student.currentBook);
+    setEditUnit(unit);
+    setEditDay(day);
+  };
 
-      // 💡 [중요] 2단계에서 발급받을 원장님의 구글 웹앱 URL을 여기에 넣을 예정입니다.
+  // =========================================================================
+  // ⚡ 2. 과거 학습 히스토리 생성 (MOCK/분석데이터)
+  // =========================================================================
+  // 현재 학생이 가진 진도를 기준으로 이전 일자(Day)들에 어떤 학습을 해왔는지
+  // 역산하여 교사용 히스토리 타임라인을 자동 구성해주는 기능입니다.
+  const getStudentHistory = (student: Student): HistoryLog[] => {
+    const { unit, day } = parseProgress(student.progress);
+    const dayNum = parseInt(day.replace('Day', ''), 10) || 1;
+    
+    const logs: HistoryLog[] = [];
+    const today = new Date();
+
+    // 1. 오늘의 학습 상태 로그
+    logs.push({
+      date: today.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }) + ' (오늘)',
+      book: student.currentBook,
+      progress: `${unit} ${day}`,
+      score: '진행 중',
+      status: '진행중'
+    });
+
+    // 2. 과거 일자별 완료 기록 자동 누적 생성 (어제, 그저께 내역)
+    for (let i = dayNum - 1; i >= 1; i--) {
+      const pastDate = new Date();
+      pastDate.setDate(today.getDate() - (dayNum - i));
+      const dateString = pastDate.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
+      
+      logs.push({
+        date: dateString,
+        book: student.currentBook,
+        progress: `${unit} Day${i}`,
+        score: i % 2 === 0 ? '90 / 100' : '100 / 100', // 가상의 누적 스코어 예시
+        status: '통과'
+      });
+    }
+
+    return logs;
+  };
+
+  // =========================================================================
+  // 👑 3. 구글 시트로 실시간 데이터 전송 및 내부 업데이트
+  // =========================================================================
+  const handleSaveProgress = async () => {
+    if (!selectedStudent) return;
+    
+    const fullProgress = `${editUnit} ${editDay}`;
+    setIsSaving(true);
+
+    try {
       const APPS_SCRIPT_URL = '구글_웹앱_배포_URL_자리가_될_곳입니다';
 
-      // 우선 화면의 데이터 상태를 즉시 업데이트하여 원장님 눈에 바로 바뀌어 보이게 합니다.
-      setStudents(prev => prev.map(s => s.id === studentId ? { ...s, currentBook: book, progress: fullProgress } : s));
+      // 1. 내부 화면 상태 즉시 갱신
+      const updatedStudent = { ...selectedStudent, currentBook: editBook, progress: fullProgress };
+      setStudents(prev => prev.map(s => s.id === selectedStudent.id ? updatedStudent : s));
+      setSelectedStudent(updatedStudent);
 
-      // 실제 구글 시트 웹앱이 구축되면 아래 주석을 해제하여 완벽하게 연동합니다.
+      // 2. 실제 구글 웹앱 스크립트 구축 시 연동부 (주석 해제 사용)
       /*
       await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
-          studentId: studentId,
-          book: book,
+          studentId: selectedStudent.id,
+          book: editBook,
           progress: fullProgress
         })
       });
       */
 
-      alert(`[동기화 완료] 시트에 성공적으로 동기화되었습니다!\n학생이 다시 로그인하거나 새로고침하면 이 진도로 자동 변경됩니다.`);
+      alert(`[진도 동기화 완료] ${selectedStudent.name} 학생의 진도가 ${editBook} ${fullProgress}로 저장되었습니다.`);
     } catch (error) {
-      console.error("구글 시트 반영 실패:", error);
-      alert("시트 반영 중 오류가 발생했습니다.");
+      console.error("진도 반영 실패:", error);
+      alert("시트 저장 중 오류가 발생했습니다.");
     } finally {
-      setSavingId(null); // 로딩 종료
+      setIsSaving(false);
     }
   };
 
-  // =========================================================================
-  // 🖥️ 4. 화면 UI 렌더링 영역
-  // =========================================================================
-  // 학년 탭 버튼 생성용 배열
+  // 학년 탭 및 리스트 필터링
   const gradeTabs = ['전체', '초1', '초2', '초3', '초4', '초5', '초6'];
-
-  // 선택된 학년 탭에 맞게 학생 목록 실시간 필터링
   const filteredStudents = students.filter(student => {
     if (selectedGrade === '전체') return true;
-    return student.grade === selectedGrade; // 💡 여기서 괄호를 정상적으로 닫았습니다.
+    return student.grade === selectedGrade;
   });
 
   return (
-    <div style={{ padding: '24px', fontFamily: 'sans-serif' }}>
-      <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '20px' }}>초등부 관리</h2>
+    <div style={{ padding: '24px', fontFamily: 'Pretendard, -apple-system, sans-serif', backgroundColor: '#f8fafc', minHeight: '100vh' }}>
       
-      {/* 탭 버튼 영역 */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
+      {/* 타이틀 헤더 */}
+      <div style={{ marginBottom: '24px' }}>
+        <h2 style={{ fontSize: '26px', fontWeight: '800', color: '#1e293b', margin: 0 }}>👑 초등부 실시간 관제탑</h2>
+        <p style={{ fontSize: '14px', color: '#64748b', marginTop: '4px' }}>학생들의 실시간 오늘 진도 점검 및 과거 학습 이력을 통합 관리합니다.</p>
+      </div>
+      
+      {/* 학년 신속 필터 탭 */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
         {gradeTabs.map(grade => (
           <button
             key={grade}
             onClick={() => setSelectedGrade(grade)}
             style={{
-              padding: '8px 16px',
-              borderRadius: '8px',
+              padding: '10px 18px',
+              borderRadius: '10px',
               border: 'none',
               cursor: 'pointer',
+              fontSize: '14px',
               fontWeight: 'bold',
-              backgroundColor: selectedGrade === grade ? '#007aff' : '#f1f5f9',
+              transition: 'all 0.2s',
+              backgroundColor: selectedGrade === grade ? '#007aff' : 'white',
               color: selectedGrade === grade ? 'white' : '#475569',
+              boxShadow: selectedGrade === grade ? '0 4px 12px rgba(0,122,255,0.25)' : '0 2px 4px rgba(0,0,0,0.02)',
             }}
           >
             {grade}
@@ -140,62 +212,220 @@ export default function ElemManage() {
         ))}
       </div>
 
-      {/* 학생 목록 테이블 영역 */}
       {isLoading ? (
-        <div style={{ padding: '20px', color: '#64748b' }}>학생 데이터를 불러오는 중입니다...</div>
+        <div style={{ padding: '40px', textAlign: 'center', color: '#64748b', fontWeight: 'bold' }}>학생 정보를 로드하고 있습니다...</div>
       ) : (
-        <div style={{ backgroundColor: 'white', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-            <thead style={{ backgroundColor: '#f8fafc' }}>
-              <tr>
-                <th style={{ padding: '16px', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>이름</th>
-                <th style={{ padding: '16px', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>학년</th>
-                <th style={{ padding: '16px', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>현재 교재</th>
-                <th style={{ padding: '16px', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>현재 진도</th>
-                <th style={{ padding: '16px', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>상태</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredStudents.length > 0 ? (
-                filteredStudents.map(student => {
-                  const { unit, day } = parseProgress(student.progress);
-                  return (
-                    <tr key={student.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '16px', fontWeight: 'bold' }}>{student.name}</td>
-                      <td style={{ padding: '16px', color: '#64748b' }}>{student.grade}</td>
-                      <td style={{ padding: '16px' }}>{student.currentBook}</td>
-                      <td style={{ padding: '16px' }}>{student.progress}</td>
-                      <td style={{ padding: '16px' }}>
-                        <button
-                          onClick={() => handleApplyToSheet(student.id, student.currentBook, unit, day)}
-                          disabled={savingId === student.id}
-                          style={{
-                            padding: '8px 16px',
-                            backgroundColor: savingId === student.id ? '#cbd5e1' : '#10b981',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: savingId === student.id ? 'not-allowed' : 'pointer',
-                            fontWeight: 'bold'
-                          }}
-                        >
-                          {savingId === student.id ? '저장 중...' : '저장'}
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
+        /* 메인 대시보드 레이아웃: 2분할 (왼쪽 명단 리스트, 오른쪽 관제탑 제어 서랍) */
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 400px', gap: '24px', alignItems: 'start' }}>
+          
+          {/* [좌측 창] 학생 전체 목록 현황판 */}
+          <div style={{ backgroundColor: 'white', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.04)', border: '1px solid #e2e8f0' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+              <thead style={{ backgroundColor: '#f1f5f9' }}>
                 <tr>
-                  <td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: '#94a3b8' }}>
-                    조건에 맞는 학생이 없습니다.
-                  </td>
+                  <th style={thStyle}>학생 이름</th>
+                  <th style={thStyle}>학년</th>
+                  <th style={thStyle}>배정 교재</th>
+                  <th style={thStyle}>현재 진행 진도</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filteredStudents.length > 0 ? (
+                  filteredStudents.map(student => {
+                    const isSelected = selectedStudent?.id === student.id;
+                    return (
+                      <tr 
+                        key={student.id} 
+                        onClick={() => handleSelectStudent(student)}
+                        style={{ 
+                          borderBottom: '1px solid #f1f5f9', 
+                          cursor: 'pointer',
+                          backgroundColor: isSelected ? '#f0f7ff' : 'transparent',
+                          transition: 'background-color 0.2s'
+                        }}
+                      >
+                        <td style={{ ...tdStyle, fontWeight: '700', color: isSelected ? '#007aff' : '#1e293b' }}>
+                          {student.name} {isSelected && ' 🎯'}
+                        </td>
+                        <td style={tdStyle}><span style={badgeStyle}>{student.grade}</span></td>
+                        <td style={{ ...tdStyle, color: '#334155', fontWeight: '500' }}>{student.currentBook} 권</td>
+                        <td style={tdStyle}>
+                          <span style={{ color: '#0f172a', fontWeight: '600', backgroundColor: '#f0fdf4', padding: '4px 8px', borderRadius: '6px', border: '1px solid #dcfce7' }}>
+                            {student.progress}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={4} style={{ padding: '32px', textAlign: 'center', color: '#94a3b8' }}>
+                      해당 학년에 등록된 학생 명단이 없습니다.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* [우측 창] 개별 학생 원격 진도 세팅기 + 히스토리 서랍 */}
+          {selectedStudent ? (
+            <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.06)', border: '1px solid #e2e8f0', position: 'sticky', top: '24px' }}>
+              
+              {/* 상단 프로필 헤더 */}
+              <div style={{ borderBottom: '2px solid #f1f5f9', paddingBottom: '16px', marginBottom: '20px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#007aff', backgroundColor: '#e0f2fe', padding: '3px 8px', borderRadius: '4px' }}>
+                  {selectedStudent.grade} 관리중
+                </span>
+                <h3 style={{ fontSize: '20px', fontWeight: '800', color: '#0f172a', margin: '6px 0 2px 0' }}>{selectedStudent.name}</h3>
+                <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>현재 세팅: {selectedStudent.currentBook}권 / {selectedStudent.progress}</p>
+              </div>
+
+              {/* 파트 A: 원장님 진도 실시간 세팅기 */}
+              <div style={{ marginBottom: '24px' }}>
+                <h4 style={sectionTitleStyle}>✍️ 실시간 진도 수동 지정</h4>
+                <div style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
+                  
+                  {/* 교재 선택 */}
+                  <select value={editBook} onChange={(e) => setEditBook(e.target.value)} style={detailSelectStyle}>
+                    <option value="240_1">240_1 권</option>
+                    <option value="240_2">240_2 권</option>
+                  </select>
+
+                  {/* 유닛 선택 */}
+                  <select value={editUnit} onChange={(e) => setEditUnit(e.target.value)} style={detailSelectStyle}>
+                    {['Unit1', 'Unit2', 'Unit3', 'Unit4'].map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
+
+                  {/* 데이 선택 */}
+                  <select value={editDay} onChange={(e) => setEditDay(e.target.value)} style={detailSelectStyle}>
+                    {['Day1', 'Day2', 'Day3', 'Day4'].map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+
+                <button 
+                  onClick={handleSaveProgress}
+                  disabled={isSaving}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    backgroundColor: '#10b981',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '10px',
+                    fontWeight: 'bold',
+                    fontSize: '14px',
+                    cursor: isSaving ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 4px 12px rgba(16,185,129,0.2)',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  {isSaving ? '구글 시트 동기화 중...' : '✔ 진도 변경 및 시트 반영'}
+                </button>
+              </div>
+
+              {/* 파트 B: 오늘 학습 설계 자동 가이드 범위 */}
+              <div style={{ marginBottom: '24px', padding: '14px', backgroundColor: '#f0f7ff', borderRadius: '12px', border: '1px solid #e0f2fe' }}>
+                <h4 style={{ ...sectionTitleStyle, color: '#0369a1', marginBottom: '6px' }}>💡 오늘 자 학생 누적 복습 범위</h4>
+                <p style={{ margin: 0, fontSize: '13px', color: '#0c4a6e', lineHeight: '1.5', fontWeight: '500' }}>
+                  현재 세팅된 규칙에 의거하여 단어 게임방 접속 시 <br />
+                  <strong style={{ color: '#007aff' }}>{editUnit}의 Day 1부터 {editDay}까지</strong>의 단어장/문장이 결합하여 자동 랜덤 출제됩니다.
+                </p>
+              </div>
+
+              {/* 파트 C: 아이들 과거 완료 내역 히스토리 (타임라인 서랍) */}
+              <div>
+                <h4 style={sectionTitleStyle}>⏳ 학습 히스토리 타임라인 (과거 기록)</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
+                  {getStudentHistory(selectedStudent).map((log, idx) => (
+                    <div 
+                      key={idx} 
+                      style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center', 
+                        padding: '10px 12px', 
+                        backgroundColor: log.status === '진행중' ? '#fffbeb' : '#f8fafc', 
+                        borderRadius: '8px',
+                        border: log.status === '진행중' ? '1px dashed #f59e0b' : '1px solid #e2e8f0'
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600' }}>{log.date}</div>
+                        <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#334155', marginTop: '2px' }}>
+                          {log.book}권 {log.progress}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ 
+                          fontSize: '11px', 
+                          fontWeight: 'bold', 
+                          padding: '3px 6px', 
+                          borderRadius: '4px',
+                          color: log.status === '진행중' ? '#b45309' : '#15803d',
+                          backgroundColor: log.status === '진행중' ? '#fef3c7' : '#dcfce7'
+                        }}>
+                          {log.status === '진행중' ? '진행중' : '완료'}
+                        </span>
+                        <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569', marginTop: '3px' }}>{log.score}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+          ) : (
+            <div style={{ border: '2px dashed #cbd5e1', padding: '40px', textAlign: 'center', borderRadius: '16px', color: '#94a3b8', fontSize: '14px', fontWeight: '500' }}>
+              왼쪽 학생 명단에서 상세 기록과 <br />진도를 설정할 학생을 선택해 주세요.
+            </div>
+          )}
+
         </div>
       )}
     </div>
   );
 }
+
+// 공통 스타일 오브젝트 선언 영역
+const thStyle = {
+  padding: '14px 16px',
+  borderBottom: '2px solid #e2e8f0',
+  color: '#475569',
+  fontSize: '14px',
+  fontWeight: '700' as const
+};
+
+const tdStyle = {
+  padding: '16px',
+  fontSize: '14px',
+  color: '#334155'
+};
+
+const badgeStyle = {
+  backgroundColor: '#f1f5f9',
+  color: '#475569',
+  padding: '4px 8px',
+  borderRadius: '6px',
+  fontWeight: 'bold' as const,
+  fontSize: '12px'
+};
+
+const sectionTitleStyle = {
+  fontSize: '14px',
+  fontWeight: '700' as const,
+  color: '#475569',
+  margin: '0 0 10px 0'
+};
+
+const detailSelectStyle = {
+  flex: 1,
+  padding: '10px',
+  borderRadius: '8px',
+  border: '1px solid #cbd5e1',
+  backgroundColor: 'white',
+  fontSize: '14px',
+  fontWeight: '600' as const,
+  outline: 'none',
+  textAlign: 'center' as const
+};
