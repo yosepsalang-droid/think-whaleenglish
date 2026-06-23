@@ -32,7 +32,7 @@ export default function ElemManage() {
   const fetchElementaryStudents = async () => {
     try {
       setIsLoading(true);
-      const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe/pub?gid=1059185510&single=true&output=csv';
+      const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe/pubhtml?gid=1059185510&single=true';
       const response = await fetch(SHEET_CSV_URL);
       const text = await response.text();
       const rows = text.split('\n').map(row => row.trim()).filter(row => row !== '');
