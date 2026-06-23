@@ -40,6 +40,12 @@ export default function Sentence({ onBack }: SentenceProps) {
   // 💡 [교정] 대소문자, 띄어쓰기 오차를 없애고 드롭다운과 필터 범위를 100% 일치시키는 절대 규칙
   const normalize = (val: string) => (val || '').toLowerCase().replace(/\s+/g, '').trim();
 
+  // 💡 [신규] 'Day 3' 같은 문자열에서 숫자 '3'만 정수로 추출해 내는 헬퍼 함수
+  const extractDayNum = (dayStr: string): number => {
+    const match = (dayStr || '').match(/\d+/);
+    return match ? parseInt(match[0], 10) : -1;
+  };
+
   // 빈 셀로 인해 열이 밀리는 현상을 방지하는 CSV 파서
   const parseCSVRow = (row: string): string[] => {
     const result: string[] = [];
@@ -122,12 +128,25 @@ export default function Sentence({ onBack }: SentenceProps) {
   }, [allSentences, book, unit]);
 
 
-  // 3️⃣ 선택 범위 매칭 및 문제 설정 (선택창의 데이터 규칙과 완벽 호환)
+  // 3️⃣ 💡 [핵심 로직 수정] 선택한 Day 이하의 모든 Day 문장들을 '누적'으로 수집합니다.
   const filterSentences = (targetBook: string, targetLesson: string, targetDay: string) => {
+    const targetDayNumber = extractDayNum(targetDay);
+
     const filtered = allSentences.filter(s => {
-      return normalize(s.book) === normalize(targetBook) &&
-             normalize(s.lesson) === normalize(targetLesson) &&
-             normalize(s.day) === normalize(targetDay);
+      const isBookMatch = normalize(s.book) === normalize(targetBook);
+      const isLessonMatch = normalize(s.lesson) === normalize(targetLesson);
+
+      if (!isBookMatch || !isLessonMatch) return false;
+
+      const currentDayNumber = extractDayNum(s.day);
+
+      // 규격화된 숫자 Day(예: Day1, Day2)인 경우 -> 선택한 숫자 이하의 범위 전부 허용 (<=)
+      if (targetDayNumber !== -1 && currentDayNumber !== -1) {
+        return currentDayNumber <= targetDayNumber;
+      }
+
+      // 숫자가 안 적힌 특수한 Day 이름인 경우 -> 기존처럼 1:1 일치 검사
+      return normalize(s.day) === normalize(targetDay);
     });
 
     if (filtered.length > 0) {
@@ -142,8 +161,15 @@ export default function Sentence({ onBack }: SentenceProps) {
           chunks: shuffledChunks
         };
       });
+
       setCurrentSentenceList(examFormat);
-      setAppliedProgress(`${targetBook} ${targetLesson} ${targetDay}`);
+
+      // 상단 진행상태 표기: 누적일 경우 "(Day1 ~ DayX 누적)" 으로 표시해 줍니다.
+      const label = targetDayNumber > 1 
+        ? `${targetBook} ${targetLesson} (Day1 ~ ${targetDay} 누적)`
+        : `${targetBook} ${targetLesson} ${targetDay}`;
+      setAppliedProgress(label);
+
     } else {
       setCurrentSentenceList([{ id: 1, kor: '해당 범위에 등록된 문장이 없습니다.', eng: 'none', chunks: [] }]);
       setAppliedProgress(`${targetBook} ${targetLesson} ${targetDay}`);
