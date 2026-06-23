@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 // 💡 1. Voca 컴포넌트를 불러옵니다.
-import Voca from './Voca'; 
+import Voca from '../mid/Voca'; 
 
 interface Student { id: string; name: string; currentBook: string; progress: string; grade: string; }
 
