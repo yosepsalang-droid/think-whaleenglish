@@ -45,9 +45,20 @@ export default function Grammar({ student, onBack }: GrammarProps) {
   const [timeLeft, setTimeLeft] = useState(10);
   const [hearts, setHearts] = useState(3);
   const [score, setScore] = useState(0);
-  const [monthlyRankings, setMonthlyRankings] = useState<RankingItem[]>([]);
 
-  // 💡 [수정 완료] 구글 시트 업데이트 지연 방어 로직이 적용된 함수
+  // 💡 [개선] 로딩 시 하얀 화면 방지 - 로컬 스토리지에서 기존 랭킹 데이터를 즉시 가져와 로딩 전까지 노출
+  const [monthlyRankings, setMonthlyRankings] = useState<RankingItem[]>(() => {
+    const localCache = localStorage.getItem('global_rankings_cache');
+    return localCache ? JSON.parse(localCache) : [];
+  });
+
+  // 💡 [신규] 내 현재 등수와 누적 점수를 기억하는 상태 추가
+  const [myRankInfo, setMyRankInfo] = useState<{ rank: number; score: number } | null>(() => {
+    const localMyRank = localStorage.getItem(`my_rank_cache_${student.name}`);
+    return localMyRank ? JSON.parse(localMyRank) : null;
+  });
+
+  // 구글 시트 업데이트 지연 방어 로직이 적용된 함수
   const fetchGlobalRankings = async () => {
     try {
       const response = await fetch(`${GOOGLE_SHEET_RANKING_CSV_URL}&_nocache=${Date.now()}`);
@@ -99,7 +110,7 @@ export default function Grammar({ student, onBack }: GrammarProps) {
         }
       });
       
-      // 💡 구글 시트 업데이트 지연 방어 로직 추가 부분
+      // 구글 시트 업데이트 지연 방어 로직 부분
       const localCacheStr = localStorage.getItem('global_rankings_cache');
       if (localCacheStr) {
         const localCache = JSON.parse(localCacheStr) as RankingItem[];
@@ -109,19 +120,28 @@ export default function Grammar({ student, onBack }: GrammarProps) {
           if (!accumulatedScoresMap[student.name]) {
             accumulatedScoresMap[student.name] = { ...myLocalData };
           } else if (accumulatedScoresMap[student.name].score < myLocalData.score) {
-            // 시트에서 가져온 점수보다 로컬 점수가 더 높다면 (시트 갱신 지연 중) 로컬 점수 유지
             accumulatedScoresMap[student.name].score = myLocalData.score;
           }
         }
       }
 
-      const sortedList = Object.values(accumulatedScoresMap)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 5);
+      // 💡 [신규] 전체 인원 등수 정렬 후 '내 등수' 추출하기
+      const sortedAllList = Object.values(accumulatedScoresMap)
+        .sort((a, b) => b.score - a.score);
+      
+      const myIndex = sortedAllList.findIndex(p => p.name === student.name);
+      if (myIndex !== -1) {
+        const info = { rank: myIndex + 1, score: sortedAllList[myIndex].score };
+        setMyRankInfo(info);
+        localStorage.setItem(`my_rank_cache_${student.name}`, JSON.stringify(info));
+      }
+
+      // 상위 5명 컷트
+      const sortedTopList = sortedAllList.slice(0, 5);
         
-      if (sortedList.length > 0) {
-        setMonthlyRankings(sortedList);
-        localStorage.setItem('global_rankings_cache', JSON.stringify(sortedList));
+      if (sortedTopList.length > 0) {
+        setMonthlyRankings(sortedTopList);
+        localStorage.setItem('global_rankings_cache', JSON.stringify(sortedTopList));
       }
     } catch (error) {
       const localCache = localStorage.getItem('global_rankings_cache');
@@ -367,6 +387,12 @@ export default function Grammar({ student, onBack }: GrammarProps) {
       return sorted;
     });
 
+    // 💡 [신규] 게임 오버 즉시 내 등수 데이터 가상 업데이트 (새로고침 전 딜레이 방지)
+    setMyRankInfo(prev => {
+      const nextScore = (prev?.score || 0) + score;
+      return { rank: prev?.rank || 99, score: nextScore };
+    });
+
     sendScoreToGoogleSheet(score, currentLevel);
   };
 
@@ -375,6 +401,31 @@ export default function Grammar({ student, onBack }: GrammarProps) {
       saveAndLoadRankings();
     }
     onBack();
+  };
+
+  // 💡 [신규] 내 랭킹 전용 디자인 박스를 그려주는 헬퍼 함수
+  const renderMyRankBox = () => {
+    return (
+      <div style={{ 
+        width: '100%', 
+        background: '#f0fdf4', 
+        borderRadius: '16px', 
+        padding: '14px 16px', 
+        marginBottom: '14px', 
+        border: '1px solid #bbf7d0', 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center',
+        boxSizing: 'border-box'
+      }}>
+        <span style={{ fontSize: '14px', fontWeight: '700', color: '#166534' }}>👤 내 현재 랭킹</span>
+        <span style={{ fontSize: '14px', fontWeight: '800', color: '#15803d' }}>
+          {myRankInfo && myRankInfo.score > 0 
+            ? `${myRankInfo.rank}위 (${myRankInfo.score.toLocaleString()}점)` 
+            : `랭킹 진입 전 (0점)`}
+        </span>
+      </div>
+    );
   };
 
   if (isLoading) {
@@ -405,17 +456,22 @@ export default function Grammar({ student, onBack }: GrammarProps) {
               스피드 랭킹전
             </h2>
             
-            <div style={{ width: '100%', background: '#f8fafc', borderRadius: '16px', padding: '16px', marginBottom: '24px', textAlign: 'left', border: '1px solid #e2e8f0' }}>
+            {/* 💡 상단에 내 현재 등수 카드 즉시 표기 */}
+            {renderMyRankBox()}
+            
+            <div style={{ width: '100%', background: '#f8fafc', borderRadius: '16px', padding: '16px', marginBottom: '24px', textAlign: 'left', border: '1px solid #e2e8f0', boxSizing: 'border-box' }}>
               <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#64748b', fontWeight: 'bold', textAlign: 'center' }}>🏆 {new Date().getMonth() + 1}월 누적 득점 TOP 5</h4>
               
               {monthlyRankings.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {monthlyRankings.map((player, idx) => {
                     const isMe = player.name === student.name;
+                    // 💡 1, 2, 3등에게 빛나는 메달 수여
+                    const rankDisplay = idx === 0 ? "🥇 " : idx === 1 ? "🥈 " : idx === 2 ? "🥉 " : `${idx + 1}. `;
                     return (
                       <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', backgroundColor: isMe ? '#e0f2fe' : 'transparent', borderRadius: '8px' }}>
                         <span style={{ fontWeight: isMe ? '700' : '500', fontSize: '14px', color: player.name.includes("⚠️") ? '#ef4444' : (isMe ? '#0369a1' : '#334155') }}>
-                          {player.name.includes("⚠️") ? player.name : `${idx + 1}. ${player.name}`}
+                          {player.name.includes("⚠️") ? player.name : `${rankDisplay}${player.name}`}
                         </span>
                         <span style={{ fontWeight: '700', fontSize: '14px', color: isMe ? '#0369a1' : '#475569' }}>
                           {player.score > 0 ? `${player.score.toLocaleString()}점` : player.grade}
@@ -505,19 +561,23 @@ export default function Grammar({ student, onBack }: GrammarProps) {
               이번 게임 획득: <strong style={{ color: '#007aff', fontSize: '20px' }}>{score.toLocaleString()}</strong> 점
             </p>
 
-            <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', marginBottom: '24px', textAlign: 'left' }}>
+            {/* 💡 결과 화면에도 상단에 내 업데이트된 등수 표기 */}
+            {renderMyRankBox()}
+
+            <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '16px', marginBottom: '24px', textAlign: 'left', boxSizing: 'border-box' }}>
               <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#64748b', fontWeight: 'bold', textAlign: 'center' }}>🏆 {new Date().getMonth() + 1}월 누적 득점 TOP 5</h4>
               {monthlyRankings.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {monthlyRankings.map((player, idx) => {
                     const isMe = player.name === student.name;
+                    const rankDisplay = idx === 0 ? "🥇 " : idx === 1 ? "🥈 " : idx === 2 ? "🥉 " : `${idx + 1}. `;
                     return (
                       <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', backgroundColor: isMe ? '#e0f2fe' : 'transparent', borderRadius: '8px' }}>
                         <span style={{ fontWeight: isMe ? '700' : '500', fontSize: '14px', color: player.name.includes("⚠️") ? '#ef4444' : (isMe ? '#0369a1' : '#334155') }}>
-                          {player.name.includes("⚠️") ? player.name : `${idx + 1}. ${player.name}`}
+                          {player.name.includes("⚠️") ? player.name : `${rankDisplay}${player.name}`}
                         </span>
                         <span style={{ fontWeight: '700', fontSize: '14px', color: isMe ? '#0369a1' : '#475569' }}>
-                          {player.score > 0 ? `${player.score.toLocaleString()}점` : player.grade}
+                          {player.score > 0 ? `${player.score.toLocaleString()}0점` : player.grade}
                         </span>
                       </div>
                     );
