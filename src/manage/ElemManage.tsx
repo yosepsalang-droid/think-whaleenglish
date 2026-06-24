@@ -131,12 +131,13 @@ export default function ElemManage() {
     setIsSaving(true);
 
     try {
-      // ⚠️ [중요] 여기에 'Apps Script 웹 앱 주소'를 넣으세요!
+      // ⚠️ [중요] 여기에 원장님의 'Apps Script 웹 앱 주소'를 다시 꼭 넣어주세요!
       const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyOAbzxggopAl9QhrG2VHSmo0yCEcdIi89xhgvT5nOWkk9sZbiTtB-XjQd4GVhV4MhE/exec';
 
       const response = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        // 💡 핵심 해결책: 구글 보안 에러(CORS) 방지를 위해 text/plain 으로 우회하여 전송합니다.
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify({
           studentId: selectedStudent.id,
           book: editBook,
