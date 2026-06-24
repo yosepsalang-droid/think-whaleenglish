@@ -352,24 +352,23 @@ export default function Grammar({ student, onBack }: GrammarProps) {
 
   // Grammar.tsx 내부의 sendScoreToGoogleSheet 함수를 아래와 같이 수정하세요
   const sendScoreToGoogleSheet = async (finalScore: number, finalStage: number) => {
-    // 💡 시트 구조에 맞게 보낼 데이터 세팅
-    const payload = {
-      type: "grammarScore", 
-      timestamp: new Date().toLocaleString('ko-KR'), // A열 들어갈 시간
-      student_name: student.name,                    // B열 들어갈 이름
-      grade: student.grade,                          // C열 들어갈 학년
-      score: finalScore,                             // D열 들어갈 점수
-      stage: finalStage                              // E열 들어갈 단계
-    };
-
+    // FormData를 사용하면 브라우저 보안 정책을 우회하기가 훨씬 쉽습니다.
+    const formData = new FormData();
+    formData.append("type", "grammarScore");
+    formData.append("timestamp", new Date().toLocaleString('ko-KR'));
+    formData.append("student_name", student.name.trim());
+    formData.append("grade", student.grade);
+    formData.append("score", finalScore.toString());
+    formData.append("stage", finalStage.toString());
+  
     try {
+      // URLSearchParams를 사용하여 전송하면 CORS 문제를 피할 확률이 높습니다.
       await fetch(GOOGLE_WEB_APP_URL, {
         method: "POST",
-        mode: "no-cors", // 구글 보안 에러 방지
-        headers: { "Content-Type": "text/plain;charset=utf-8" }, 
-        body: JSON.stringify(payload),
+        body: formData, // JSON.stringify 대신 formData 사용
       });
       
+      console.log("전송 시도 완료");
       setTimeout(fetchGlobalRankings, 1000); 
     } catch (error) {
       console.error("전송 실패:", error);
