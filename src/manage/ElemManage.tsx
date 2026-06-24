@@ -274,8 +274,8 @@ export default function ElemManage() {
                     <option value="240_4">240_4 권</option>
                     <option value="520_1">520_1 권</option>
                     <option value="520_2">520_2 권</option>
-                    <option value="520_3">240_3 권</option>
-                    <option value="520_4">240_4 권</option>
+                    <option value="520_3">520_3 권</option>
+                    <option value="520_4">520_4 권</option>
                     <option value="860_1">860_1 권</option>
                     <option value="860_2">860_2 권</option>
                     <option value="860_3">860_3 권</option>

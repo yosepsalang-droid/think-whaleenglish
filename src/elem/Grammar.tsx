@@ -361,7 +361,7 @@ export default function Grammar({ student, onBack }: GrammarProps) {
     try {
       await fetch(GOOGLE_WEB_APP_URL, {
         method: "POST",
-        // 💡 [수정] application/json 대신 text/plain을 써야 구글 시트 CORS 에러를 피할 수 있습니다.
+        mode: "no-cors", // 💡 [핵심 추가] 구글 보안(CORS) 에러 무시하고 강제로 밀어넣기
         headers: { "Content-Type": "text/plain;charset=utf-8" }, 
         body: JSON.stringify(payload),
       });
