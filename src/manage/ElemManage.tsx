@@ -274,6 +274,20 @@ export default function ElemManage() {
                     <option value="240_4">240_4 권</option>
                     <option value="520_1">520_1 권</option>
                     <option value="520_2">520_2 권</option>
+                    <option value="520_3">240_3 권</option>
+                    <option value="520_4">240_4 권</option>
+                    <option value="860_1">860_1 권</option>
+                    <option value="860_2">860_2 권</option>
+                    <option value="860_3">860_3 권</option>
+                    <option value="860_4">860_4 권</option>
+                    <option value="1240_1">1240_1 권</option>
+                    <option value="1240_2">1240_2 권</option>
+                    <option value="1240_3">1240_3 권</option>
+                    <option value="1240_4">1240_4 권</option>
+                    <option value="1680_1">1680_1 권</option>
+                    <option value="1680_2">1680_2 권</option>
+                    <option value="1680_3">1680_3 권</option>
+                    <option value="1680_4">1680_4 권</option>
                   </select>
                   <select value={editUnit} onChange={(e) => setEditUnit(e.target.value)} style={detailSelectStyle}>
                     {['Unit1', 'Unit2', 'Unit3', 'Unit4'].map(u => <option key={u} value={u}>{u}</option>)}
