@@ -132,7 +132,7 @@ export default function ElemManage() {
 
     try {
       // ⚠️ [중요] 여기에 원장님의 'Apps Script 웹 앱 주소'를 다시 꼭 넣어주세요!
-      const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyOAbzxggopAl9QhrG2VHSmo0yCEcdIi89xhgvT5nOWkk9sZbiTtB-XjQd4GVhV4MhE/exec';
+      const APPS_SCRIPT_URL = '아까 변경하고 넣었어음';
 
       const response = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
