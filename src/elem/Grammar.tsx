@@ -352,22 +352,21 @@ export default function Grammar({ student, onBack }: GrammarProps) {
 
   // Grammar.tsx 내부의 sendScoreToGoogleSheet 함수를 아래와 같이 수정하세요
   const sendScoreToGoogleSheet = async (finalScore: number, finalStage: number) => {
-    // 💡 1. 통합 앱스 스크립트와 규격 맞추기 (application/json)
+    // 💡 통합 앱스 스크립트와 통신하기 위한 데이터 포맷
     const payload = {
-      type: "grammarScore", // 👈 통합 앱스 스크립트의 if문 통과용
+      type: "grammarScore", // 앱스 스크립트가 시트5로 분류하게 만드는 명령어
       studentId: student.name,
       score: finalScore
     };
-  
+
     try {
-      // 💡 2. 데이터 형식 수정 (headers 추가)
       await fetch(GOOGLE_WEB_APP_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" }, // 👈 필수!
+        headers: { "Content-Type": "application/json" }, // 중요: 데이터 형식을 JSON으로 명시
         body: JSON.stringify(payload),
       });
       
-      // 점수 전송 성공 시 랭킹 데이터 다시 불러오기
+      // 전송 성공 시 랭킹 데이터 새로고침
       setTimeout(fetchGlobalRankings, 1000); 
     } catch (error) {
       console.error("전송 실패:", error);
