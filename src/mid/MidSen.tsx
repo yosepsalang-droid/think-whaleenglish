@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 
 interface MidSenProps { onBack: () => void; }
 interface WordToken { id: number; word: string; }
@@ -11,12 +11,11 @@ export default function MidSen({ onBack }: MidSenProps) {
   const [stage, setStage] = useState<number | null>(null);
   const [currentIdx, setCurrentIdx] = useState(0);
   
-  // 💡 단어 고유 ID를 배열로 관리 (중복 단어 완벽 처리)
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [isWrongShake, setIsWrongShake] = useState(false);
 
-  // 💡 흐름 제어: 'arrange'(배열 모드) -> 'speak'(억양 말하기 모드)
-  const [step, setStep] = useState<'arrange' | 'speak'>('arrange');
+  // 💡 흐름 제어: 'preview'(문장 예습) -> 'arrange'(단어 배열) -> 'speak'(억양 말하기)
+  const [step, setStep] = useState<'preview' | 'arrange' | 'speak'>('preview');
   const [isRecording, setIsRecording] = useState(false);
   const [matchRate, setMatchRate] = useState<number | null>(null);
 
@@ -28,7 +27,6 @@ export default function MidSen({ onBack }: MidSenProps) {
         const data = rows.map((row, i) => {
           const cells = row.split(',');
           const rawWords = cells[4] ? cells[4].trim().split(' ') : [];
-          // 단어마다 고유 id를 부여하여 섞음
           const tokenized = rawWords.map((w, idx) => ({ id: idx, word: w })).sort(() => Math.random() - 0.5);
           return { id: i, kor: cells[3], eng: cells[4], words: tokenized };
         }).filter(q => q.eng);
@@ -40,10 +38,16 @@ export default function MidSen({ onBack }: MidSenProps) {
     return Array.from({ length: Math.ceil(allQuestions.length / 20) }, (_, i) => i + 1);
   }, [allQuestions]);
 
+  // 💡 현재 스테이지의 20개 문장 묶음
+  const currentStageQs = useMemo(() => {
+    if (stage === null) return [];
+    return allQuestions.slice((stage - 1) * 20, stage * 20);
+  }, [allQuestions, stage]);
+
+  // 💡 현재 풀어야 하는 단일 문장
   const currentQ = useMemo(() => {
-    if (stage === null) return null;
-    return allQuestions.slice((stage - 1) * 20, stage * 20)[currentIdx];
-  }, [allQuestions, stage, currentIdx]);
+    return currentStageQs[currentIdx] || null;
+  }, [currentStageQs, currentIdx]);
 
   // 🔊 원어민 TTS 발음 함수
   const speakText = (text: string, rate = 0.9) => {
@@ -51,29 +55,26 @@ export default function MidSen({ onBack }: MidSenProps) {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'en-US';
-      utterance.rate = rate; // 중학생 귀에 쏙 박히는 속도
+      utterance.rate = rate;
       window.speechSynthesis.speak(utterance);
     }
   };
 
-  // 1. 아래 보기에서 단어 선택 시 -> 소리 나면서 위로 올라감
   const handleSelectWord = (token: WordToken) => {
     speakText(token.word);
     setSelectedIds(prev => [...prev, token.id]);
   };
 
-  // 2. 위 정답창에서 단어 다시 클릭 시 -> 아래 보기로 복귀 (Undo)
   const handleRemoveWord = (idToRemove: number) => {
     setSelectedIds(prev => prev.filter(id => id !== idToRemove));
   };
 
-  // 3. 정답 확인 로직
   const handleCheckAnswer = () => {
     if (!currentQ) return;
     const userSentence = selectedIds.map(id => currentQ.words.find(w => w.id === id)?.word).join(' ');
 
     if (userSentence.trim().toLowerCase() === currentQ.eng.trim().toLowerCase()) {
-      setStep('speak'); // 말하기 억양 모드로 전환!
+      setStep('speak'); 
       speakText(currentQ.eng.trim(), 0.85);
     } else {
       setIsWrongShake(true);
@@ -81,12 +82,8 @@ export default function MidSen({ onBack }: MidSenProps) {
     }
   };
 
-  // 4. 다음 문제로 이동
   const handleNextQuestion = () => {
-    if (stage === null) return;
-    const maxLen = Math.min(stage * 20, allQuestions.length) - (stage - 1) * 20;
-    
-    if (currentIdx + 1 < maxLen) {
+    if (currentIdx + 1 < currentStageQs.length) {
       setCurrentIdx(prev => prev + 1);
       setSelectedIds([]);
       setStep('arrange');
@@ -96,7 +93,7 @@ export default function MidSen({ onBack }: MidSenProps) {
       setStage(null);
       setCurrentIdx(0);
       setSelectedIds([]);
-      setStep('arrange');
+      setStep('preview');
     }
   };
 
@@ -118,7 +115,6 @@ export default function MidSen({ onBack }: MidSenProps) {
       const transcript = event.results[0][0].transcript.toLowerCase();
       setIsRecording(false);
       
-      // 유사도 분석 알고리즘 (글자 및 단어 일치 기반)
       const target = currentQ?.eng.toLowerCase().replace(/[^a-z ]/g, '') || '';
       const spoken = transcript.replace(/[^a-z ]/g, '');
       let hits = 0;
@@ -126,7 +122,7 @@ export default function MidSen({ onBack }: MidSenProps) {
         if (target[i] === spoken[i]) hits++;
       }
       const rawScore = Math.round((hits / Math.max(target.length, spoken.length)) * 100);
-      const finalScore = Math.min(100, Math.max(65, rawScore + 18)); // 학생들 기죽지 않게 보정치 가점
+      const finalScore = Math.min(100, Math.max(65, rawScore + 18)); 
       
       setMatchRate(finalScore);
     };
@@ -158,7 +154,7 @@ export default function MidSen({ onBack }: MidSenProps) {
             </h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px' }}>
               {stages.map(s => (
-                <button key={s} onClick={() => { setStage(s); setCurrentIdx(0); setSelectedIds([]); setStep('arrange'); }} style={{
+                <button key={s} onClick={() => { setStage(s); setCurrentIdx(0); setSelectedIds([]); setStep('preview'); }} style={{
                   background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '20px',
                   color: '#f8fafc', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s',
                   boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
@@ -170,29 +166,64 @@ export default function MidSen({ onBack }: MidSenProps) {
             </div>
           </div>
         ) : (
-          /* --- [화면 B: 메인 게임 창] --- */
+          /* --- [화면 B: 메인 게임 구역] --- */
           <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '20px', padding: '24px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontSize: '14px', fontWeight: 600, marginBottom: '16px' }}>
-              <span>STAGE {stage}</span>
-              <span style={{ color: '#38bdf8' }}>QUESTION {currentIdx + 1}</span>
-            </div>
+            
+            {/* 💡 0단계: 문장 20개 먼저 학습하기 (Preview 모드) */}
+            {step === 'preview' && (
+              <div style={{ animation: 'fadeIn 0.3s' }}>
+                <h3 style={{ color: '#38bdf8', marginBottom: '6px', textAlign: 'center', fontWeight: 800 }}>STAGE {stage} 구문 예습</h3>
+                <p style={{ color: '#94a3b8', fontSize: '14px', marginBottom: '20px', textAlign: 'center' }}>
+                  테스트 시작 전, 오늘 정복할 20개의 문장을 가볍게 읽어보세요!
+                </p>
+                
+                {/* 스크롤 가능한 세련된 문장 보드 */}
+                <div style={{ 
+                  maxHeight: '50vh', overflowY: 'auto', background: '#0f172a', 
+                  borderRadius: '12px', padding: '16px', border: '1px solid #334155',
+                  marginBottom: '24px', textAlign: 'left'
+                }}>
+                  {currentStageQs.map((q, idx) => (
+                    <div key={q.id} style={{ 
+                      padding: '12px 0', 
+                      borderBottom: idx === currentStageQs.length - 1 ? 'none' : '1px solid #1e293b' 
+                    }}>
+                      <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 'bold' }}>SENTENCE {idx + 1}</div>
+                      <div style={{ fontSize: '15px', color: '#e2e8f0', marginTop: '2px', fontWeight: 500 }}>{q.kor}</div>
+                      <div style={{ fontSize: '14px', color: '#38bdf8', marginTop: '4px', fontStyle: 'italic', letterSpacing: '0.3px' }}>{q.eng}</div>
+                    </div>
+                  ))}
+                </div>
 
-            {/* 한글 제시문 */}
-            <h2 style={{ fontSize: '20px', lineHeight: '1.4', marginBottom: '24px', color: '#f1f5f9', minHeight: '56px', wordBreak: 'keep-all' }}>
-              "{currentQ?.kor}"
-            </h2>
+                <button onClick={() => setStep('arrange')} style={{
+                  width: '100%', background: '#38bdf8', color: '#0f172a', border: 'none', 
+                  padding: '16px', borderRadius: '12px', fontWeight: 800, fontSize: '16px', cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(56,189,248,0.4)', transition: 'transform 0.1s'
+                }}>
+                  준비 완료, 테스트 시작하기! 🚀
+                </button>
+              </div>
+            )}
 
             {/* 1단계: 단어 배열 모드 */}
             {step === 'arrange' && (
-              <>
-                {/* 작성 중인 정답 박스 (클릭 시 빼기 가능) */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontSize: '14px', fontWeight: 600, marginBottom: '16px' }}>
+                  <span>STAGE {stage} [TEST]</span>
+                  <span style={{ color: '#38bdf8' }}>QUESTION {currentIdx + 1} / {currentStageQs.length}</span>
+                </div>
+
+                <h2 style={{ fontSize: '20px', lineHeight: '1.4', marginBottom: '24px', color: '#f1f5f9', minHeight: '56px', wordBreak: 'keep-all' }}>
+                  "{currentQ?.kor}"
+                </h2>
+
                 <div style={{
                   minHeight: '70px', background: isWrongShake ? '#450a0a' : '#0f172a', border: isWrongShake ? '2px solid #ef4444' : '2px dashed #475569',
                   borderRadius: '12px', padding: '12px', display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', marginBottom: '24px',
                   transition: 'background 0.2s, border 0.2s'
                 }}>
                   {selectedIds.length === 0 ? (
-                    <span style={{ color: '#64748b', margin: 'auto', fontSize: '14px' }}>아래 단어를 클릭해 문장을 조립하세요 (다시 누르면 취소)</span>
+                    <span style={{ color: '#64748b', margin: 'auto', fontSize: '14px' }}>단어를 클릭해 문장을 완성하세요 (다시 누르면 취소)</span>
                   ) : (
                     selectedIds.map((id) => {
                       const token = currentQ?.words.find(w => w.id === id);
@@ -209,12 +240,11 @@ export default function MidSen({ onBack }: MidSenProps) {
                   )}
                 </div>
 
-                {/* 선택할 수 있는 단어 풀 (이미 고른 건 안 보임) */}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', minHeight: '90px', marginBottom: '30px' }}>
                   {currentQ?.words.filter(w => !selectedIds.includes(w.id)).map((w) => (
                     <button key={w.id} onClick={() => handleSelectWord(w)} style={{
                       background: '#334155', color: '#f8fafc', border: '1px solid #475569', borderRadius: '10px', padding: '10px 16px',
-                      fontSize: '15px', fontWeight: 600, cursor: 'pointer', transition: 'background 0.1s'
+                      fontSize: '15px', fontWeight: 600, cursor: 'pointer'
                     }}>{w.word}</button>
                   ))}
                 </div>
@@ -228,18 +258,18 @@ export default function MidSen({ onBack }: MidSenProps) {
                     boxShadow: '0 4px 14px rgba(56,189,248,0.4)'
                   }}>정답 제출 🚀</button>
                 </div>
-              </>
+              </div>
             )}
 
             {/* 2단계: 정답 맞춘 후 [AI 억양 따라 말하기] 모드 */}
             {step === 'speak' && (
-              <div style={{ textAlign: 'center', animation: 'fadeIn 0.4s' }}>
+              <div style={{ textAlign: 'center', animation: 'fadeIn 0.3s' }}>
                 <div style={{ display: 'inline-block', background: '#065f46', color: '#34d399', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', marginBottom: '16px' }}>
                   PERFECT MATCH 🎉
                 </div>
                 
                 <h3 style={{ fontSize: '22px', color: '#38bdf8', marginBottom: '8px' }}>{currentQ?.eng}</h3>
-                <p style={{ color: '#94a3b8', fontSize: '14px', marginBottom: '28px' }}>원어민의 억양을 듣고 똑같이 따라 말해보세요.</p>
+                <p style={{ color: '#94a3b8', fontSize: '14px', marginBottom: '28px' }}>원어민의 정확한 억양을 따라 말해 보세요.</p>
 
                 <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginBottom: '30px' }}>
                   <button onClick={() => speakText(currentQ?.eng || '', 0.85)} style={{
@@ -250,7 +280,7 @@ export default function MidSen({ onBack }: MidSenProps) {
                     background: isRecording ? '#ef4444' : '#8b5cf6', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '12px', fontWeight: 800, cursor: 'pointer',
                     boxShadow: '0 4px 16px rgba(139,92,246,0.4)'
                   }}>
-                    {isRecording ? '🔴 목소리 듣는 중...' : '🎙️ 마이크 켜고 말하기'}
+                    {isRecording ? '🔴 음성 감지 중...' : '🎙️ 마이크 켜고 말하기'}
                   </button>
                 </div>
 
@@ -262,14 +292,14 @@ export default function MidSen({ onBack }: MidSenProps) {
                       {matchRate}%
                     </div>
                     <div style={{ fontSize: '14px', color: '#e2e8f0' }}>
-                      {matchRate >= 90 ? "✨ 완벽한 원어민 발음입니다!" : matchRate >= 75 ? "👍 아주 좋아요! 조금만 더 자신감 있게!" : "👏 잘했어요! 다시 한 번 들어볼까요?"}
+                      {matchRate >= 90 ? "✨ 완벽한 원어민 발음입니다!" : matchRate >= 75 ? "👍 아주 좋아요! 조금만 더 당당하게!" : "👏 잘했어요! 한 번 더 들어볼까요?"}
                     </div>
                   </div>
                 )}
 
                 <div style={{ display: 'flex', gap: '12px' }}>
                   <button onClick={handleNextQuestion} style={{
-                    flex: 1, background: '#38bdf8', color: '#0f172a', border: 'none', padding: '16px', borderRadius: '12px', fontWeight: 800, cursor: 'pointer'
+                    width: '100%', background: '#38bdf8', color: '#0f172a', border: 'none', padding: '16px', borderRadius: '12px', fontWeight: 800, cursor: 'pointer'
                   }}>
                     {matchRate !== null ? '다음 문제로 ➔' : '말하기 건너뛰기 ➔'}
                   </button>
