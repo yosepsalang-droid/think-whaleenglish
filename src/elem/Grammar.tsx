@@ -352,9 +352,8 @@ export default function Grammar({ student, onBack }: GrammarProps) {
 
   // Grammar.tsx 내부의 sendScoreToGoogleSheet 함수를 아래와 같이 수정하세요
   const sendScoreToGoogleSheet = async (finalScore: number, finalStage: number) => {
-    // 💡 통합 앱스 스크립트와 통신하기 위한 데이터 포맷
     const payload = {
-      type: "grammarScore", // 앱스 스크립트가 시트5로 분류하게 만드는 명령어
+      type: "grammarScore", 
       studentId: student.name,
       score: finalScore
     };
@@ -362,11 +361,11 @@ export default function Grammar({ student, onBack }: GrammarProps) {
     try {
       await fetch(GOOGLE_WEB_APP_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" }, // 중요: 데이터 형식을 JSON으로 명시
+        // 💡 [수정] application/json 대신 text/plain을 써야 구글 시트 CORS 에러를 피할 수 있습니다.
+        headers: { "Content-Type": "text/plain;charset=utf-8" }, 
         body: JSON.stringify(payload),
       });
       
-      // 전송 성공 시 랭킹 데이터 새로고침
       setTimeout(fetchGlobalRankings, 1000); 
     } catch (error) {
       console.error("전송 실패:", error);
@@ -389,10 +388,13 @@ export default function Grammar({ student, onBack }: GrammarProps) {
       return sorted;
     });
 
-    // 💡 [신규] 게임 오버 즉시 내 등수 데이터 가상 업데이트 (새로고침 전 딜레이 방지)
+    // 💡 [수정] 아래 부분을 교체하세요. (로컬 스토리지에 즉시 내 점수 저장 추가)
     setMyRankInfo(prev => {
       const nextScore = (prev?.score || 0) + score;
-      return { rank: prev?.rank || 99, score: nextScore };
+      const newInfo = { rank: prev?.rank || 99, score: nextScore };
+      // 방금 얻은 점수를 즉시 기기에 저장해서 뒤로 갔다가 와도 유지되게 만듭니다.
+      localStorage.setItem(`my_rank_cache_${student.name}`, JSON.stringify(newInfo));
+      return newInfo;
     });
 
     sendScoreToGoogleSheet(score, currentLevel);
