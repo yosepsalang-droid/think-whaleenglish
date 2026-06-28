@@ -15,14 +15,12 @@
 <body class="bg-slate-900 text-slate-100 min-h-screen p-8">
 
   <div class="max-w-5xl mx-auto">
-    <!-- Header -->
     <div class="border-b border-slate-800 pb-6 mb-8 text-center md:text-left">
       <span class="bg-emerald-500/10 text-emerald-400 text-xs font-extrabold px-3 py-1.5 rounded-full border border-emerald-500/20">SYSTEM SCHEMA & CODE</span>
       <h1 class="text-4xl font-extrabold text-white mt-3">초등부 실시간 학습 트래커 세팅</h1>
       <p class="text-slate-400 mt-2">구글 시트 새 탭 헤더 구성 양식 및 자동 연동용 소스 코드 패키지</p>
     </div>
 
-    <!-- Section 1: Google Sheet Structure -->
     <div class="bg-slate-800/50 border border-slate-700/60 rounded-2xl p-6 mb-8">
       <h2 class="text-xl font-bold text-emerald-400 mb-4 flex items-center gap-2">
         <span>📊</span> 1단계: "초등부관리" 탭의 1열(헤더) 세팅 방법
@@ -31,7 +29,6 @@
         새로 만드신 <strong class="text-white">"초등부관리"</strong> 탭의 <strong class="text-emerald-400">1행(A1~F1)</strong>에 아래 노란색 칸의 글자들을 똑같이 타이핑해 주세요. 데이터는 학생들이 학습을 완료할 때마다 아래 예시처럼 자동으로 한 줄씩 추가(Append)됩니다.
       </p>
 
-      <!-- Excel Visual Table -->
       <div class="overflow-x-auto rounded-xl border border-slate-700">
         <table class="w-full text-left border-collapse">
           <thead>
@@ -55,7 +52,6 @@
             </tr>
           </thead>
           <tbody class="text-sm text-slate-300 font-mono">
-            <!-- Row 1 (Header Guide) -->
             <tr class="border-b border-slate-800 bg-slate-900/40">
               <td class="p-3 border-r border-slate-700 text-center text-slate-500 font-sans">1</td>
               <td class="p-3 border-r border-slate-700 font-bold text-white">Timestamp</td>
@@ -65,7 +61,6 @@
               <td class="p-3 border-r border-slate-700 font-bold text-white">Status</td>
               <td class="p-3 font-bold text-white">Score</td>
             </tr>
-            <!-- Sample Data 1 -->
             <tr class="border-b border-slate-800 hover:bg-slate-800/30">
               <td class="p-3 border-r border-slate-700 text-center text-slate-500 font-sans">2</td>
               <td class="p-3 border-r border-slate-700 text-emerald-400">2026-06-26 14:05:22</td>
@@ -75,7 +70,6 @@
               <td class="p-3 border-r border-slate-700"><span class="bg-emerald-500/10 text-emerald-400 text-xs px-2 py-0.5 rounded">완료</span></td>
               <td class="p-3">100 / 100</td>
             </tr>
-            <!-- Sample Data 2 -->
             <tr class="border-b border-slate-800 hover:bg-slate-800/30">
               <td class="p-3 border-r border-slate-700 text-center text-slate-500 font-sans">3</td>
               <td class="p-3 border-r border-slate-700 text-emerald-400">2026-06-26 14:12:45</td>
@@ -85,7 +79,6 @@
               <td class="p-3 border-r border-slate-700"><span class="bg-emerald-500/10 text-emerald-400 text-xs px-2 py-0.5 rounded">완료</span></td>
               <td class="p-3">20 / 20</td>
             </tr>
-            <!-- Sample Data 3 (Future Extension) -->
             <tr class="border-b border-slate-800 hover:bg-slate-800/30 text-slate-500">
               <td class="p-3 border-r border-slate-700 text-center text-slate-500 font-sans">4</td>
               <td class="p-3 border-r border-slate-700">2026-06-26 14:30:00</td>
@@ -103,7 +96,6 @@
       </div>
     </div>
 
-    <!-- Section 2: Apps Script Unified Code -->
     <div class="bg-slate-800/50 border border-slate-700/60 rounded-2xl p-6 mb-8">
       <h2 class="text-xl font-bold text-sky-400 mb-2 flex items-center gap-2">
         <span>⚙️</span> 2단계: 통합 구글 앱스 스크립트 (Apps Script) 소스 코드
@@ -181,7 +173,6 @@ function doPost(e) {
       </div>
     </div>
 
-    <!-- Section 3: React ElemManage Code -->
     <div class="bg-slate-800/50 border border-slate-700/60 rounded-2xl p-6 mb-8">
       <h2 class="text-xl font-bold text-indigo-400 mb-2 flex items-center gap-2">
         <span>💻</span> 3단계: 초등부 관제탑 리액트 소스 코드 (`ElemManage.tsx`)
@@ -362,8 +353,8 @@ export default function ElemManage() {
     setIsSaving(true);
 
     try {
-      // ⚠️ [중요] 배포된 Apps Script 주소 기입
-      const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwdzWfpTyvJ5quRGbPULmRCJ-45VbTaS3vpVBmzJ3mfJhr5KdAgng9D3_VjidVjVoKh/exec';
+      // ⚠️ [수정완료] 원장님의 실시간 올바른 Apps Script 웹앱 주소로 반영했습니다.
+      const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyOAbzxggopAl9QhrG2VHSmo0yCEcdIi89xhgvT5nOWkk9sZbiTtB-XjQd4GVhV4MhE/exec';
 
       const response = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
@@ -454,7 +445,7 @@ export default function ElemManage() {
             <div>
               <h3 className="text-lg font-black text-white border-b border-slate-800 pb-2 mb-4">{selectedStudent.name} 학생 상세</h3>
               
-              <!-- 진도 관리 등 수동 입력 영역 -->
+              {/* 진도 관리 등 수동 입력 영역 */}
               <div className="space-y-4">
                 <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
                   <h4 className="text-xs text-slate-400 font-bold mb-2">실시간 학습 미션 현황</h4>
