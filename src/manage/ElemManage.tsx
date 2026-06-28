@@ -220,7 +220,7 @@ export default function ElemManage() {
     try {
       setIsLoading(true);
       
-      // ⚠️ [중요] 구글 시트에서 각각 발급받은 고유 CSV 웹 게시 주소를 복사해 넣으세요!
+      // 구글 시트에서 각각 발급받은 고유 CSV 웹 게시 주소
       const MEMBER_LIST_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe/pub?gid=1059185510&single=true&output=csv'; // 1번째 탭 (회원 명단)
       const DAILY_LOG_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe/pub?gid=1281735273&single=true&output=csv';   // 신설한 "초등부관리" 탭 (로그)
 
@@ -353,9 +353,8 @@ export default function ElemManage() {
     setIsSaving(true);
 
     try {
-      // ⚠️ [수정완료] 원장님의 실시간 올바른 Apps Script 웹앱 주소로 반영했습니다.
-      const APPS_SCRIPT_URL = '// ⭕ 아래처럼 구글 주소가 들어가야 합니다!
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyOAbzxggopAl9QhrG2VHSmo0yCEcdIi89xhgvT5nOWkk9sZbiTtB-XjQd4GVhV4MhE/exec';
+      // ⚠️ 원장님의 올바른 진짜 Apps Script 웹앱 주소 기입 완료
+      const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyOAbzxggopAl9QhrG2VHSmo0yCEcdIi89xhgvT5nOWkk9sZbiTtB-XjQd4GVhV4MhE/exec';
 
       const response = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
