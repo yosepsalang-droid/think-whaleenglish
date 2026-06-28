@@ -354,7 +354,8 @@ export default function ElemManage() {
 
     try {
       // ⚠️ [수정완료] 원장님의 실시간 올바른 Apps Script 웹앱 주소로 반영했습니다.
-      const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyOAbzxggopAl9QhrG2VHSmo0yCEcdIi89xhgvT5nOWkk9sZbiTtB-XjQd4GVhV4MhE/exec';
+      const APPS_SCRIPT_URL = '// ⭕ 아래처럼 구글 주소가 들어가야 합니다!
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyOAbzxggopAl9QhrG2VHSmo0yCEcdIi89xhgvT5nOWkk9sZbiTtB-XjQd4GVhV4MhE/exec';
 
       const response = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
