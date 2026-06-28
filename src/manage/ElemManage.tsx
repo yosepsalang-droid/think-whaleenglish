@@ -363,7 +363,7 @@ export default function ElemManage() {
 
     try {
       // ⚠️ [중요] 배포된 Apps Script 주소 기입
-      const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyOAbzxggopAl9QhrG2VHSmo0yCEcdIi89xhgvT5nOWkk9sZbiTtB-XjQd4GVhV4MhE/exec';
+      const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwdzWfpTyvJ5quRGbPULmRCJ-45VbTaS3vpVBmzJ3mfJhr5KdAgng9D3_VjidVjVoKh/exec';
 
       const response = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
