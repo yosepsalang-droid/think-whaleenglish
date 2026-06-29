@@ -8,15 +8,17 @@ interface GoogleWord {
   kor: string;
 }
 
+// 💡 [확장] 백엔드 로그 적재를 위해 학생 정보 Props 추가
 interface WordProps {
   onBack: () => void;
+  studentId?: string;
+  studentName?: string;
 }
 
-export default function Word({ onBack }: WordProps) {
+export default function Word({ onBack, studentId = "ST_TEST", studentName = "테스트학생" }: WordProps) {
   const [allWords, setAllWords] = useState<GoogleWord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 💡 [변경] Sentence와 동일하게 초기 선택값은 빈 문자열로 세팅
   const [book, setBook] = useState('');
   const [unit, setUnit] = useState('');
   const [day, setDay] = useState('');
@@ -99,7 +101,7 @@ export default function Word({ onBack }: WordProps) {
     fetchGoogleSheet();
   }, []);
 
-  // 2️⃣ [Sentence와 동일] 구글 시트 기반 실시간 드롭다운 데이터 바인딩 로직
+  // 2️⃣ 구글 시트 기반 실시간 드롭다운 데이터 바인딩 로직
   const books = useMemo(() => {
     return Array.from(new Set(allWords.map(w => w.book?.trim()))).filter(Boolean).sort();
   }, [allWords]);
@@ -170,6 +172,32 @@ export default function Word({ onBack }: WordProps) {
     }
   };
 
+  // 💡 [추가] 구글 앱스 스크립트 웹앱으로 미션 완료 로그를 전송하는 함수
+  const sendLogToGoogleSheet = async (finalScore: number) => {
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyOAbzxggopAl9QhrG2VHSmo0yCEcdIi89xhgvT5nOWkk9sZbiTtB-XjQd4GVhV4MhE/exec";
+    
+    try {
+      // 구글 웹앱 특유의 CORS 정책을 우회하기 위해 text/plain 타입으로 안전하게 전송
+      await fetch(WEB_APP_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/plain;charset=utf-8",
+        },
+        body: JSON.stringify({
+          type: "saveLog",
+          studentId: studentId,
+          studentName: studentName,
+          taskType: "단어게임",
+          status: "완료",
+          score: String(finalScore)
+        }),
+      });
+      console.log("구글 시트에 로그 적재 성공");
+    } catch (err) {
+      console.error("구글 시트 로그 전송 실패:", err);
+    }
+  };
+
   const handleApplyProgress = () => {
     if (!book || !unit || !day) {
       alert("교재, Lesson, Day를 모두 선택해주세요.");
@@ -193,8 +221,10 @@ export default function Word({ onBack }: WordProps) {
     const isCorrect = userAnswer.trim().toLowerCase() === currentWord.eng.toLowerCase();
     speakWord(currentWord.eng);
 
+    let nextScore = score;
     if (isCorrect) {
-      setScore(prev => prev + 1);
+      nextScore = score + 1;
+      setScore(nextScore);
       setFeedback({ isCorrect: true, msg: '정답입니다! 👍' });
     } else {
       setFeedback({ isCorrect: false, msg: `오답입니다. 정답은 [ ${currentWord.eng} ]` });
@@ -205,6 +235,8 @@ export default function Word({ onBack }: WordProps) {
         setCurrentIndex(prev => prev + 1);
       } else {
         setIsFinished(true);
+        // 💡 [변경] 모든 문제가 끝나는 시점에 백엔드로 로그 자동 전송 실행
+        sendLogToGoogleSheet(nextScore);
       }
     }, 1500);
   };
@@ -239,7 +271,7 @@ export default function Word({ onBack }: WordProps) {
         <span style={{ fontWeight: 'bold', color: '#007aff' }}>{appliedProgress}</span>
       </div>
 
-      {/* 💡 [변경] Sentence와 동일한 디자인의 실시간 감지 드롭다운 영역 */}
+      {/* 실시간 감지 드롭다운 영역 */}
       <div style={{ marginBottom: '24px', padding: '16px', backgroundColor: '#f8f9fa', borderRadius: '12px', border: '1px solid #e9ecef', display: 'flex', gap: '6px', alignItems: 'center', boxSizing: 'border-box' }}>
         <select value={book} onChange={(e) => { setBook(e.target.value); setUnit(''); setDay(''); }} style={selectStyle}>
           <option value="">교재 선택</option>
@@ -329,7 +361,6 @@ export default function Word({ onBack }: WordProps) {
   );
 }
 
-// 드롭다운 공통 스타일 컴포넌트
 const selectStyle = {
   width: '25%',
   minWidth: '0',
