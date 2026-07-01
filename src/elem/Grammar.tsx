@@ -17,6 +17,12 @@ interface GrammarProps {
   studentName?: string;
 }
 
+// 💡 랭킹 데이터 구조 정의
+interface RankingItem {
+  studentName: string;
+  score: number;
+}
+
 export default function Grammar({ onBack, studentId = "ST_TEST", studentName = "테스트학생" }: GrammarProps) {
   const [allGrammars, setAllGrammars] = useState<GoogleGrammar[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -34,6 +40,19 @@ export default function Grammar({ onBack, studentId = "ST_TEST", studentName = "
   
   const [userAnswer, setUserAnswer] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // 💡 랭킹 관련 상태 추가
+  const [thisMonthRanking, setThisMonthRanking] = useState<RankingItem[]>([]);
+  const [lastMonthHonorRoll, setLastMonthHonorRoll] = useState<RankingItem[]>([]);
+  const [isRankingLoading, setIsRankingLoading] = useState(true);
+
+  // 💡 현재 날짜 기준으로 이번 달과 지난달 계산 (예: 7월 기준 -> 이번달 7월, 지난달 6월)
+  const dateInfo = useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const lastMonth = currentMonth === 1 ? 12 : currentMonth - 1;
+    return { currentMonth, lastMonth };
+  }, []);
 
   const currentQuestion = currentQuestionList[currentIndex];
 
@@ -59,12 +78,10 @@ export default function Grammar({ onBack, studentId = "ST_TEST", studentName = "
     return result;
   };
 
-  // 1️⃣ 구글 시트 데이터 로드 (문법 전용 시트 주소 호출)
+  // 1️⃣ 구글 시트 데이터 로드 및 실시간 랭킹 로드
   useEffect(() => {
     const fetchGoogleSheet = async () => {
       try {
-        // 💡 [중요] config.ts에 ELEM_GRAMMAR 주소가 정의되어 있어야 합니다!
-        // 만약 아직 없다면 config.ts의 SHEETS 안에 ELEM_GRAMMAR: "구글시트CSV주소" 를 추가해 주세요.
         const response = await fetch(CONFIG.SHEETS.ELEM_GRAMMAR || CONFIG.SHEETS.ELEM_WORD);
         const csvText = await response.text();
 
@@ -81,8 +98,8 @@ export default function Grammar({ onBack, studentId = "ST_TEST", studentName = "
               book: cells[0],    
               lesson: cells[1],  
               day: cells[2],     
-              eng: cells[3],     // 문법/영작 정답
-              kor: cells[4]      // 문제 내용 (한글 뜻 등)
+              eng: cells[3],     
+              kor: cells[4]      
             });
           }
         });
@@ -97,7 +114,36 @@ export default function Grammar({ onBack, studentId = "ST_TEST", studentName = "
       }
     };
 
+    // 💡 구글 웹앱으로부터 월별 랭킹 데이터를 가져오는 함수
+    const fetchRankings = async () => {
+      try {
+        setIsRankingLoading(true);
+        const response = await fetch(CONFIG.WEB_APP_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "text/plain;charset=utf-8",
+          },
+          body: JSON.stringify({
+            type: "getRanking",
+            taskType: "문법게임"
+          }),
+        });
+        const resData = await response.json();
+        
+        if (resData) {
+          // 서버에서 정렬 및 필터링된 데이터를 상태에 저장
+          setThisMonthRanking(resData.thisMonth || []);
+          setLastMonthHonorRoll(resData.lastMonth || []);
+        }
+      } catch (error) {
+        console.error("랭킹 데이터 로드 실패:", error);
+      } finally {
+        setIsRankingLoading(false);
+      }
+    };
+
     fetchGoogleSheet();
+    fetchRankings();
   }, []);
 
   // 2️⃣ 드롭다운 바인딩
@@ -166,7 +212,7 @@ export default function Grammar({ onBack, studentId = "ST_TEST", studentName = "
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'en-US';
-      utterance.rate = 0.85; // 문장이므로 단어보다 살짝 정돈된 속도
+      utterance.rate = 0.85; 
       window.speechSynthesis.speak(utterance);
     }
   };
@@ -183,7 +229,7 @@ export default function Grammar({ onBack, studentId = "ST_TEST", studentName = "
           type: "saveLog",
           studentId: studentId,
           studentName: studentName,
-          taskType: "문법게임", // 💡 고정 분리: 구글 시트에 "문법게임"으로 분류되어 들어갑니다.
+          taskType: "문법게임", 
           status: "완료",
           score: String(finalScore)
         }),
@@ -214,7 +260,6 @@ export default function Grammar({ onBack, studentId = "ST_TEST", studentName = "
     e.preventDefault();
     if (!currentQuestion || currentQuestion.eng === 'none' || !userAnswer.trim()) return;
 
-    // 대소문자 및 양끝 공백을 무시한 정확한 문장 매칭
     const isCorrect = userAnswer.trim().toLowerCase() === currentQuestion.eng.toLowerCase();
     speakSentence(currentQuestion.eng);
 
@@ -234,7 +279,7 @@ export default function Grammar({ onBack, studentId = "ST_TEST", studentName = "
         setIsFinished(true);
         sendLogToGoogleSheet(nextScore);
       }
-    }, 2000); // 문법 문장은 확인하는 시간을 고려해 2초로 상향 조정
+    }, 2000); 
   };
 
   const preventCheating = (e: React.SyntheticEvent) => {
@@ -263,7 +308,7 @@ export default function Grammar({ onBack, studentId = "ST_TEST", studentName = "
       {/* 상단 헤더 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
         <button onClick={onBack} style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #ccc', backgroundColor: 'white', cursor: 'pointer' }}>← 홈으로</button>
-        <span style={{ fontWeight: 'bold', color: '#64dfdf' }}>{appliedProgress}</span>
+        <span style={{ fontWeight: 'bold', color: '#2a9d8f' }}>{appliedProgress}</span>
       </div>
 
       {/* 실시간 감지 드롭다운 영역 */}
@@ -286,71 +331,127 @@ export default function Grammar({ onBack, studentId = "ST_TEST", studentName = "
         <button onClick={handleApplyProgress} style={{ width: '24%', padding: '10px 0', backgroundColor: '#333', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px', boxSizing: 'border-box' }}>확인</button>
       </div>
 
-      {isFinished ? (
-        <div style={{ textAlign: 'center', padding: '40px 20px', backgroundColor: '#f8f9fa', borderRadius: '16px' }}>
-          <h2 style={{ margin: '0 0 10px 0' }}>문법 테스트 완료! 🎉</h2>
-          <p style={{ fontSize: '20px', color: '#333', marginBottom: '30px' }}>총 {currentQuestionList.length}문항 중 <strong>{score}</strong>개 정답</p>
-          {score === currentQuestionList.length ? (
-            <button onClick={onBack} style={{ width: '100%', padding: '16px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '12px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer' }}>완료 (홈으로 가기)</button>
-          ) : (
-            <button onClick={handleRetest} style={{ width: '100%', padding: '16px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '12px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer' }}>재시험 보기</button>
-          )}
-        </div>
-      ) : (
-        <div style={{ padding: '30px 20px', backgroundColor: 'white', border: '1px solid #eee', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', boxSizing: 'border-box' }}>
-          <p style={{ textAlign: 'center', color: '#666', marginBottom: '10px' }}>문항 {currentIndex + 1} / {currentQuestionList.length}</p>
+      {currentQuestionList.length === 0 && (
+        /* 💡 메인 화면 하단에 랭킹 및 명예의 전당 보드 노출 */
+        <div style={{ marginTop: '10px', boxSizing: 'border-box' }}>
           
-          <h2 
-            translate="no"
-            className="notranslate"
-            onDragStart={preventCheating}
-            style={{ 
-              textAlign: 'center', fontSize: '24px', 
-              margin: '20px 0 40px 0', color: '#111', fontWeight: '800',
-              userSelect: 'none', WebkitUserSelect: 'none', wordBreak: 'keep-all'
-            }}
-          >
-            {currentQuestion?.kor || '문항 없음'}
-          </h2>
+          {/* 🏆 지난달 명예의 전당 영역 */}
+          <div style={{ backgroundColor: '#fffdf0', border: '2px solid #ffda79', borderRadius: '16px', padding: '16px', marginBottom: '20px' }}>
+            <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', color: '#cc8e00', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              👑 {dateInfo.lastMonth}월 문법 명예의 전당
+            </h3>
+            {isRankingLoading ? (
+              <p style={{ fontSize: '13px', color: '#999', margin: 0 }}>로드 중...</p>
+            ) : lastMonthHonorRoll.length === 0 ? (
+              <p style={{ fontSize: '13px', color: '#999', margin: 0 }}>지난달 명예의 전당 기록이 없습니다.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {lastMonthHonorRoll.slice(0, 3).map((item, index) => {
+                  const medals = ['🥇', '🥈', '🥉'];
+                  return (
+                    <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', backgroundColor: 'white', borderRadius: '8px', border: '1px solid #ffeaa7' }}>
+                      <span style={{ fontWeight: 'bold', fontSize: '14px' }}>{medals[index]} {item.studentName} 학생</span>
+                      <span style={{ fontSize: '14px', color: '#666', fontWeight: '600' }}>{item.score}점</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
-          <form onSubmit={handleSubmit}>
-            <input 
-              ref={inputRef}
-              type="text" 
-              value={userAnswer}
-              onChange={(e) => setUserAnswer(e.target.value)}
-              disabled={feedback !== null || !currentQuestion || currentQuestion.eng === 'none'}
-              placeholder="정답 문장을 입력하세요" 
-              autoComplete="off"
-              autoCapitalize="none"
-              spellCheck="false"
-              style={{ 
-                width: '100%', padding: '16px', fontSize: '18px', fontWeight: 'bold',
-                borderRadius: '12px', border: '2px solid #64dfdf', textAlign: 'center',
-                boxSizing: 'border-box', outline: 'none', marginBottom: '20px',
-                backgroundColor: feedback ? '#f4f4f4' : 'white'
-              }}
-            />
+          {/* 🔥 이번 달 실시간 랭킹 영역 (매월 1일 자동 빈칸 시작) */}
+          <div style={{ backgroundColor: '#f3faff', border: '1px solid #a2d2ff', borderRadius: '16px', padding: '16px' }}>
+            <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', color: '#0077b6', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              ⚡ {dateInfo.currentMonth}월 실시간 TOP 5 랭킹
+            </h3>
+            {isRankingLoading ? (
+              <p style={{ fontSize: '13px', color: '#999', margin: 0 }}>로드 중...</p>
+            ) : thisMonthRanking.length === 0 ? (
+              <p style={{ fontSize: '13px', color: '#666', margin: 0, textAlign: 'center', padding: '10px 0' }}>
+                📅 이번 달 첫 번째 랭커에 도전해 보세요!
+              </p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {thisMonthRanking.slice(0, 5).map((item, index) => (
+                  <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 12px', backgroundColor: 'white', borderRadius: '6px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: '500' }}>{index + 1}위. {item.studentName}</span>
+                    <span style={{ fontSize: '13px', color: '#0077b6', fontWeight: 'bold' }}>{item.score}점</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+        </div>
+      )}
+
+      {currentQuestionList.length > 0 && (
+        isFinished ? (
+          <div style={{ textAlign: 'center', padding: '40px 20px', backgroundColor: '#f8f9fa', borderRadius: '16px' }}>
+            <h2 style={{ margin: '0 0 10px 0' }}>문법 테스트 완료! 🎉</h2>
+            <p style={{ fontSize: '20px', color: '#333', marginBottom: '30px' }}>총 {currentQuestionList.length}문항 중 <strong>{score}</strong>개 정답</p>
+            {score === currentQuestionList.length ? (
+              <button onClick={onBack} style={{ width: '100%', padding: '16px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '12px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer' }}>완료 (홈으로 가기)</button>
+            ) : (
+              <button onClick={handleRetest} style={{ width: '100%', padding: '16px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '12px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer' }}>재시험 보기</button>
+            )}
+          </div>
+        ) : (
+          <div style={{ padding: '30px 20px', backgroundColor: 'white', border: '1px solid #eee', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', boxSizing: 'border-box' }}>
+            <p style={{ textAlign: 'center', color: '#666', marginBottom: '10px' }}>문항 {currentIndex + 1} / {currentQuestionList.length}</p>
             
-            <button 
-              type="submit"
-              disabled={feedback !== null || !currentQuestion || currentQuestion.eng === 'none' || !userAnswer.trim()} 
+            <h2 
+              translate="no"
+              className="notranslate"
+              onDragStart={preventCheating}
               style={{ 
-                width: '100%', padding: '16px', fontSize: '18px', fontWeight: 'bold', color: 'white',
-                backgroundColor: (feedback || !currentQuestion || currentQuestion.eng === 'none' || !userAnswer.trim()) ? '#ccc' : '#111', 
-                border: 'none', borderRadius: '12px', cursor: 'pointer' 
+                textAlign: 'center', fontSize: '24px', 
+                margin: '20px 0 40px 0', color: '#111', fontWeight: '800',
+                userSelect: 'none', WebkitUserSelect: 'none', wordBreak: 'keep-all'
               }}
             >
-              정답 제출
-            </button>
-          </form>
+              {currentQuestion?.kor || '문항 없음'}
+            </h2>
 
-          {feedback ? (
-            <div style={{ marginTop: '20px', padding: '15px', borderRadius: '8px', fontWeight: 'bold', textAlign: 'center', backgroundColor: feedback.isCorrect ? '#d4edda' : '#f8d7da', color: feedback.isCorrect ? '#155724' : '#721c24' }}>
-              {feedback.msg}
-            </div>
-          ) : null}
-        </div>
+            <form onSubmit={handleSubmit}>
+              <input 
+                ref={inputRef}
+                type="text" 
+                value={userAnswer}
+                onChange={(e) => setUserAnswer(e.target.value)}
+                disabled={feedback !== null || !currentQuestion || currentQuestion.eng === 'none'}
+                placeholder="정답 문장을 입력하세요" 
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck="false"
+                style={{ 
+                  width: '100%', padding: '16px', fontSize: '18px', fontWeight: 'bold',
+                  borderRadius: '12px', border: '2px solid #64dfdf', textAlign: 'center',
+                  boxSizing: 'border-box', outline: 'none', marginBottom: '20px',
+                  backgroundColor: feedback ? '#f4f4f4' : 'white'
+                }}
+              />
+              
+              <button 
+                type="submit"
+                disabled={feedback !== null || !currentQuestion || currentQuestion.eng === 'none' || !userAnswer.trim()} 
+                style={{ 
+                  width: '100%', padding: '16px', fontSize: '18px', fontWeight: 'bold', color: 'white',
+                  backgroundColor: (feedback || !currentQuestion || currentQuestion.eng === 'none' || !userAnswer.trim()) ? '#ccc' : '#111', 
+                  border: 'none', borderRadius: '12px', cursor: 'pointer' 
+                }}
+              >
+                정답 제출
+              </button>
+            </form>
+
+            {feedback ? (
+              <div style={{ marginTop: '20px', padding: '15px', borderRadius: '8px', fontWeight: 'bold', textAlign: 'center', backgroundColor: feedback.isCorrect ? '#d4edda' : '#f8d7da', color: feedback.isCorrect ? '#155724' : '#721c24' }}>
+                {feedback.msg}
+              </div>
+            ) : null}
+          </div>
+        )
       )}
     </div>
   );
