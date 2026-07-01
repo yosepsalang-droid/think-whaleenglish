@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CONFIG } from './config';
-import Ranking from './Ranking'; // 💡 새로 만든 랭킹 컴포넌트 불러오기
+import Ranking from './Ranking';
 
 interface GoogleGrammar {
   book: string;
@@ -14,7 +14,7 @@ interface GrammarProps {
   onBack: () => void;
   studentId?: string;
   studentName?: string;
-  student?: any; // App.tsx에서 전달받는 학생 정보
+  student?: any;
 }
 
 interface RankingItem {
@@ -29,7 +29,6 @@ export default function Grammar({ onBack, student, studentId = student?.id || "S
   const [lastMonthHonorRoll, setLastMonthHonorRoll] = useState<RankingItem[]>([]);
   const [isRankingLoading, setIsRankingLoading] = useState(true);
 
-  // ... 기존 상태 유지 ...
   const [book, setBook] = useState('');
   const [unit, setUnit] = useState('');
   const [day, setDay] = useState('');
@@ -40,7 +39,6 @@ export default function Grammar({ onBack, student, studentId = student?.id || "S
   const [isFinished, setIsFinished] = useState(false);
   const [feedback, setFeedback] = useState<{ isCorrect: boolean; msg: string } | null>(null);
   const [userAnswer, setUserAnswer] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const dateInfo = useMemo(() => {
     const now = new Date();
@@ -51,23 +49,21 @@ export default function Grammar({ onBack, student, studentId = student?.id || "S
 
   const normalize = (val: string) => (val || '').toLowerCase().replace(/\s+/g, '').trim();
 
-  // 1. 데이터 로드 로직
+  // 1. 초기 데이터 및 랭킹 로드
   useEffect(() => {
     const fetchData = async () => {
-      // 구글 시트 데이터
       try {
         const response = await fetch(CONFIG.SHEETS.ELEM_GRAMMAR || CONFIG.SHEETS.ELEM_WORD);
         const csvText = await response.text();
         const rows = csvText.split(/\r?\n/);
         const parsedGrammars: GoogleGrammar[] = rows.slice(1).filter(row => row.trim()).map(row => {
-          const cells = row.split(','); // 간단한 파싱
+          const cells = row.split(',');
           return { book: cells[0], lesson: cells[1], day: cells[2], eng: cells[3], kor: cells[4] };
         });
         setAllGrammars(parsedGrammars);
         setIsLoading(false);
       } catch (e) { console.error(e); setIsLoading(false); }
 
-      // 랭킹 데이터
       try {
         setIsRankingLoading(true);
         const response = await fetch(CONFIG.WEB_APP_URL, {
@@ -75,7 +71,6 @@ export default function Grammar({ onBack, student, studentId = student?.id || "S
           body: JSON.stringify({ type: "getRanking", taskType: "문법게임" }),
         });
         const resData = await response.json();
-        // 💡 랭킹 데이터가 들어오면 상태에 저장
         setThisMonthRanking(resData.thisMonth || []);
         setLastMonthHonorRoll(resData.lastMonth || []);
       } catch (e) { console.error(e); } finally { setIsRankingLoading(false); }
@@ -83,7 +78,23 @@ export default function Grammar({ onBack, student, studentId = student?.id || "S
     fetchData();
   }, []);
 
-  // ... 기존 유틸 함수들 (books, units, days, filterQuestions 등) ...
+  // 2. 게임 종료 시 점수 자동 저장 로직 (💡 누락되었던 부분 추가!)
+  useEffect(() => {
+    if (isFinished && score > 0) {
+      fetch(CONFIG.WEB_APP_URL, {
+        method: "POST",
+        body: JSON.stringify({
+          type: "saveLog",
+          studentName: studentName,
+          grade: student?.grade || "",
+          score: score,
+          stage: appliedProgress,
+          taskType: "문법게임"
+        }),
+      }).catch(e => console.error("점수 저장 실패:", e));
+    }
+  }, [isFinished]); // 게임이 끝났을 때(isFinished가 true가 될 때) 딱 한 번 실행
+
   const books = useMemo(() => Array.from(new Set(allGrammars.map(g => g.book?.trim()))).filter(Boolean).sort(), [allGrammars]);
   const units = useMemo(() => Array.from(new Set(allGrammars.filter(g => normalize(g.book) === normalize(book)).map(g => g.lesson?.trim()))).filter(Boolean), [allGrammars, book]);
   const days = useMemo(() => Array.from(new Set(allGrammars.filter(g => normalize(g.book) === normalize(book) && normalize(g.lesson) === normalize(unit)).map(g => g.day?.trim()))).filter(Boolean), [allGrammars, book, unit]);
@@ -107,8 +118,7 @@ export default function Grammar({ onBack, student, studentId = student?.id || "S
             setCurrentIndex(prev => prev + 1);
             setFeedback(null); setUserAnswer('');
         } else {
-            setIsFinished(true);
-            // 점수 로그 전송 (실제 점수 전송)
+            setIsFinished(true); // 이 순간 useEffect가 감지하고 구글 시트로 점수를 쏩니다!
         }
     }, 1500);
   };
@@ -121,15 +131,13 @@ export default function Grammar({ onBack, student, studentId = student?.id || "S
       
       {currentQuestionList.length === 0 && (
         <div style={{ marginTop: '20px' }}>
-          {/* 💡 랭킹 모듈 사용 */}
           <Ranking title={`${dateInfo.lastMonth}월 문법 명예의 전당`} data={lastMonthHonorRoll} isLoading={isRankingLoading} isHonorRoll={true} />
           <Ranking title={`${dateInfo.currentMonth}월 실시간 TOP 5 랭킹`} data={thisMonthRanking} isLoading={isRankingLoading} />
           
-          {/* 셀렉트 박스 영역 (기존 코드 유지) */}
           <div style={{ display: 'flex', gap: '5px', marginTop: '20px' }}>
-            <select value={book} onChange={(e) => setBook(e.target.value)}><option value="">교재</option>{books.map(b => <option value={b}>{b}</option>)}</select>
-            <select value={unit} onChange={(e) => setUnit(e.target.value)}><option value="">Lesson</option>{units.map(u => <option value={u}>{u}</option>)}</select>
-            <select value={day} onChange={(e) => setDay(e.target.value)}><option value="">Day</option>{days.map(d => <option value={d}>{d}</option>)}</select>
+            <select value={book} onChange={(e) => setBook(e.target.value)}><option value="">교재</option>{books.map(b => <option key={b} value={b}>{b}</option>)}</select>
+            <select value={unit} onChange={(e) => setUnit(e.target.value)}><option value="">Lesson</option>{units.map(u => <option key={u} value={u}>{u}</option>)}</select>
+            <select value={day} onChange={(e) => setDay(e.target.value)}><option value="">Day</option>{days.map(d => <option key={d} value={d}>{d}</option>)}</select>
             <button onClick={handleApplyProgress}>확인</button>
           </div>
         </div>
@@ -140,10 +148,18 @@ export default function Grammar({ onBack, student, studentId = student?.id || "S
             <h2>{currentQuestionList[currentIndex].kor}</h2>
             <input value={userAnswer} onChange={(e) => setUserAnswer(e.target.value)} />
             <button onClick={handleSubmit}>제출</button>
+            {feedback && <div style={{ color: feedback.isCorrect ? 'green' : 'red', marginTop: '10px' }}>{feedback.msg}</div>}
         </div>
       )}
 
-      {isFinished && <div>테스트 종료! 점수: {score}점</div>}
+      {isFinished && (
+        <div style={{ textAlign: 'center', marginTop: '40px' }}>
+          <h2>테스트 종료! 🎉</h2>
+          <p style={{ fontSize: '20px' }}>최종 점수: <strong>{score}</strong>점</p>
+          <p style={{ color: '#0077b6', fontSize: '14px' }}>점수가 서버에 안전하게 저장되었습니다.</p>
+          <button onClick={onBack} style={{ marginTop: '20px', padding: '10px 20px' }}>확인</button>
+        </div>
+      )}
     </div>
   );
 }

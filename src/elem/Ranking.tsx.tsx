@@ -13,9 +13,6 @@ interface RankingProps {
 }
 
 export default function Ranking({ title, data, isLoading, isHonorRoll = false }: RankingProps) {
-  // 점수 10배 오류 강제 보정 함수 (필요시 수정)
-  const formatScore = (score: any) => Math.floor(Number(score) / 10);
-
   return (
     <div style={{ backgroundColor: isHonorRoll ? '#fffdf0' : '#f3faff', border: `2px solid ${isHonorRoll ? '#ffda79' : '#a2d2ff'}`, borderRadius: '16px', padding: '16px', marginBottom: '16px' }}>
       <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', color: isHonorRoll ? '#cc8e00' : '#0077b6', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -23,9 +20,9 @@ export default function Ranking({ title, data, isLoading, isHonorRoll = false }:
       </h3>
       
       {isLoading ? (
-        <p style={{ fontSize: '13px', color: '#999', margin: 0 }}>로드 중...</p>
+        <p style={{ fontSize: '13px', color: '#999', margin: 0 }}>데이터를 불러오는 중입니다...</p>
       ) : data.length === 0 ? (
-        <p style={{ fontSize: '13px', color: '#666', margin: 0, textAlign: 'center' }}>기록이 없습니다.</p>
+        <p style={{ fontSize: '13px', color: '#666', margin: 0, textAlign: 'center' }}>아직 랭킹 기록이 없습니다.</p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
           {data.map((item, index) => (
@@ -33,7 +30,7 @@ export default function Ranking({ title, data, isLoading, isHonorRoll = false }:
               <span style={{ fontSize: '13px', fontWeight: '500' }}>
                 {isHonorRoll ? ['🥇', '🥈', '🥉'][index] : `${index + 1}위.`} {item.studentName}
               </span>
-              <span style={{ fontSize: '13px', color: '#0077b6', fontWeight: 'bold' }}>{formatScore(item.score)}점</span>
+              <span style={{ fontSize: '13px', color: '#0077b6', fontWeight: 'bold' }}>{item.score}점</span>
             </div>
           ))}
         </div>
