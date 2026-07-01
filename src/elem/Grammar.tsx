@@ -68,6 +68,9 @@ export default function Grammar({ onBack, student, studentId = student?.id || "S
         setIsRankingLoading(true);
         const response = await fetch(CONFIG.WEB_APP_URL, {
           method: "POST",
+          headers: {
+            "Content-Type": "text/plain;charset=utf-8", // 💡 해결: CORS 에러 방지용 헤더 추가 1
+          },
           body: JSON.stringify({ type: "getRanking", taskType: "문법게임" }),
         });
         const resData = await response.json();
@@ -78,11 +81,14 @@ export default function Grammar({ onBack, student, studentId = student?.id || "S
     fetchData();
   }, []);
 
-  // 2. 게임 종료 시 점수 자동 저장 로직 (💡 누락되었던 부분 추가!)
+  // 2. 게임 종료 시 점수 자동 저장 로직
   useEffect(() => {
     if (isFinished && score > 0) {
       fetch(CONFIG.WEB_APP_URL, {
         method: "POST",
+        headers: {
+          "Content-Type": "text/plain;charset=utf-8", // 💡 해결: CORS 에러 방지용 헤더 추가 2
+        },
         body: JSON.stringify({
           type: "saveLog",
           studentName: studentName,
@@ -93,7 +99,7 @@ export default function Grammar({ onBack, student, studentId = student?.id || "S
         }),
       }).catch(e => console.error("점수 저장 실패:", e));
     }
-  }, [isFinished]); // 게임이 끝났을 때(isFinished가 true가 될 때) 딱 한 번 실행
+  }, [isFinished]);
 
   const books = useMemo(() => Array.from(new Set(allGrammars.map(g => g.book?.trim()))).filter(Boolean).sort(), [allGrammars]);
   const units = useMemo(() => Array.from(new Set(allGrammars.filter(g => normalize(g.book) === normalize(book)).map(g => g.lesson?.trim()))).filter(Boolean), [allGrammars, book]);
@@ -118,7 +124,7 @@ export default function Grammar({ onBack, student, studentId = student?.id || "S
             setCurrentIndex(prev => prev + 1);
             setFeedback(null); setUserAnswer('');
         } else {
-            setIsFinished(true); // 이 순간 useEffect가 감지하고 구글 시트로 점수를 쏩니다!
+            setIsFinished(true); 
         }
     }, 1500);
   };
