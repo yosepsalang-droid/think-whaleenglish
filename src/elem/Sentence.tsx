@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
+// 💡 [변경] 중앙 설정 관리 파일을 불러옵니다.
+import { CONFIG } from './config';
 
 // 구글 시트에서 가져올 문장 데이터의 규격 정의
 interface GoogleSentence {
@@ -9,11 +11,14 @@ interface GoogleSentence {
   kor: string;
 }
 
+// 💡 [변경] 다른 파일들과 호환되도록 학생 정보 Props를 추가했습니다.
 interface SentenceProps {
   onBack: () => void;
+  studentId?: string;
+  studentName?: string;
 }
 
-export default function Sentence({ onBack }: SentenceProps) {
+export default function Sentence({ onBack, studentId = "ST_TEST", studentName = "테스트학생" }: SentenceProps) {
   // 전체 문장 데이터 및 로딩 상태 관리
   const [allSentences, setAllSentences] = useState<GoogleSentence[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -37,10 +42,10 @@ export default function Sentence({ onBack }: SentenceProps) {
 
   const currentSentence = currentSentenceList[currentIndex];
 
-  // 💡 [교정] 대소문자, 띄어쓰기 오차를 없애고 드롭다운과 필터 범위를 100% 일치시키는 절대 규칙
+  // 대소문자, 띄어쓰기 오차를 없애고 드롭다운과 필터 범위를 100% 일치시키는 절대 규칙
   const normalize = (val: string) => (val || '').toLowerCase().replace(/\s+/g, '').trim();
 
-  // 💡 [신규] 'Day 3' 같은 문자열에서 숫자 '3'만 정수로 추출해 내는 헬퍼 함수
+  // 'Day 3' 같은 문자열에서 숫자 '3'만 정수로 추출해 내는 헬퍼 함수
   const extractDayNum = (dayStr: string): number => {
     const match = (dayStr || '').match(/\d+/);
     return match ? parseInt(match[0], 10) : -1;
@@ -71,10 +76,10 @@ export default function Sentence({ onBack }: SentenceProps) {
   useEffect(() => {
     const fetchGoogleSheet = async () => {
       try {
-        const sheetId = "1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe";
-        const csvUrl = `https://docs.google.com/spreadsheets/d/e/2PACX-${sheetId}/pub?gid=752237439&single=true&output=csv`;
-        
-        const response = await fetch(csvUrl);
+        // 💡 [변경] 하드코딩된 긴 구글 주소 대신 CONFIG 파일에 등록된 주소를 우선 호출합니다.
+        // 주소가 없을 경우를 대비해 기존 주소도 백업용(Fallback)으로 연동해 두었습니다.
+        const backupUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe/pub?gid=752237439&single=true&output=csv";
+        const response = await fetch(CONFIG.SHEETS.ELEM_SENTENCE || backupUrl);
         const csvText = await response.text();
 
         const rows = csvText.split(/\r?\n/);
@@ -109,7 +114,7 @@ export default function Sentence({ onBack }: SentenceProps) {
     fetchGoogleSheet();
   }, []);
 
-  // 2️⃣ 일관된 규칙(normalize)으로 상위 선택에 맞는 하위 항목만 오차 없이 실시간 바인딩
+  // 2️⃣ 실시간 드롭다운 바인딩
   const books = useMemo(() => {
     return Array.from(new Set(allSentences.map(s => s.book?.trim()))).filter(Boolean).sort();
   }, [allSentences]);
@@ -128,7 +133,7 @@ export default function Sentence({ onBack }: SentenceProps) {
   }, [allSentences, book, unit]);
 
 
-  // 3️⃣ 💡 [핵심 로직 수정] 선택한 Day 이하의 모든 Day 문장들을 '누적'으로 수집합니다.
+  // 3️⃣ 범위 누적 수집 필터링 함수
   const filterSentences = (targetBook: string, targetLesson: string, targetDay: string) => {
     const targetDayNumber = extractDayNum(targetDay);
 
@@ -140,12 +145,10 @@ export default function Sentence({ onBack }: SentenceProps) {
 
       const currentDayNumber = extractDayNum(s.day);
 
-      // 규격화된 숫자 Day(예: Day1, Day2)인 경우 -> 선택한 숫자 이하의 범위 전부 허용 (<=)
       if (targetDayNumber !== -1 && currentDayNumber !== -1) {
         return currentDayNumber <= targetDayNumber;
       }
 
-      // 숫자가 안 적힌 특수한 Day 이름인 경우 -> 기존처럼 1:1 일치 검사
       return normalize(s.day) === normalize(targetDay);
     });
 
@@ -164,7 +167,6 @@ export default function Sentence({ onBack }: SentenceProps) {
 
       setCurrentSentenceList(examFormat);
 
-      // 상단 진행상태 표기: 누적일 경우 "(Day1 ~ DayX 누적)" 으로 표시해 줍니다.
       const label = targetDayNumber > 1 
         ? `${targetBook} ${targetLesson} (Day1 ~ ${targetDay} 누적)`
         : `${targetBook} ${targetLesson} ${targetDay}`;
@@ -196,6 +198,29 @@ export default function Sentence({ onBack }: SentenceProps) {
       utterance.lang = 'en-US';
       utterance.rate = 0.9;
       window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  // 💡 [신규 추가] 구글 앱스 스크립트로 문장배열 게임 완료 로그 전송
+  const sendLogToGoogleSheet = async (finalScore: number) => {
+    try {
+      await fetch(CONFIG.WEB_APP_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/plain;charset=utf-8",
+        },
+        body: JSON.stringify({
+          type: "saveLog",
+          studentId: studentId,
+          studentName: studentName,
+          taskType: "문장배열", // 💡 구글 시트에 "문장배열" 통계로 묶여 들어갑니다.
+          status: "완료",
+          score: String(finalScore)
+        }),
+      });
+      console.log("구글 시트에 문장배열 로그 적재 성공");
+    } catch (err) {
+      console.error("구글 시트 로그 전송 실패:", err);
     }
   };
 
@@ -239,8 +264,10 @@ export default function Sentence({ onBack }: SentenceProps) {
     const userAnswer = selectedWords.join(' ');
     const isCorrect = userAnswer === currentSentence.eng;
 
+    let nextScore = score;
     if (isCorrect) {
-      setScore(score + 1);
+      nextScore = score + 1;
+      setScore(nextScore);
       setFeedback({ isCorrect: true, msg: '정답입니다! 👏' });
       speakWord(currentSentence.eng);
     } else {
@@ -252,6 +279,8 @@ export default function Sentence({ onBack }: SentenceProps) {
         setCurrentIndex(currentIndex + 1);
       } else {
         setIsFinished(true);
+        // 💡 모든 문제를 다 풀었을 때 구글 백엔드로 점수 전송 실행
+        sendLogToGoogleSheet(nextScore);
       }
     }, 2000); 
   };
@@ -307,7 +336,7 @@ export default function Sentence({ onBack }: SentenceProps) {
         <div style={{ padding: '30px 20px', backgroundColor: 'white', border: '1px solid #eee', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', boxSizing: 'border-box' }}>
           <p style={{ textAlign: 'center', color: '#666', marginBottom: '10px' }}>문장 {currentIndex + 1} / {currentSentenceList.length}</p>
           
-          <h2 style={{ textAlign: 'center', fontSize: currentSentence?.eng === 'none' ? '18px' : '24px', margin: '10px 0 30px 0', color: '#111' }}>
+          <h2 style={{ textAlign: 'center', fontSize: currentSentence?.eng === 'none' ? '18px' : '24px', margin: '10px 0 30px 0', color: '#111', wordBreak: 'keep-all' }}>
             {currentSentence?.kor || '문장 없음'}
           </h2>
 

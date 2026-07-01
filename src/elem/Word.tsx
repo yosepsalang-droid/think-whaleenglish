@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+// 💡 [변경] 중앙 설정 관리 파일을 불러옵니다. (경로는 파일 위치에 맞게 필요시 수정)
+import { CONFIG } from './config';
 
 interface GoogleWord {
   book: string;
@@ -8,7 +10,7 @@ interface GoogleWord {
   kor: string;
 }
 
-// 💡 [확장] 백엔드 로그 적재를 위해 학생 정보 Props 추가
+// 백엔드 로그 적재를 위한 학생 정보 Props (Home.tsx의 Student 인터페이스와 호환)
 interface WordProps {
   onBack: () => void;
   studentId?: string;
@@ -59,14 +61,12 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
     return result;
   };
 
-  // 1️⃣ 구글 시트 데이터 로드 (gid=0 단어 탭)
+  // 1️⃣ 구글 시트 데이터 로드
   useEffect(() => {
     const fetchGoogleSheet = async () => {
       try {
-        const sheetId = "1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe";
-        const csvUrl = `https://docs.google.com/spreadsheets/d/e/2PACX-${sheetId}/pub?gid=0&single=true&output=csv`;
-        
-        const response = await fetch(csvUrl);
+        // 💡 [변경] 하드코딩된 긴 구글시트 주소 대신, CONFIG에 등록된 초등 단어 리스트 주소를 호출합니다.
+        const response = await fetch(CONFIG.SHEETS.ELEM_WORD);
         const csvText = await response.text();
 
         const rows = csvText.split(/\r?\n/);
@@ -172,13 +172,11 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
     }
   };
 
-  // 💡 [추가] 구글 앱스 스크립트 웹앱으로 미션 완료 로그를 전송하는 함수
+  // 💡 구글 앱스 스크립트 웹앱으로 미션 완료 로그를 전송하는 함수
   const sendLogToGoogleSheet = async (finalScore: number) => {
-    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyOAbzxggopAl9QhrG2VHSmo0yCEcdIi89xhgvT5nOWkk9sZbiTtB-XjQd4GVhV4MhE/exec";
-    
     try {
-      // 구글 웹앱 특유의 CORS 정책을 우회하기 위해 text/plain 타입으로 안전하게 전송
-      await fetch(WEB_APP_URL, {
+      // 💡 [변경] 내부에 적혀있던 웹앱 URL 변수를 지우고, CONFIG.WEB_APP_URL을 직접 호출합니다.
+      await fetch(CONFIG.WEB_APP_URL, {
         method: "POST",
         headers: {
           "Content-Type": "text/plain;charset=utf-8",
@@ -235,7 +233,7 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
         setCurrentIndex(prev => prev + 1);
       } else {
         setIsFinished(true);
-        // 💡 [변경] 모든 문제가 끝나는 시점에 백엔드로 로그 자동 전송 실행
+        // 모든 문제가 끝나는 시점에 백엔드로 로그 자동 전송 실행
         sendLogToGoogleSheet(nextScore);
       }
     }, 1500);
