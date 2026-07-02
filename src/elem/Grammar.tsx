@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { CONFIG } from './config';
+import { CONFIG } from '../config';
 import Ranking from './Ranking';
 
 interface GoogleGrammar {
