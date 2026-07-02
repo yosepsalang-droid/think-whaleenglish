@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { CONFIG } from '../config';
 import Ranking from './Ranking';
 
-// 🚨 버셀 에러 해결을 위한 타입 지정
 const style: { [key: string]: React.CSSProperties } = {
   container: { padding: '20px', maxWidth: '600px', margin: '0 auto', fontFamily: 'Pretendard, sans-serif' },
   card: { background: '#ffffff', borderRadius: '25px', padding: '30px', boxShadow: '0 10px 30px rgba(0,0,0,0.1)', marginBottom: '20px', border: '1px solid #f0f0f0' },
@@ -27,7 +26,6 @@ export default function Grammar({ onBack, student, studentName = student?.name |
   const [rankingData, setRankingData] = useState({ thisMonth: [], lastMonth: [] });
   const [isRankingLoading, setIsRankingLoading] = useState(true);
   
-  // 게임 상태
   const [stage, setStage] = useState(0); 
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
@@ -45,7 +43,6 @@ export default function Grammar({ onBack, student, studentName = student?.name |
     return { currentMonth, lastMonth };
   }, []);
 
-  // 1. 초기 데이터 로드
   useEffect(() => {
     fetch(CONFIG.WEB_APP_URL, { 
       method: "POST", 
@@ -63,59 +60,63 @@ export default function Grammar({ onBack, student, studentName = student?.name |
       .then(text => {
         const rows = text.split(/\r?\n/).slice(1);
         const parsed = rows.map(r => { 
-          const c = r.split(','); 
-          return { eng: c[3]?.trim(), kor: c[4]?.trim() }; 
+          // 🚨 수정 포인트 1: 문장 안에 있는 쉼표(,) 때문에 데이터가 꼬이지 않도록 정규식 적용
+          const c = r.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); 
+          // 🚨 쌍따옴표가 붙어 넘어오는 경우 깔끔하게 제거
+          const eng = c[3]?.replace(/^"|"$/g, '').trim();
+          const kor = c[4]?.replace(/^"|"$/g, '').trim();
+          return { eng, kor }; 
         }).filter(item => item.eng && item.kor);
         setAllData(parsed);
       });
   }, []);
 
-  // 2. 타이머 로직
   useEffect(() => {
     if (stage > 0 && stage <= 10 && !isFinished && !feedback) {
       if (timeLeft > 0) {
         const timerId = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
         return () => clearTimeout(timerId);
       } else {
-        handleAnswer(null); // 시간 초과
+        handleAnswer(null); 
       }
     }
   }, [timeLeft, stage, isFinished, feedback]);
 
-  // 3. 문제 만들기 (영어 문장에서 한 단어 빈칸 뚫기)
   const generateProblem = (currentStage: number) => {
     if (currentStage > 10 || allData.length < 4) { 
       setIsFinished(true); 
       return; 
     }
     
-    // 타겟 문장 선택
     const targetIdx = Math.floor(Math.random() * allData.length);
     const target = allData[targetIdx];
     
-    // 영어 문장을 단어 단위로 쪼개서 빈칸 뚫을 단어 하나 선택
     const words = target.eng.split(/\s+/);
-    // 특수문자 제외하고 순수 알파벳 단어만 필터링
-    const cleanWords = words.map(w => w.replace(/[^a-zA-Z]/g, '')).filter(w => w.length > 0);
-    const targetWord = cleanWords[Math.floor(Math.random() * cleanWords.length)];
+    // 🚨 수정 포인트 2: 알파벳만 남기고, 최소 2글자 이상인 단어만 추출 (특수문자 에러 원천 차단)
+    const cleanWords = words.map(w => w.replace(/[^a-zA-Z]/g, '')).filter(w => w.length > 1);
     
-    // 문장에서 해당 단어를 빈칸(____)으로 변경 (대소문자 구분 없이 정확한 단어 매칭)
+    // 🚨 만약 추출할 수 있는 정상적인 영어 단어가 없는 문장이라면, 멈추지 않고 다른 문장을 다시 뽑습니다.
+    if (cleanWords.length === 0) {
+      generateProblem(currentStage);
+      return;
+    }
+
+    const targetWord = cleanWords[Math.floor(Math.random() * cleanWords.length)];
     const sentenceWithBlank = target.eng.replace(new RegExp(`\\b${targetWord}\\b`, 'i'), '_____');
     
-    // 오답 단어 3개 추출 (전체 데이터의 다른 단어들 중에서 무작위 추출)
     const allWordsPool = allData.flatMap(d => d.eng.split(/\s+/).map(w => w.replace(/[^a-zA-Z]/g, '')).filter(w => w.length > 1));
     const wrongChoices: string[] = [];
-    let attempts = 0; // 무한 루프 방지
+    let attempts = 0; 
     
     while (wrongChoices.length < 3 && attempts < 100) {
       attempts++;
       const randWord = allWordsPool[Math.floor(Math.random() * allWordsPool.length)];
-      if (randWord.toLowerCase() !== targetWord.toLowerCase() && !wrongChoices.includes(randWord.toLowerCase())) {
+      // 🚨 randWord가 정상적으로 존재할 때만 비교하도록 안전장치 추가
+      if (randWord && randWord.toLowerCase() !== targetWord.toLowerCase() && !wrongChoices.includes(randWord.toLowerCase())) {
         wrongChoices.push(randWord.toLowerCase());
       }
     }
     
-    // 보기 4개 섞기 (정답 1개 + 오답 3개) - 보기 통일을 위해 모두 소문자로 변환
     const finalChoices = [targetWord.toLowerCase(), ...wrongChoices].sort(() => 0.5 - Math.random());
     
     setCurrentProblem({ ...target, sentenceWithBlank, targetWord: targetWord.toLowerCase() });
@@ -133,14 +134,13 @@ export default function Grammar({ onBack, student, studentName = student?.name |
     generateProblem(1);
   };
 
-  // 4. 정답 확인 및 점수 계산
   const handleAnswer = (selected: string | null) => {
     if (feedback) return;
     
     const isCorrect = selected === currentProblem?.targetWord;
     
     if (isCorrect) {
-      const earnedScore = 100 + (timeLeft * 10); // 스피드 보너스
+      const earnedScore = 100 + (timeLeft * 10);
       setScore(s => s + earnedScore);
       setFeedback({ msg: `정답이야! (+${earnedScore}점) ⚡`, isCorrect: true });
     } else {
@@ -161,7 +161,6 @@ export default function Grammar({ onBack, student, studentName = student?.name |
     }, 1500);
   };
 
-  // 5. 서버 저장
   useEffect(() => {
     if (isFinished && score > 0) {
       fetch(CONFIG.WEB_APP_URL, {
@@ -212,22 +211,19 @@ export default function Grammar({ onBack, student, studentName = student?.name |
               생명: {'❤️'.repeat(lives)}
             </span>
             
-            {/* 한국어 뜻 제시 */}
             <p style={{ fontSize: '18px', color: '#64748b', margin: '20px 0 10px', fontWeight: '600' }}>
               {currentProblem.kor}
             </p>
             
-            {/* 영어 문장 (빈칸 포함) */}
             <h2 style={{ fontSize: '26px', color: '#1e293b', wordBreak: 'keep-all', margin: '0 0 20px', lineHeight: '1.5' }}>
               {currentProblem.sentenceWithBlank}
             </h2>
           </div>
           
-          {/* 단어 4지 선다 보기 제공 */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-            {choices.map(c => (
+            {choices.map((c, idx) => (
               <button 
-                key={c} 
+                key={idx} 
                 onClick={() => handleAnswer(c)} 
                 style={{
                   ...style.choiceBtn,
