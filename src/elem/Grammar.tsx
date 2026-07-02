@@ -14,6 +14,7 @@ const style: { [key: string]: React.CSSProperties } = {
 export default function Grammar({ onBack, studentName = "테스트학생" }: any) {
   const [allData, setAllData] = useState<any[]>([]);
   const [rankingData, setRankingData] = useState({ thisMonth: [], lastMonth: [] });
+  const [isRankingLoading, setIsRankingLoading] = useState(true); // 🚨 로딩 상태 추가
   
   const [stage, setStage] = useState(0);
   const [score, setScore] = useState(0);
@@ -28,11 +29,14 @@ export default function Grammar({ onBack, studentName = "테스트학생" }: any
     return { currentMonth, lastMonth };
   }, []);
 
-  // 1. 데이터 가져오기
   useEffect(() => {
     fetch(CONFIG.WEB_APP_URL, { method: "POST", body: JSON.stringify({ type: "getRanking", taskType: "문법게임" }) })
       .then(res => res.json())
-      .then(data => setRankingData({ thisMonth: data.thisMonth || [], lastMonth: data.lastMonth || [] }));
+      .then(data => {
+        setRankingData({ thisMonth: data.thisMonth || [], lastMonth: data.lastMonth || [] });
+        setIsRankingLoading(false);
+      })
+      .catch(() => setIsRankingLoading(false));
 
     fetch(CONFIG.SHEETS.ELEM_GRAMMAR)
       .then(res => res.text())
@@ -43,7 +47,6 @@ export default function Grammar({ onBack, studentName = "테스트학생" }: any
       });
   }, []);
 
-  // 2. 문제 및 빈칸 생성
   const generateProblem = () => {
     if (stage >= 10) { setIsFinished(true); return; }
     const target = allData[Math.floor(Math.random() * allData.length)];
@@ -58,11 +61,9 @@ export default function Grammar({ onBack, studentName = "테스트학생" }: any
     setStage(s => s + 1);
   };
 
-  // 3. 정답 확인 및 소리 출력
   const handleAnswer = (selected: string) => {
     if (selected === currentProblem.targetWord) {
       setScore(s => s + 100);
-      // 소리 출력 (TTS)
       const utterance = new SpeechSynthesisUtterance(currentProblem.eng);
       utterance.lang = 'en-US';
       window.speechSynthesis.speak(utterance);
@@ -78,8 +79,9 @@ export default function Grammar({ onBack, studentName = "테스트학생" }: any
       {stage === 0 ? (
         <div style={style.card}>
           <h2 style={style.title}>⚡ 스피드 문법 퀴즈</h2>
-          <Ranking title={`${dateInfo.lastMonth}월 명예의 전당 (1-3등)`} data={rankingData.lastMonth.slice(0, 3)} />
-          <Ranking title={`${dateInfo.currentMonth}월 실시간 랭킹`} data={rankingData.thisMonth} />
+          {/* 🚨 아래에 isLoading={isRankingLoading}을 명시적으로 추가하여 에러 해결 */}
+          <Ranking title={`${dateInfo.lastMonth}월 명예의 전당 (1-3등)`} data={rankingData.lastMonth.slice(0, 3)} isLoading={isRankingLoading} />
+          <Ranking title={`${dateInfo.currentMonth}월 실시간 랭킹`} data={rankingData.thisMonth} isLoading={isRankingLoading} />
           <button style={style.button} onClick={generateProblem}>게임 시작하기</button>
         </div>
       ) : isFinished ? (
