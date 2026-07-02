@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { CONFIG } from './config';
+import { CONFIG } from '../config';
 
 interface WhaleChatProps {
   onBack: () => void;

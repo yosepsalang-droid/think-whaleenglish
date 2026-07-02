@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 // 💡 [변경] 중앙 설정 관리 파일을 불러옵니다.
-import { CONFIG } from './config';
+import { CONFIG } from '../config';
 
 // 구글 시트에서 가져올 문장 데이터의 규격 정의
 interface GoogleSentence {

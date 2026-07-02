@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 // 💡 [변경] 중앙 설정 관리 파일을 불러옵니다. (경로는 파일 위치에 맞게 필요시 수정)
-import { CONFIG } from './config';
+import { CONFIG } from '../config';
 
 interface GoogleWord {
   book: string;
