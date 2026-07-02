@@ -2,6 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { CONFIG } from '../config';
 import Ranking from './Ranking';
 
+// 🚨 원장님, 여기서 숫자만 바꾸면 1, 2, 3단계 교재가 자동으로 변경됩니다!
+const GAME_LEVEL = 1; 
+
 const style: { [key: string]: React.CSSProperties } = {
   container: { padding: '20px', maxWidth: '600px', margin: '0 auto', fontFamily: 'Pretendard, sans-serif' },
   card: { background: '#ffffff', borderRadius: '25px', padding: '30px', boxShadow: '0 10px 30px rgba(0,0,0,0.15)', marginBottom: '20px', border: '1px solid #f0f0f0' },
@@ -12,12 +15,13 @@ const style: { [key: string]: React.CSSProperties } = {
 };
 
 export default function Grammar({ onBack, studentName = "테스트학생" }: any) {
-  const [allData, setAllData] = useState<any[]>([]);
+  const [activePool, setActivePool] = useState<any[]>([]);
   const [rankingData, setRankingData] = useState({ thisMonth: [], lastMonth: [] });
   const [isRankingLoading, setIsRankingLoading] = useState(true);
   
   const [stage, setStage] = useState(0);
   const [score, setScore] = useState(0);
+  const [lives, setLives] = useState(3); // 🚨 목숨 상태 추가
   const [currentProblem, setCurrentProblem] = useState<any>(null);
   const [choices, setChoices] = useState<string[]>([]);
   const [isFinished, setIsFinished] = useState(false);
@@ -32,32 +36,42 @@ export default function Grammar({ onBack, studentName = "테스트학생" }: any
   useEffect(() => {
     fetch(CONFIG.WEB_APP_URL, { method: "POST", body: JSON.stringify({ type: "getRanking", taskType: "문법게임" }) })
       .then(res => res.json())
-      .then(data => {
-        setRankingData({ thisMonth: data.thisMonth || [], lastMonth: data.lastMonth || [] });
-        setIsRankingLoading(false);
-      });
+      .then(data => { setRankingData({ thisMonth: data.thisMonth || [], lastMonth: data.lastMonth || [] }); setIsRankingLoading(false); });
 
     fetch(CONFIG.SHEETS.ELEM_GRAMMAR)
-      .then(res => res.text())
-      .then(text => {
+      .then(res => text => {
         const rows = text.split(/\r?\n/).slice(1);
-        const parsed = rows.map(r => { const c = r.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); return { eng: c[3]?.replace(/^"|"$/g, '').trim(), kor: c[4]?.replace(/^"|"$/g, '').trim() }; }).filter(i => i.eng && i.kor);
-        console.log("로드된 문제 수:", parsed.length); // 🚨 데이터가 잘 들어왔는지 확인용 로그
-        setAllData(parsed);
+        const allParsed = rows.map(r => { 
+            const c = r.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); 
+            return { book: c[1]?.trim(), eng: c[3]?.replace(/^"|"$/g, '').trim(), kor: c[4]?.replace(/^"|"$/g, '').trim() }; 
+        }).filter(i => i.eng && i.kor);
+
+        let targetBooks: string[] = [];
+        if (GAME_LEVEL === 1) targetBooks = ['240_1', '240_2', '240_3'];
+        else if (GAME_LEVEL === 2) targetBooks = ['240_4', '240_5', '240_6'];
+        else if (GAME_LEVEL === 3) targetBooks = ['520_1', '520_2', '520_3'];
+
+        const pool = allParsed.filter(item => targetBooks.includes(item.book));
+        setActivePool(pool);
       });
   }, []);
 
+  const startGame = () => {
+    setScore(0);
+    setLives(3); // 🚨 시작할 때 목숨 3개로 초기화
+    setStage(0);
+    generateProblem();
+  };
+
   const generateProblem = () => {
-    console.log("현재 데이터 길이:", allData.length);
-    if (allData.length < 4) { alert("문제가 아직 로드되지 않았어요! 잠시만 기다려주세요."); return; }
     if (stage >= 10) { setIsFinished(true); return; }
     
-    const target = allData[Math.floor(Math.random() * allData.length)];
+    const target = activePool[Math.floor(Math.random() * activePool.length)];
     const words = target.eng.split(/\s+/).map((w: string) => w.replace(/[^a-zA-Z]/g, '')).filter((w: string) => w.length > 2);
     const targetWord = words[Math.floor(Math.random() * words.length)];
     const sentenceWithBlank = target.eng.replace(new RegExp(`\\b${targetWord}\\b`, 'i'), '__________');
     
-    const wrong = Array.from(new Set(allData.flatMap(d => d.eng.split(/\s+/).map((w: string) => w.replace(/[^a-zA-Z]/g, ''))).filter(w => w.length > 2))).filter(w => w.toLowerCase() !== targetWord.toLowerCase()).sort(() => 0.5 - Math.random()).slice(0, 3);
+    const wrong = Array.from(new Set(activePool.flatMap(d => d.eng.split(/\s+/).map((w: string) => w.replace(/[^a-zA-Z]/g, ''))).filter(w => w.length > 2))).filter(w => w.toLowerCase() !== targetWord.toLowerCase()).sort(() => 0.5 - Math.random()).slice(0, 3);
     
     setCurrentProblem({ ...target, sentenceWithBlank, targetWord: targetWord.toLowerCase() });
     setChoices([targetWord.toLowerCase(), ...wrong].sort(() => 0.5 - Math.random()));
@@ -72,7 +86,16 @@ export default function Grammar({ onBack, studentName = "테스트학생" }: any
       window.speechSynthesis.speak(utterance);
       setTimeout(generateProblem, 1000);
     } else {
-      alert("틀렸어! 다시 해보자!");
+      setLives(prev => {
+        const nextLives = prev - 1;
+        if (nextLives <= 0) {
+            alert("목숨이 다했어요! 게임 종료!");
+            setIsFinished(true);
+        } else {
+            alert(`틀렸어요! 목숨이 ${nextLives}개 남았습니다.`);
+        }
+        return nextLives;
+      });
     }
   };
 
@@ -84,23 +107,27 @@ export default function Grammar({ onBack, studentName = "테스트학생" }: any
           <h2 style={style.title}>⚡ 스피드 문법 퀴즈</h2>
           <Ranking title={`${dateInfo.lastMonth}월 명예의 전당 (1-3등)`} data={rankingData.lastMonth.slice(0, 3)} isLoading={isRankingLoading} />
           <Ranking title={`${dateInfo.currentMonth}월 실시간 랭킹`} data={rankingData.thisMonth} isLoading={isRankingLoading} />
-          <button style={style.button} onClick={generateProblem}>게임 시작하기</button>
+          <button style={style.button} onClick={startGame}>게임 시작하기</button>
         </div>
       ) : isFinished ? (
         <div style={style.card}>
           <h2>최종 점수: {score}점</h2>
           <button style={style.button} onClick={() => window.location.reload()}>다시하기</button>
         </div>
-      ) : currentProblem ? (
+      ) : (
         <div style={style.card}>
-          <div style={style.header}><span>문제 {stage}</span><span>점수: {score}</span></div>
+          <div style={style.header}>
+            <span>문제 {stage} / 10</span>
+            <span>점수: {score}</span>
+            <span style={{color: 'red'}}>❤️ 목숨: {lives}</span> {/* 🚨 목숨 UI 추가 */}
+          </div>
           <p style={{fontSize:'20px', color:'#64748b', textAlign:'center'}}>{currentProblem?.kor}</p>
           <h2 style={{fontSize:'28px', textAlign:'center', margin:'30px 0'}}>{currentProblem?.sentenceWithBlank}</h2>
           <div style={{display:'grid', gap:'10px'}}>
             {choices.map((c, i) => <button key={i} style={style.choiceBtn} onClick={() => handleAnswer(c)}>{c}</button>)}
           </div>
         </div>
-      ) : <div style={style.card}><h2>문제를 불러오는 중입니다...</h2></div>}
+      )}
     </div>
   );
 }
