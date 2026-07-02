@@ -14,14 +14,14 @@ const style: { [key: string]: React.CSSProperties } = {
   header: { display: 'flex', justifyContent: 'space-between', marginBottom: '20px', color: '#64748b', fontSize: '18px', fontWeight: '700' }
 };
 
-export default function Grammar({ onBack, studentName = "테스트학생" }: any) {
+export default function Grammar({ onBack }: { onBack: () => void }) {
   const [activePool, setActivePool] = useState<any[]>([]);
-  const [rankingData, setRankingData] = useState({ thisMonth: [], lastMonth: [] });
+  const [rankingData, setRankingData] = useState<{thisMonth: any[], lastMonth: any[]}>({ thisMonth: [], lastMonth: [] });
   const [isRankingLoading, setIsRankingLoading] = useState(true);
   
-  const [stage, setStage] = useState(0);
+  const [stage, setStage] = useState(0); 
   const [score, setScore] = useState(0);
-  const [lives, setLives] = useState(3); // 🚨 목숨 상태 추가
+  const [lives, setLives] = useState(3); 
   const [currentProblem, setCurrentProblem] = useState<any>(null);
   const [choices, setChoices] = useState<string[]>([]);
   const [isFinished, setIsFinished] = useState(false);
@@ -35,30 +35,31 @@ export default function Grammar({ onBack, studentName = "테스트학생" }: any
 
   useEffect(() => {
     fetch(CONFIG.WEB_APP_URL, { method: "POST", body: JSON.stringify({ type: "getRanking", taskType: "문법게임" }) })
-      .then(res => res.json())
-      .then(data => { setRankingData({ thisMonth: data.thisMonth || [], lastMonth: data.lastMonth || [] }); setIsRankingLoading(false); });
+      .then((res: Response) => res.json())
+      .then((data: any) => { setRankingData({ thisMonth: data.thisMonth || [], lastMonth: data.lastMonth || [] }); setIsRankingLoading(false); });
 
     fetch(CONFIG.SHEETS.ELEM_GRAMMAR)
-      .then(res => text => {
+      .then((res: Response) => res.text())
+      .then((text: string) => {
         const rows = text.split(/\r?\n/).slice(1);
-        const allParsed = rows.map(r => { 
+        const allParsed = rows.map((r: string) => { 
             const c = r.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); 
             return { book: c[1]?.trim(), eng: c[3]?.replace(/^"|"$/g, '').trim(), kor: c[4]?.replace(/^"|"$/g, '').trim() }; 
-        }).filter(i => i.eng && i.kor);
+        }).filter((i: any) => i.eng && i.kor);
 
         let targetBooks: string[] = [];
         if (GAME_LEVEL === 1) targetBooks = ['240_1', '240_2', '240_3'];
         else if (GAME_LEVEL === 2) targetBooks = ['240_4', '240_5', '240_6'];
         else if (GAME_LEVEL === 3) targetBooks = ['520_1', '520_2', '520_3'];
 
-        const pool = allParsed.filter(item => targetBooks.includes(item.book));
+        const pool = allParsed.filter((item: any) => targetBooks.includes(item.book));
         setActivePool(pool);
       });
   }, []);
 
   const startGame = () => {
     setScore(0);
-    setLives(3); // 🚨 시작할 때 목숨 3개로 초기화
+    setLives(3); 
     setStage(0);
     generateProblem();
   };
@@ -71,7 +72,7 @@ export default function Grammar({ onBack, studentName = "테스트학생" }: any
     const targetWord = words[Math.floor(Math.random() * words.length)];
     const sentenceWithBlank = target.eng.replace(new RegExp(`\\b${targetWord}\\b`, 'i'), '__________');
     
-    const wrong = Array.from(new Set(activePool.flatMap(d => d.eng.split(/\s+/).map((w: string) => w.replace(/[^a-zA-Z]/g, ''))).filter(w => w.length > 2))).filter(w => w.toLowerCase() !== targetWord.toLowerCase()).sort(() => 0.5 - Math.random()).slice(0, 3);
+    const wrong = Array.from(new Set(activePool.flatMap((d: any) => d.eng.split(/\s+/).map((w: string) => w.replace(/[^a-zA-Z]/g, ''))).filter((w: string) => w.length > 2))).filter((w: string) => w.toLowerCase() !== targetWord.toLowerCase()).sort(() => 0.5 - Math.random()).slice(0, 3);
     
     setCurrentProblem({ ...target, sentenceWithBlank, targetWord: targetWord.toLowerCase() });
     setChoices([targetWord.toLowerCase(), ...wrong].sort(() => 0.5 - Math.random()));
@@ -119,12 +120,12 @@ export default function Grammar({ onBack, studentName = "테스트학생" }: any
           <div style={style.header}>
             <span>문제 {stage} / 10</span>
             <span>점수: {score}</span>
-            <span style={{color: 'red'}}>❤️ 목숨: {lives}</span> {/* 🚨 목숨 UI 추가 */}
+            <span style={{color: 'red'}}>❤️ 목숨: {lives}</span>
           </div>
           <p style={{fontSize:'20px', color:'#64748b', textAlign:'center'}}>{currentProblem?.kor}</p>
           <h2 style={{fontSize:'28px', textAlign:'center', margin:'30px 0'}}>{currentProblem?.sentenceWithBlank}</h2>
           <div style={{display:'grid', gap:'10px'}}>
-            {choices.map((c, i) => <button key={i} style={style.choiceBtn} onClick={() => handleAnswer(c)}>{c}</button>)}
+            {choices.map((c: string, i: number) => <button key={i} style={style.choiceBtn} onClick={() => handleAnswer(c)}>{c}</button>)}
           </div>
         </div>
       )}
