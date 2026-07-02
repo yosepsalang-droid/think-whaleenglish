@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { CONFIG } from '../config';
 import Ranking from './Ranking';
 
-// 🚨 원장님, 여기서 숫자만 바꾸면 1, 2, 3단계 교재가 자동으로 변경됩니다!
+// 🚨 레벨 설정 (1, 2, 3)
 const GAME_LEVEL = 1; 
 
 const style: { [key: string]: React.CSSProperties } = {
@@ -14,7 +14,8 @@ const style: { [key: string]: React.CSSProperties } = {
   header: { display: 'flex', justifyContent: 'space-between', marginBottom: '20px', color: '#64748b', fontSize: '18px', fontWeight: '700' }
 };
 
-export default function Grammar({ onBack }: { onBack: () => void }) {
+// 🚨 student 프롭을 받도록 정의 수정
+export default function Grammar({ onBack, student }: { onBack: () => void, student?: any }) {
   const [activePool, setActivePool] = useState<any[]>([]);
   const [rankingData, setRankingData] = useState<{thisMonth: any[], lastMonth: any[]}>({ thisMonth: [], lastMonth: [] });
   const [isRankingLoading, setIsRankingLoading] = useState(true);
@@ -68,6 +69,8 @@ export default function Grammar({ onBack }: { onBack: () => void }) {
     if (stage >= 10) { setIsFinished(true); return; }
     
     const target = activePool[Math.floor(Math.random() * activePool.length)];
+    if (!target) return;
+    
     const words = target.eng.split(/\s+/).map((w: string) => w.replace(/[^a-zA-Z]/g, '')).filter((w: string) => w.length > 2);
     const targetWord = words[Math.floor(Math.random() * words.length)];
     const sentenceWithBlank = target.eng.replace(new RegExp(`\\b${targetWord}\\b`, 'i'), '__________');
