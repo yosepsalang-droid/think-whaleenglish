@@ -76,7 +76,14 @@ export default function App() {
     // 📘 중등부 학습 화면 라우팅
     if (loggedInStudent && studentMode === 'middle') {
       if (currentMenu === 'voca') {
-        return <Voca currentBook={loggedInStudent.currentBook} onBack={() => setCurrentMenu('midHome')} />;
+        return (
+          <Voca 
+            studentId={loggedInStudent.id} 
+            studentName={loggedInStudent.name} 
+            currentBook={loggedInStudent.currentBook} 
+            onBack={() => setCurrentMenu('midHome')} 
+          />
+        );
       }
       if (currentMenu === 'midSen') {
         return <MidSen onBack={() => setCurrentMenu('midHome')} />;

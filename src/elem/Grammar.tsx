@@ -53,7 +53,7 @@ export default function Grammar({ onBack, student, studentId = student?.id || "S
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch(CONFIG.SHEETS.ELEM_GRAMMAR || CONFIG.SHEETS.ELEM_WORD);
+        const response = await fetch(CONFIG.SHEETS.GRAMMAR_LOG);
         const csvText = await response.text();
         const rows = csvText.split(/\r?\n/);
         const parsedGrammars: GoogleGrammar[] = rows.slice(1).filter(row => row.trim()).map(row => {
