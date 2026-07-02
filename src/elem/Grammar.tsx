@@ -14,7 +14,7 @@ const style: { [key: string]: React.CSSProperties } = {
 export default function Grammar({ onBack, studentName = "테스트학생" }: any) {
   const [allData, setAllData] = useState<any[]>([]);
   const [rankingData, setRankingData] = useState({ thisMonth: [], lastMonth: [] });
-  const [isRankingLoading, setIsRankingLoading] = useState(true); // 🚨 로딩 상태 추가
+  const [isRankingLoading, setIsRankingLoading] = useState(true);
   
   const [stage, setStage] = useState(0);
   const [score, setScore] = useState(0);
@@ -35,20 +35,23 @@ export default function Grammar({ onBack, studentName = "테스트학생" }: any
       .then(data => {
         setRankingData({ thisMonth: data.thisMonth || [], lastMonth: data.lastMonth || [] });
         setIsRankingLoading(false);
-      })
-      .catch(() => setIsRankingLoading(false));
+      });
 
     fetch(CONFIG.SHEETS.ELEM_GRAMMAR)
       .then(res => res.text())
       .then(text => {
         const rows = text.split(/\r?\n/).slice(1);
         const parsed = rows.map(r => { const c = r.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); return { eng: c[3]?.replace(/^"|"$/g, '').trim(), kor: c[4]?.replace(/^"|"$/g, '').trim() }; }).filter(i => i.eng && i.kor);
+        console.log("로드된 문제 수:", parsed.length); // 🚨 데이터가 잘 들어왔는지 확인용 로그
         setAllData(parsed);
       });
   }, []);
 
   const generateProblem = () => {
+    console.log("현재 데이터 길이:", allData.length);
+    if (allData.length < 4) { alert("문제가 아직 로드되지 않았어요! 잠시만 기다려주세요."); return; }
     if (stage >= 10) { setIsFinished(true); return; }
+    
     const target = allData[Math.floor(Math.random() * allData.length)];
     const words = target.eng.split(/\s+/).map((w: string) => w.replace(/[^a-zA-Z]/g, '')).filter((w: string) => w.length > 2);
     const targetWord = words[Math.floor(Math.random() * words.length)];
@@ -79,7 +82,6 @@ export default function Grammar({ onBack, studentName = "테스트학생" }: any
       {stage === 0 ? (
         <div style={style.card}>
           <h2 style={style.title}>⚡ 스피드 문법 퀴즈</h2>
-          {/* 🚨 아래에 isLoading={isRankingLoading}을 명시적으로 추가하여 에러 해결 */}
           <Ranking title={`${dateInfo.lastMonth}월 명예의 전당 (1-3등)`} data={rankingData.lastMonth.slice(0, 3)} isLoading={isRankingLoading} />
           <Ranking title={`${dateInfo.currentMonth}월 실시간 랭킹`} data={rankingData.thisMonth} isLoading={isRankingLoading} />
           <button style={style.button} onClick={generateProblem}>게임 시작하기</button>
@@ -89,7 +91,7 @@ export default function Grammar({ onBack, studentName = "테스트학생" }: any
           <h2>최종 점수: {score}점</h2>
           <button style={style.button} onClick={() => window.location.reload()}>다시하기</button>
         </div>
-      ) : (
+      ) : currentProblem ? (
         <div style={style.card}>
           <div style={style.header}><span>문제 {stage}</span><span>점수: {score}</span></div>
           <p style={{fontSize:'20px', color:'#64748b', textAlign:'center'}}>{currentProblem?.kor}</p>
@@ -98,7 +100,7 @@ export default function Grammar({ onBack, studentName = "테스트학생" }: any
             {choices.map((c, i) => <button key={i} style={style.choiceBtn} onClick={() => handleAnswer(c)}>{c}</button>)}
           </div>
         </div>
-      )}
+      ) : <div style={style.card}><h2>문제를 불러오는 중입니다...</h2></div>}
     </div>
   );
 }
