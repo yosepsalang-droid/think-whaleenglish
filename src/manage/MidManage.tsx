@@ -12,6 +12,7 @@ export default function MidManage() {
   // 💡 2. 화면 스위치와 교재 정보
   const [currentView, setCurrentView] = useState<'main' | 'voca'>('main');
   const [selectedBook, setSelectedBook] = useState<string>('');
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
 
   const fetchMiddleStudents = async () => {
     try {
@@ -45,8 +46,9 @@ export default function MidManage() {
     setSavingId(null);
   };
 
-  const handleStartVoca = (book: string) => {
-    setSelectedBook(book);
+  const handleStartVoca = (student: Student) => {
+    setSelectedStudent(student);
+    setSelectedBook(student.currentBook);
     setCurrentView('voca');
   };
 
@@ -55,7 +57,9 @@ export default function MidManage() {
     return (
       <Voca 
         onBack={() => setCurrentView('main')} 
-        currentBook={selectedBook} 
+        currentBook={selectedBook}
+        studentId={selectedStudent?.id ?? ''}
+        studentName={selectedStudent?.name ?? ''}
       />
     );
   }
@@ -80,7 +84,7 @@ export default function MidManage() {
                 <td style={{ padding: '12px', border: '1px solid #e2e8f0' }}>{s.currentBook} / {s.progress}</td>
                 <td style={{ padding: '12px', border: '1px solid #e2e8f0' }}>
                   <button 
-                    onClick={() => handleStartVoca(s.currentBook)}
+                    onClick={() => handleStartVoca(s)}
                     style={{ marginRight: '8px', padding: '6px 12px', background: '#007aff', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
                   >
                     📝 단어 테스트
