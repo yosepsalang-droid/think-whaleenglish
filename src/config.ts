@@ -16,6 +16,10 @@ export const CONFIG = {
       // [교재 및 문제 데이터]
       ELEM_WORD: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe/pub?gid=0&single=true&output=csv",          // 시트1: 고래영어교재 단어 리스트
       ELEM_SENTENCE: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe/pub?gid=752237439&single=true&output=csv",  // 시트3: 고래 교재 문장배열 리스트
+      
+      // 👇 여기에 시트3번 주소와 완전히 동일한 주소를 ELEM_GRAMMAR라는 이름으로 한 줄 추가합니다.
+      ELEM_GRAMMAR: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe/pub?gid=752237439&single=true&output=csv",   // 시트3: 스피드 문법 문제용 공유
+      
       MID_WORD: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe/pub?gid=8529494&single=true&output=csv",       // 시트4: 중등 단어 리스트
       MID_SENTENCE: "https://docs.google.com/spreadsheets/d/e/2PACX-1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe/pub?gid=2069604392&single=true&output=csv", // 시트6: 중등 문장배열 리스트
   
