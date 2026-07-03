@@ -5,7 +5,10 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
   const [gameState, setGameState] = useState('LOBBY');
   const [studentName, setStudentName] = useState(student?.name || '');
   
+  // 💡 stage(단계: 1~10), qCount(단계별 문제번호: 1~10)
   const [stage, setStage] = useState(1);
+  const [qCount, setQCount] = useState(1);
+  
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
   const [timeLeft, setTimeLeft] = useState(10);
@@ -35,13 +38,7 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
       .then(text => {
         const rows = text.split(/\r?\n/).slice(1);
         const parsed = rows.map(r => { 
-            // CSV 데이터를 콤마 기준으로 나눕니다.
             const c = r.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); 
-            
-            // 🚨 원장님 시트 구조에 맞춘 열 매칭!
-            // A열(인덱스 0) = book_id
-            // E열(인덱스 4) = english
-            // F열(인덱스 5) = korean
             return { 
               book: c[0]?.trim(), 
               eng: c[4]?.replace(/^"|"$/g, '').trim(), 
@@ -53,16 +50,19 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
       });
   }, []);
 
-  // 💡 1~10단계별로 출제될 교재 설정 함수
+  // 💡 원장님이 알려주신 교재 리스트에 맞춰 1~10단계 세팅 완벽 적용!
   const getBooksForStage = (currentStage: number) => {
     switch (currentStage) {
       case 1: return ['240_1', '240_2', '240_3'];
       case 2: return ['240_4', '240_5', '240_6'];
       case 3: return ['520_1', '520_2', '520_3'];
       case 4: return ['520_4', '520_5', '520_6']; 
-      case 5: return ['800_1', '800_2', '800_3']; 
-      case 6: return ['800_4', '800_5', '800_6']; 
-      // 필요한 단계에 맞게 책 이름을 수정해 주세요!
+      case 5: return ['860_1', '860_2', '860_3']; 
+      case 6: return ['860_4', '860_5', '860_6']; 
+      case 7: return ['1240_1', '1240_2', '1240_3']; 
+      case 8: return ['1240_4', '1240_5', '1240_6']; 
+      case 9: return ['1680_1', '1680_2', '1680_3']; 
+      case 10: return ['1680_4', '1680_5', '1680_6']; 
       default: return ['240_1']; 
     }
   };
@@ -72,7 +72,7 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
     const targetBooks = getBooksForStage(currentStage);
     const stagePool = pool.filter(item => targetBooks.includes(item.book));
 
-    if (stagePool.length < 4) return null; 
+    if (stagePool.length < 4) return null; // 해당 스테이지의 문제가 부족할 경우
     
     const target = stagePool[Math.floor(Math.random() * stagePool.length)];
     const words = target.eng.split(/\s+/).map((w:string) => w.replace(/[^a-zA-Z]/g, '')).filter((w:string) => w.length > 2);
@@ -91,11 +91,12 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
     
     const initialQuestion = generateProblem(allData, 1);
     if (!initialQuestion) { 
-      alert("현재 1단계(240_1~3)에 해당하는 문제 데이터를 시트에서 찾을 수 없습니다."); 
+      alert("시트에 1단계(240_1~3) 문제 데이터가 부족합니다."); 
       return; 
     }
     
     setStage(1);
+    setQCount(1); // 1단계의 1번 문제부터 시작
     setScore(0);
     setLives(3);
     setTimeLeft(10);
@@ -113,7 +114,7 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [gameState, stage, lives]);
+  }, [gameState, stage, qCount, lives]); // qCount 추가
 
   const handleTimeOut = () => {
     setLives(prev => {
@@ -143,21 +144,31 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
     moveToNextStage(newScore);
   };
 
+  // 💡 단계별 10문제씩 출제되도록 변경된 로직
   const moveToNextStage = (currentScore: number) => {
-    if (stage < 10) {
+    if (qCount < 10) {
+      // 1. 같은 단계에서 다음 문제로 넘어갈 때 (1~9번 문제 풀고 난 후)
+      const nextQuestion = generateProblem(allData, stage);
+      setQCount(prev => prev + 1);
+      setTimeLeft(10);
+      setCurrentQ(nextQuestion);
+    } else if (stage < 10) {
+      // 2. 10문제를 다 풀고 다음 단계로 넘어갈 때
       const nextStage = stage + 1;
       const nextQuestion = generateProblem(allData, nextStage);
       
       if (!nextQuestion) {
-        alert(`${nextStage}단계 교재 데이터가 부족하여 여기까지만 진행됩니다!`);
+        alert(`시트에 ${nextStage}단계 교재 데이터가 부족하여 여기까지만 진행됩니다!`);
         endGame(currentScore);
         return;
       }
 
       setStage(nextStage);
+      setQCount(1); // 문제 번호는 다시 1번으로 초기화
       setTimeLeft(10);
       setCurrentQ(nextQuestion);
     } else {
+      // 3. 10단계 10문제(총 100문제)를 모두 다 맞췄을 때
       endGame(currentScore);
     }
   };
@@ -172,7 +183,7 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
         studentName: studentName,
         grade: student?.grade || "미지정",
         score: finalScore,
-        stage: stage,
+        stage: stage, // 구글 시트에는 도달한 '단계(stage)' 기준으로 저장됩니다.
         taskType: "문법게임"
       })
     }).catch(err => console.error(err));
@@ -244,17 +255,21 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
   }
 
   if (gameState === 'GAME') {
+    // 💡 총 100문제 기준 진행률 게이지 바 계산
+    const progressPercent = ((((stage - 1) * 10) + qCount) / 100) * 100;
+
     return (
       <div style={styles.container}>
         <div style={styles.card}>
           <div style={styles.gameHeader}>
-            <span style={styles.badge}>STAGE {stage} / 10</span>
+            {/* 💡 STAGE 번호와 그 안에서의 문제 번호 동시 표시 */}
+            <span style={styles.badge}>STAGE {stage} ({qCount}/10)</span>
             <span style={styles.timer}>⏳ {timeLeft}초</span>
             <span style={styles.scoreText}>점수: {score}</span>
             <span style={styles.lives}>{"❤️".repeat(lives)}</span>
           </div>
           <div style={styles.progressBg}>
-            <div style={{...styles.progressBar, width: `${(stage / 10) * 100}%`}} />
+            <div style={{...styles.progressBar, width: `${progressPercent}%`}} />
           </div>
           <p style={{fontSize:'16px', color:'#64748b', textAlign:'center', marginTop: '10px'}}>{currentQ?.kor}</p>
           <h2 style={styles.questionText}>{currentQ?.sentence}</h2>
