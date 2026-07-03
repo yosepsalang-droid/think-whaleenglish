@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { CONFIG } from '../config';
 
 export default function Grammar({ onBack, student }: { onBack: () => void, student?: any }) {
+  // 💡 상태(LOBBY, GAME, TRANSITION, RESULT)
   const [gameState, setGameState] = useState('LOBBY');
   const [studentName, setStudentName] = useState(student?.name || '');
   
-  // 💡 stage(단계: 1~10), qCount(단계별 문제번호: 1~10)
   const [stage, setStage] = useState(1);
   const [qCount, setQCount] = useState(1);
   
@@ -50,7 +50,6 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
       });
   }, []);
 
-  // 💡 원장님이 알려주신 교재 리스트에 맞춰 1~10단계 세팅 완벽 적용!
   const getBooksForStage = (currentStage: number) => {
     switch (currentStage) {
       case 1: return ['240_1', '240_2', '240_3'];
@@ -67,20 +66,40 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
     }
   };
 
-  // 2️⃣ 동적 문제 생성 로직 
+  // 2️⃣ 동적 문제 생성 로직 (✅ 빈칸 무조건 나오도록 로직 완전 수정)
   const generateProblem = (pool: any[], currentStage: number) => {
     const targetBooks = getBooksForStage(currentStage);
     const stagePool = pool.filter(item => targetBooks.includes(item.book));
 
-    if (stagePool.length < 4) return null; // 해당 스테이지의 문제가 부족할 경우
+    if (stagePool.length < 4) return null; // 문제 부족
     
     const target = stagePool[Math.floor(Math.random() * stagePool.length)];
-    const words = target.eng.split(/\s+/).map((w:string) => w.replace(/[^a-zA-Z]/g, '')).filter((w:string) => w.length > 2);
-    const targetWord = words[Math.floor(Math.random() * words.length)] || target.eng.split(/\s+/)[0];
-    const sentence = target.eng.replace(new RegExp(`\\b${targetWord}\\b`, 'i'), '__________');
+    const tokens = target.eng.split(' '); // 공백 기준으로 정확히 분리
+
+    // 알파벳 3글자 이상 포함된 토큰만 후보로 선택
+    const candidateIndices = tokens
+      .map((t: string, i: number) => /[a-zA-Z]{3,}/.test(t) ? i : -1)
+      .filter((i: number) => i !== -1);
     
-    const wrong = Array.from(new Set(pool.flatMap(d => d.eng.split(/\s+/).map((w:string) => w.replace(/[^a-zA-Z]/g, ''))).filter(w => w.length > 2))).filter(w => w.toLowerCase() !== targetWord.toLowerCase()).sort(() => 0.5 - Math.random()).slice(0, 3);
-    const options = [targetWord.toLowerCase(), ...wrong].sort(() => 0.5 - Math.random());
+    const targetIndex = candidateIndices.length > 0 
+      ? candidateIndices[Math.floor(Math.random() * candidateIndices.length)] 
+      : 0;
+    
+    const originalToken = tokens[targetIndex];
+    const answerMatch = originalToken.match(/[a-zA-Z]+/); // 순수 영단어만 추출 (문장 부호 무시)
+    const targetWord = answerMatch ? answerMatch[0] : originalToken;
+    
+    // 타겟 단어가 포함된 토큰에서 '영단어 부분만' 빈칸으로 치환 (점, 쉼표 보존)
+    tokens[targetIndex] = originalToken.replace(/[a-zA-Z]+/, '__________');
+    const sentence = tokens.join(' '); // 문장 재조립
+    
+    // 오답 생성
+    const wrong = Array.from(new Set(pool.flatMap(d => d.eng.split(/\s+/).map((w:string) => w.replace(/[^a-zA-Z]/g, ''))).filter(w => w.length > 2)))
+      .filter(w => w.toLowerCase() !== targetWord.toLowerCase())
+      .sort(() => 0.5 - Math.random())
+      .slice(0, 3);
+      
+    const options = [targetWord.toLowerCase(), ...wrong.map(w => w.toLowerCase())].sort(() => 0.5 - Math.random());
     
     return { sentence, answer: targetWord.toLowerCase(), options, kor: target.kor };
   };
@@ -96,7 +115,7 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
     }
     
     setStage(1);
-    setQCount(1); // 1단계의 1번 문제부터 시작
+    setQCount(1); 
     setScore(0);
     setLives(3);
     setTimeLeft(10);
@@ -114,7 +133,7 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [gameState, stage, qCount, lives]); // qCount 추가
+  }, [gameState, stage, qCount, lives]); 
 
   const handleTimeOut = () => {
     setLives(prev => {
@@ -125,11 +144,12 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
     });
   };
 
-  // 5️⃣ 정답 처리 로직
+  // 5️⃣ 정답 처리 로직 (✅ 남은 초 비례, 최대 10점 적용)
   const handleAnswer = (selectedOption: string) => {
     let newScore = score;
     if (selectedOption === currentQ.answer) {
-      const earnedPoints = Math.max(1, Math.round((timeLeft / 10) * 10)) * 10;
+      // 맞췄을 때 점수: 1 ~ 10점 (남은 시간에 비례)
+      const earnedPoints = Math.max(1, timeLeft); 
       newScore = score + earnedPoints;
       setScore(newScore);
       
@@ -144,16 +164,14 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
     moveToNextStage(newScore);
   };
 
-  // 💡 단계별 10문제씩 출제되도록 변경된 로직
+  // 6️⃣ 다음 단계 이동 및 알림 화면 적용 (✅ TRANSITION 화면 추가)
   const moveToNextStage = (currentScore: number) => {
     if (qCount < 10) {
-      // 1. 같은 단계에서 다음 문제로 넘어갈 때 (1~9번 문제 풀고 난 후)
       const nextQuestion = generateProblem(allData, stage);
       setQCount(prev => prev + 1);
       setTimeLeft(10);
       setCurrentQ(nextQuestion);
     } else if (stage < 10) {
-      // 2. 10문제를 다 풀고 다음 단계로 넘어갈 때
       const nextStage = stage + 1;
       const nextQuestion = generateProblem(allData, nextStage);
       
@@ -164,16 +182,17 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
       }
 
       setStage(nextStage);
-      setQCount(1); // 문제 번호는 다시 1번으로 초기화
-      setTimeLeft(10);
+      setQCount(1);
       setCurrentQ(nextQuestion);
+      setTimeLeft(10);
+      // 게임 멈추고 전환 화면 띄우기
+      setGameState('TRANSITION');
     } else {
-      // 3. 10단계 10문제(총 100문제)를 모두 다 맞췄을 때
       endGame(currentScore);
     }
   };
 
-  // 6️⃣ 종료 및 점수 저장
+  // 7️⃣ 종료 및 점수 저장
   const endGame = (finalScore: number) => {
     setGameState('RESULT');
     fetch(CONFIG.WEB_APP_URL, {
@@ -183,13 +202,12 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
         studentName: studentName,
         grade: student?.grade || "미지정",
         score: finalScore,
-        stage: stage, // 구글 시트에는 도달한 '단계(stage)' 기준으로 저장됩니다.
+        stage: stage,
         taskType: "문법게임"
       })
     }).catch(err => console.error(err));
   };
 
-  // ====== 📊 내 랭킹 찾기 로직 ======
   const myRankIndex = rankings.thisMonth.findIndex(r => r.studentName === studentName);
   const myRankText = myRankIndex !== -1 ? `${myRankIndex + 1}위` : '-';
   const myCurrentScore = myRankIndex !== -1 ? rankings.thisMonth[myRankIndex].score : 0;
@@ -198,7 +216,7 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
   if (gameState === 'LOBBY') {
     return (
       <div style={styles.container}>
-        <button onClick={onBack} style={{position: 'absolute', top: '20px', left: '20px', padding: '10px 15px', borderRadius: '10px', background: '#e2e8f0', border: 'none', cursor: 'pointer'}}>⬅ 돌아가기</button>
+        <button onClick={onBack} style={styles.backBtn}>⬅ 돌아가기</button>
         <div style={styles.card}>
           <h1 style={styles.title}>⚡ 스피드 문법 퀴즈</h1>
           
@@ -213,9 +231,9 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
             />
             {studentName && (
               <div style={styles.myStats}>
-                <span>🏆 랭킹: <strong style={{color:'#d97706'}}>{myRankText}</strong></span>
+                <span style={{color:'#475569'}}>🏆 랭킹: <strong style={{color:'#d97706'}}>{myRankText}</strong></span>
                 <span style={{color: '#cbd5e1'}}>|</span>
-                <span>🔥 현재 점수: <strong style={{color:'#2563eb'}}>{myCurrentScore}점</strong></span>
+                <span style={{color:'#475569'}}>🔥 현재 점수: <strong style={{color:'#2563eb'}}>{myCurrentScore}점</strong></span>
               </div>
             )}
           </div>
@@ -223,11 +241,11 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
           <div style={styles.rankContainer}>
             <div style={styles.rankBox}>
               <h3 style={styles.rankTitle}>🏆 지난달 명예의 전당 (TOP 3)</h3>
-              {loadingRank ? <p>불러오는 중...</p> : (
+              {loadingRank ? <p style={{color: '#64748b'}}>불러오는 중...</p> : (
                 rankings.lastMonth.length === 0 ? <p style={styles.empty}>아직 기록이 없습니다.</p> :
                 rankings.lastMonth.slice(0,3).map((r: any, idx: number) => (
                   <div key={idx} style={styles.rankRow}>
-                    <span>{idx + 1}위. {r.studentName}</span>
+                    <span style={{color: '#475569'}}>{idx + 1}위. {r.studentName}</span>
                     <strong style={{color: '#d97706'}}>{r.score}점</strong>
                   </div>
                 ))
@@ -236,11 +254,11 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
 
             <div style={styles.rankBox}>
               <h3 style={styles.rankTitle}>🔥 이번달 실시간 랭킹 (TOP 5)</h3>
-              {loadingRank ? <p>불러오는 중...</p> : (
+              {loadingRank ? <p style={{color: '#64748b'}}>불러오는 중...</p> : (
                 rankings.thisMonth.length === 0 ? <p style={styles.empty}>아직 기록이 없습니다.</p> :
                 rankings.thisMonth.slice(0,5).map((r: any, idx: number) => (
                   <div key={idx} style={styles.rankRow}>
-                    <span>{idx + 1}위. {r.studentName}</span>
+                    <span style={{color: '#475569'}}>{idx + 1}위. {r.studentName}</span>
                     <strong style={{color: '#2563eb'}}>{r.score}점</strong>
                   </div>
                 ))
@@ -254,15 +272,37 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
     );
   }
 
+  // ✅ 새로운 알림 화면: 단계 넘어갈 때 대기
+  if (gameState === 'TRANSITION') {
+    return (
+      <div style={styles.container}>
+        <div style={styles.card}>
+          <h1 style={{fontSize: '32px', color: '#16a34a', marginBottom: '15px'}}>🎉 STAGE {stage - 1} 클리어!</h1>
+          <p style={{fontSize: '18px', color: '#475569', marginBottom: '25px', wordBreak: 'keep-all'}}>
+            대단해요! 이제 조금 더 어려운 <b>STAGE {stage}</b> 문제로 넘어갑니다.
+          </p>
+          <div style={styles.finalScoreBox}>
+            <span style={{fontSize: '16px', color: '#475569'}}>현재 누적 점수</span>
+            <strong style={{fontSize: '36px', color: '#2563eb', display: 'block'}}>{score}점</strong>
+          </div>
+          <button 
+            onClick={() => setGameState('GAME')} 
+            style={{...styles.startBtn, backgroundColor: '#16a34a'}}
+          >
+            다음 단계 시작하기 🚀
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (gameState === 'GAME') {
-    // 💡 총 100문제 기준 진행률 게이지 바 계산
     const progressPercent = ((((stage - 1) * 10) + qCount) / 100) * 100;
 
     return (
       <div style={styles.container}>
         <div style={styles.card}>
           <div style={styles.gameHeader}>
-            {/* 💡 STAGE 번호와 그 안에서의 문제 번호 동시 표시 */}
             <span style={styles.badge}>STAGE {stage} ({qCount}/10)</span>
             <span style={styles.timer}>⏳ {timeLeft}초</span>
             <span style={styles.scoreText}>점수: {score}</span>
@@ -283,6 +323,7 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
     );
   }
 
+  // ✅ 결과 화면 수정: 리로드 하지 않고 로비로 이동
   return (
     <div style={styles.container}>
       <div style={styles.card}>
@@ -293,25 +334,37 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
           <strong style={{fontSize: '40px', color: '#2563eb', display: 'block'}}>{score}점</strong>
           <span style={{fontSize: '14px', color: '#64748b', marginTop: '5px'}}>최고 도달: STAGE {stage}</span>
         </div>
-        <button onClick={() => window.location.reload()} style={styles.startBtn}>처음으로 돌아가기</button>
+        <button 
+          onClick={() => {
+            setGameState('LOBBY'); // 로그아웃 방지, 로비로 돌아감
+            setStage(1);
+            setQCount(1);
+            setScore(0);
+          }} 
+          style={styles.startBtn}
+        >
+          처음으로 돌아가기
+        </button>
       </div>
     </div>
   );
 }
 
+// ✅ 다크 모드 무시를 위한 색상 하드코딩 강화
 const styles: { [key: string]: React.CSSProperties } = {
-  container: { minHeight: '100vh', backgroundColor: '#f1f5f9', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', fontFamily: 'Pretendard, sans-serif' },
-  card: { backgroundColor: 'white', padding: '30px', borderRadius: '20px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)', width: '100%', maxWidth: '600px', textAlign: 'center' },
+  container: { minHeight: '100vh', backgroundColor: '#f1f5f9', color: '#0f172a', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', fontFamily: 'Pretendard, sans-serif' },
+  card: { backgroundColor: '#ffffff', color: '#0f172a', padding: '30px', borderRadius: '20px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)', width: '100%', maxWidth: '600px', textAlign: 'center' },
+  backBtn: { position: 'absolute', top: '20px', left: '20px', padding: '10px 15px', borderRadius: '10px', background: '#e2e8f0', color: '#0f172a', border: 'none', cursor: 'pointer', fontWeight: 'bold' },
   title: { fontSize: '28px', fontWeight: 'bold', color: '#1e293b', marginBottom: '25px' },
   myInfoBox: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 20px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '25px' },
-  nameInput: { fontSize: '18px', fontWeight: 'bold', color: '#0f172a', background: 'transparent', border: 'none', outline: 'none', width: '100px' },
-  myStats: { display: 'flex', gap: '12px', fontSize: '15px', color: '#475569' },
+  nameInput: { fontSize: '18px', fontWeight: 'bold', color: '#0f172a', backgroundColor: 'transparent', border: 'none', outline: 'none', width: '100px' },
+  myStats: { display: 'flex', gap: '12px', fontSize: '15px' },
   rankContainer: { display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '30px' },
   rankBox: { backgroundColor: '#ffffff', padding: '15px 20px', borderRadius: '12px', border: '1px solid #e2e8f0', textAlign: 'left', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' },
   rankTitle: { fontSize: '16px', fontWeight: 'bold', color: '#334155', marginBottom: '10px', borderBottom: '1px solid #e2e8f0', paddingBottom: '8px' },
-  rankRow: { display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: '15px', color: '#475569' },
+  rankRow: { display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: '15px' },
   empty: { color: '#94a3b8', fontSize: '14px', textAlign: 'center', margin: '10px 0' },
-  startBtn: { width: '100%', padding: '18px', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '12px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', transition: 'background 0.2s' },
+  startBtn: { width: '100%', padding: '18px', backgroundColor: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '12px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', transition: 'background 0.2s' },
   gameHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', fontSize: '16px', fontWeight: 'bold' },
   badge: { backgroundColor: '#e0f2fe', color: '#0369a1', padding: '5px 12px', borderRadius: '20px', fontSize: '14px' },
   timer: { color: '#ef4444', fontWeight: '800' },
