@@ -1,234 +1,326 @@
 import React, { useState, useEffect } from 'react';
-import { CONFIG } from '../config';
-import Ranking from './Ranking';
 
-const GAME_LEVEL = 1; 
+// 💡 [중요] 원장님의 구글 앱스스크립트 웹앱 주소(URL)를 따옴표 안에 넣어주세요!
+const SCRIPT_URL = "원장님의_앱스스크립트_WEB_APP_URL_여기에_붙여넣기";
 
-const style: { [key: string]: React.CSSProperties } = {
-  container: { padding: '20px', maxWidth: '600px', margin: '0 auto', fontFamily: 'Pretendard, sans-serif' },
-  card: { background: '#ffffff', borderRadius: '25px', padding: '30px', boxShadow: '0 10px 30px rgba(0,0,0,0.1)', marginBottom: '20px', border: '1px solid #f0f0f0' },
-  title: { fontSize: '24px', fontWeight: '800', color: '#1e293b', textAlign: 'center', marginBottom: '20px' },
-  button: { background: '#3b82f6', color: '#fff', border: 'none', padding: '18px', borderRadius: '20px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', width: '100%', marginBottom: '10px' },
-  // 👇 보기 버튼: 크기 고정(height 80px) & 글자 길이에 따른 자동 폰트 크기 조절(clamp)
-  choiceBtn: { 
-    background: '#f1f5f9', 
-    border: '2px solid #e2e8f0', 
-    padding: '10px 15px', 
-    borderRadius: '15px', 
-    fontSize: 'clamp(14px, 3.5vw, 18px)', 
-    cursor: 'pointer', 
-    fontWeight: '600', 
-    color: '#334155', 
-    width: '100%', 
-    height: '80px', 
-    display: 'flex', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    textAlign: 'center', 
-    wordBreak: 'break-word', 
-    transition: '0.2s' 
-  },
-  header: { display: 'flex', justifyContent: 'space-between', marginBottom: '15px', color: '#64748b', fontSize: '16px', fontWeight: '600' },
-  timerBar: { height: '8px', background: '#e2e8f0', borderRadius: '4px', overflow: 'hidden', marginBottom: '20px' }
-};
+// 📚 스테이지별 문법 문제 데이터 (예시: 빈칸 '____'을 명확히 넣어 문장이 다 보이지 않게 처리!)
+const QUESTION_POOL = [
+  { stage: 1, sentence: "It ____ red.", answer: "is", options: ["is", "are", "am", "be"], explanation: "It은 3인칭 단수이므로 is를 씁니다." },
+  { stage: 1, sentence: "They ____ my friends.", answer: "are", options: ["is", "are", "am", "was"], explanation: "They는 복수이므로 are를 씁니다." },
+  { stage: 2, sentence: "I ____ a student.", answer: "am", options: ["is", "are", "am", "were"], explanation: "I와 짝꿍인 be동사는 am입니다." },
+  { stage: 2, sentence: "She ____ apples every day.", answer: "eats", options: ["eat", "eats", "eating", "eaten"], explanation: "3인칭 단수 현재 시제는 동사에 -s를 붙입니다." },
+  { stage: 3, sentence: "We ____ TV yesterday.", answer: "watched", options: ["watch", "watches", "watched", "watching"], explanation: "yesterday(어제)가 있으므로 과거형을 씁니다." },
+  // 💡 원장님께서 여기에 문제들을 계속 추가해 주시면 됩니다! ( stage 1 ~ 10 )
+];
 
-export default function Grammar({ onBack, student }: { onBack: () => void, student?: any }) {
-  const [activePool, setActivePool] = useState<any[]>([]);
-  const [rankingData, setRankingData] = useState<{thisMonth: any[], lastMonth: any[]}>({ thisMonth: [], lastMonth: [] });
-  const [isRankingLoading, setIsRankingLoading] = useState(true);
+export default function App() {
+  // 화면 상태: 'LOBBY' (시작/랭킹화면), 'GAME' (게임중), 'RESULT' (종료)
+  const [gameState, setGameState] = useState('LOBBY');
   
-  const [stage, setStage] = useState(0); 
+  // 사용자 정보
+  const [studentName, setStudentName] = useState('');
+  const [grade, setGrade] = useState('초5');
+  
+  // 게임 진행 상태
+  const [stage, setStage] = useState(1);
+  const [questionIdx, setQuestionIdx] = useState(0);
   const [score, setScore] = useState(0);
-  const [lives, setLives] = useState(3); 
-  const [timeLeft, setTimeLeft] = useState(10); // ⏳ 10초 카운트다운 타이머
-  const [currentProblem, setCurrentProblem] = useState<any>(null);
-  const [choices, setChoices] = useState<string[]>([]);
-  const [isFinished, setIsFinished] = useState(false);
+  const [lives, setLives] = useState(3);
+  const [timeLeft, setTimeLeft] = useState(10); // 문제당 10초
+  const [currentQuestions, setCurrentQuestions] = useState([]);
+  
+  // 랭킹 데이터
+  const [rankings, setRankings] = useState({ thisMonth: [], lastMonth: [] });
+  const [loadingRank, setLoadingRank] = useState(false);
 
-  // 1. 데이터 로드 및 랭킹 초기화
+  // 1️⃣ 랭킹 불러오기
+  const fetchRankings = () => {
+    if (!SCRIPT_URL || SCRIPT_URL.includes("여기에")) return;
+    setLoadingRank(true);
+    fetch(SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({ type: "getRanking", taskType: "문법게임" })
+    })
+    .then(res => res.json())
+    .then(data => {
+      setRankings(data);
+      setLoadingRank(false);
+    })
+    .catch(err => {
+      console.error("랭킹 로드 실패:", err);
+      setLoadingRank(false);
+    });
+  };
+
   useEffect(() => {
-    fetch(CONFIG.WEB_APP_URL, { method: "POST", body: JSON.stringify({ type: "getRanking", taskType: "문법게임" }) })
-      .then(res => res.json())
-      .then(data => { setRankingData({ thisMonth: data.thisMonth || [], lastMonth: data.lastMonth || [] }); setIsRankingLoading(false); })
-      .catch(err => console.error("랭킹 로드 실패:", err));
-
-    fetch(CONFIG.SHEETS.ELEM_GRAMMAR)
-      .then(res => res.text())
-      .then(text => {
-        const rows = text.split(/\r?\n/).slice(1);
-        const allParsed = rows.map(r => { 
-            const c = r.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); 
-            return { book: c[0]?.trim(), eng: c[4]?.replace(/^"|"$/g, '').trim(), kor: c[5]?.replace(/^"|"$/g, '').trim() }; 
-        }).filter(i => i.eng && i.kor);
-
-        let targetBooks = GAME_LEVEL === 1 ? ['240_1', '240_2', '240_3'] : ['520_1'];
-        setActivePool(allParsed.filter(i => targetBooks.includes(i.book)));
-      });
+    fetchRankings();
   }, []);
 
-  // 2. 점수 자동 저장 (Sheet 5 기록 - grade, stage 파라미터 완벽 보완!)
-  useEffect(() => {
-    if (isFinished && score > 0) {
-      console.log("📊 [점수 저장 시도] 시트5 전송 중...", { studentName: student?.name || "학생", score, stage });
-      
-      fetch(CONFIG.WEB_APP_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ 
-          type: "saveLog", 
-          studentName: student?.name || "학생", 
-          grade: student?.grade || "초등", // Apps Script 파라미터 대응
-          score: score, 
-          stage: stage,                    // Apps Script 파라미터 대응
-          taskType: "문법게임" 
-        }),
-      })
-      .then(res => res.json())
-      .then(res => console.log("✅ [점수 저장 성공] 구글 시트 응답:", res))
-      .catch(err => console.error("❌ [점수 저장 실패]:", err));
-    }
-  }, [isFinished, score, student, stage]);
-
-  // 3. ⏳ 10초 제한시간 카운트다운 타이머 로직
-  useEffect(() => {
-    if (stage > 0 && !isFinished) {
-      const timer = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            handleTimeout(); // 10초 초과 시 오답 처리
-            return 10;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-      return () => clearInterval(timer);
-    }
-  }, [stage, isFinished, lives, currentProblem]);
-
-  const handleTimeout = () => {
-    const nextLives = lives - 1;
-    setLives(nextLives);
-    if (nextLives <= 0) {
-      setIsFinished(true);
-    } else {
-      alert(`⏰ 시간 초과! 목숨이 ${nextLives}개 남았습니다.`);
-      generateProblem(stage);
-      setTimeLeft(10);
-    }
-  };
-
+  // 2️⃣ 게임 시작 (스테이지 1부터 세팅)
   const startGame = () => {
-    if (activePool.length === 0) { alert("문제를 불러오는 중입니다. 잠시만 기다려주세요."); return; }
-    setScore(0); setLives(3); setStage(0); setIsFinished(false); setTimeLeft(10);
-    generateProblem(0);
+    if (!studentName.trim()) {
+      alert("이름을 입력해주세요!");
+      return;
+    }
+    setStage(1);
+    setQuestionIdx(0);
+    setScore(0);
+    setLives(3);
+    setTimeLeft(10);
+    loadStageQuestions(1);
+    setGameState('GAME');
   };
 
-  const generateProblem = (currentStage: number) => {
-    if (currentStage >= 10) { setIsFinished(true); return; }
-    
-    const target = activePool[Math.floor(Math.random() * activePool.length)];
-    
-    // 👇 [빈칸 버그 수정] 마침표, 쉼표 등 구두점을 제거한 순수 단어만 추출하여 블랭크 생성 실패 방지!
-    const cleanWords = target.eng.split(/\s+/).map((w: string) => w.replace(/[^a-zA-Z]/g, '')).filter((w: string) => w.length > 2);
-    const targetWord = (cleanWords[Math.floor(Math.random() * cleanWords.length)] || "the").toLowerCase();
-    
-    // 대소문자 구분 없이 해당 단어만 빈칸 변환 (구두점은 그대로 유지)
-    const sentenceWithBlank = target.eng.replace(new RegExp(`(${targetWord})`, 'i'), '__________');
-    
-    const wrong = activePool.flatMap((d: any) => d.eng.split(/\s+/))
-      .map((w: string) => w.replace(/[^a-zA-Z]/g, '').toLowerCase())
-      .filter((w: string) => w.length > 2 && w !== targetWord)
-      .sort(() => 0.5 - Math.random())
-      .slice(0, 3);
-    
-    setCurrentProblem({ ...target, sentenceWithBlank, targetWord });
-    setChoices([targetWord, ...wrong].sort(() => 0.5 - Math.random()));
-    setStage(currentStage + 1);
-    setTimeLeft(10); // 문제 시작 시 10초 리셋
+  // 스테이지에 맞는 문제 불러오기 (문제가 부족하면 전체 문제에서 랜덤 10개 추출)
+  const loadStageQuestions = (targetStage) => {
+    let filtered = QUESTION_POOL.filter(q => q.stage === targetStage);
+    if (filtered.length < 10) {
+      // 등록된 문제가 10개보다 적으면 기존 pool에서 돌려쓰기 (오류 방지)
+      filtered = [...QUESTION_POOL].sort(() => Math.random() - 0.5).slice(0, 10);
+    }
+    setCurrentQuestions(filtered);
   };
 
-  const handleAnswer = (selected: string) => {
-    if (selected.toLowerCase() === currentProblem.targetWord.toLowerCase()) {
-      setScore(s => s + 100);
-      generateProblem(stage);
+  // 3️⃣ 타이머 로직 (1초마다 감소, 0초 되면 시간초과 처리)
+  useEffect(() => {
+    if (gameState !== 'GAME') return;
+    
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          handleTimeOut();
+          return 10;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [gameState, questionIdx, stage, lives]);
+
+  // 시간 초과 시 오답 처리
+  const handleTimeOut = () => {
+    setLives((prevLives) => {
+      const nextLives = prevLives - 1;
+      if (nextLives <= 0) {
+        endGame(score);
+      } else {
+        moveToNextQuestion();
+      }
+      return nextLives;
+    });
+  };
+
+  // 4️⃣ [핵심] 정답 제출 및 10점 만점 시간비례 점수 계산!
+  const handleAnswer = (selectedOption) => {
+    const currentQ = currentQuestions[questionIdx];
+    let newScore = score;
+
+    if (selectedOption === currentQ.answer) {
+      // 💡 [새 점수 시스템] 남은 시간(timeLeft)에 비례하여 최대 10점 ~ 최소 1점 부여!
+      // 예: 10초 남김 -> 10점 / 5초 남김 -> 5점 / 1초 남김 -> 1점
+      const earnedPoints = Math.max(1, Math.round((timeLeft / 10) * 10));
+      newScore = score + earnedPoints;
+      setScore(newScore);
     } else {
+      // 오답 시 하트 감소
       const nextLives = lives - 1;
       setLives(nextLives);
-      if (nextLives <= 0) setIsFinished(true);
-      else {
-        alert(`틀렸어요! 목숨이 ${nextLives}개 남았습니다.`);
+      if (nextLives <= 0) {
+        endGame(newScore);
+        return;
+      }
+    }
+
+    moveToNextQuestion(newScore);
+  };
+
+  // 5️⃣ [핵심] 1~10단계 자동 넘어가는 로직
+  const moveToNextQuestion = (currentScore = score) => {
+    if (questionIdx < currentQuestions.length - 1) {
+      // 현재 스테이지에 풀 문제가 남았으면 다음 문제로!
+      setQuestionIdx(prev => prev + 1);
+      setTimeLeft(10);
+    } else {
+      // 10문제를 다 풀어서 현재 스테이지가 끝났을 때!
+      if (stage < 10) {
+        // 💡 10단계 미만이면 스테이지 1 올라가고 문제는 다시 1번(0번 인덱스)부터 시작!
+        const nextStage = stage + 1;
+        setStage(nextStage);
+        setQuestionIdx(0);
         setTimeLeft(10);
+        loadStageQuestions(nextStage);
+      } else {
+        // 💡 10단계까지 모두 완수했을 때 게임 종료!
+        endGame(currentScore);
       }
     }
   };
 
-  // 4. 👑 내 이번 달 실시간 등수 & 점수 계산
-  const getMyRankInfo = () => {
-    const myName = student?.name;
-    if (!myName) return null;
-    const index = rankingData.thisMonth.findIndex((r: any) => r.studentName === myName);
-    return index !== -1 ? `${index + 1}위 (${rankingData.thisMonth[index].score}점)` : "기록 없음 (도전해보세요!)";
+  // 6️⃣ 게임 종료 및 구글 시트에 점수 저장
+  const endGame = (finalScore) => {
+    setGameState('RESULT');
+    if (!SCRIPT_URL || SCRIPT_URL.includes("여기에")) return;
+    
+    fetch(SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: "saveLog",
+        studentName: studentName,
+        grade: grade,
+        score: finalScore,
+        stage: stage,
+        taskType: "문법게임"
+      })
+    })
+    .then(res => res.json())
+    .then(() => {
+      fetchRankings(); // 점수 저장 후 랭킹 새로고침
+    })
+    .catch(err => console.error("점수 저장 실패:", err));
   };
 
-  return (
-    <div style={style.container}>
-      <button onClick={onBack} style={{marginBottom:'20px', padding:'10px', borderRadius:'10px', border:'none', cursor:'pointer', fontWeight:'bold'}}>⬅ 돌아가기</button>
-      
-      {stage === 0 ? (
-        <div style={style.card}>
-          <h2 style={style.title}>⚡ 스피드 문법 퀴즈</h2>
+  // ================= 🎨 화면 렌더링 =================
+
+  // 1. 로비 (시작 & 랭킹) 화면
+  if (gameState === 'LOBBY') {
+    return (
+      <div style={styles.container}>
+        <div style={styles.card}>
+          <h1 style={styles.title}>⚡ 스피드 문법 퀴즈</h1>
           
-          {/* 👇 학생 로그인 시 내 실시간 등수 노출 */}
-          {student?.name && (
-            <div style={{ background: '#eff6ff', padding: '15px', borderRadius: '15px', marginBottom: '20px', border: '1px solid #bfdbfe', textAlign: 'center' }}>
-              <p style={{ margin: 0, fontSize: '16px', color: '#1e3a8a' }}>
-                👤 <strong>{student.name}</strong> 학생의 7월 실시간 랭킹: <strong style={{ color: '#2563eb', fontSize:'18px' }}>{getMyRankInfo()}</strong>
-              </p>
+          {/* 이름 & 학년 입력 */}
+          <div style={styles.inputSection}>
+            <input
+              type="text"
+              placeholder="학생 이름 입력 (예: 김철수)"
+              value={studentName}
+              onChange={(e) => setStudentName(e.target.value)}
+              style={styles.input}
+            />
+            <select value={grade} onChange={(e) => setGrade(e.target.value)} style={styles.select}>
+              {['초1','초2','초3','초4','초5','초6','중1','중2','중3'].map(g => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
+          </div>
+          
+          <button onClick={startGame} style={styles.startBtn}>게임 시작하기</button>
+
+          {/* 랭킹 출력 */}
+          <div style={styles.rankContainer}>
+            <div style={styles.rankBox}>
+              <h3 style={styles.rankTitle}>🏆 6월 명예의 전당 (TOP 3)</h3>
+              {loadingRank ? <p>랭킹 불러오는 중...</p> : (
+                rankings.lastMonth.length === 0 ? <p style={styles.empty}>아직 기록이 없습니다.</p> :
+                rankings.lastMonth.map((r, idx) => (
+                  <div key={idx} style={styles.rankRow}>
+                    <span>{idx + 1}위. {r.studentName}</span>
+                    <strong style={{color: '#d97706'}}>{r.score}점</strong>
+                  </div>
+                ))
+              )}
             </div>
-          )}
 
-          <Ranking title="6월 명예의 전당 (1-3등)" data={rankingData.lastMonth.slice(0, 3)} isLoading={isRankingLoading} />
-          <Ranking title="7월 실시간 랭킹" data={rankingData.thisMonth} isLoading={isRankingLoading} />
-          <button style={style.button} onClick={startGame}>게임 시작하기</button>
+            <div style={styles.rankBox}>
+              <h3 style={styles.rankTitle}>🔥 7월 실시간 랭킹 (TOP 5)</h3>
+              {loadingRank ? <p>랭킹 불러오는 중...</p> : (
+                rankings.thisMonth.length === 0 ? <p style={styles.empty}>아직 기록이 없습니다.</p> :
+                rankings.thisMonth.map((r, idx) => (
+                  <div key={idx} style={styles.rankRow}>
+                    <span>{idx + 1}위. {r.studentName}</span>
+                    <strong style={{color: '#2563eb'}}>{r.score}점</strong>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
-      ) : isFinished ? (
-        <div style={style.card}>
-          <h2 style={style.title}>🎉 게임 종료!</h2>
-          <p style={{textAlign:'center', fontSize:'32px', fontWeight:'800', color:'#3b82f6', margin:'20px 0'}}>최종 점수: {score}점</p>
-          {student?.name && (
-            <p style={{textAlign:'center', fontSize:'18px', color:'#64748b', marginBottom:'25px'}}>
-              현재 7월 실시간 순위: <strong style={{color:'#1e293b'}}>{getMyRankInfo()}</strong>
-            </p>
-          )}
-          <button style={style.button} onClick={startGame}>다시 시작하기</button>
-        </div>
-      ) : (
-        <div style={style.card}>
-          <div style={style.header}>
-            <span>문제 {stage} / 10</span>
-            <span style={{color: '#3b82f6'}}>⏳ 10초 중 <strong>{timeLeft}초</strong> 남음</span>
-            <span>점수: {score}</span>
-            <span style={{color: '#ef4444'}}>❤️ {lives}</span>
+      </div>
+    );
+  }
+
+  // 2. 게임 진행 화면
+  if (gameState === 'GAME') {
+    const currentQ = currentQuestions[questionIdx] || QUESTION_POOL[0];
+    return (
+      <div style={styles.container}>
+        <div style={styles.card}>
+          {/* 상단 정보 (스테이지, 타이머, 점수, 하트) */}
+          <div style={styles.gameHeader}>
+            <span style={styles.badge}>STAGE {stage}</span>
+            <span style={styles.timer}>⏳ {timeLeft}초</span>
+            <span style={styles.scoreText}>점수: {score}</span>
+            <span style={styles.lives}>{"❤️".repeat(lives)}</span>
           </div>
 
-          {/* ⏳ 시각적 타이머 바 (남은 시간에 따라 줄어듦) */}
-          <div style={style.timerBar}>
-            <div style={{ width: `${(timeLeft / 10) * 100}%`, height: '100%', background: timeLeft <= 3 ? '#ef4444' : '#3b82f6', transition: 'width 1s linear' }} />
+          {/* 진행바 */}
+          <div style={styles.progressBg}>
+            <div style={{...styles.progressBar, width: `${((questionIdx + 1) / currentQuestions.length) * 100}%`}} />
           </div>
+          <p style={styles.qNum}>문제 {questionIdx + 1} / {currentQuestions.length}</p>
 
-          <p style={{fontSize:'18px', color:'#64748b', textAlign:'center', marginBottom:'10px', minHeight:'27px'}}>{currentProblem?.kor}</p>
-          <h2 style={{fontSize:'22px', textAlign:'center', margin:'20px 0', lineHeight:'1.6', wordBreak:'break-word'}}>{currentProblem?.sentenceWithBlank}</h2>
-          
-          {/* 👇 보기 4개 Grid: 2x2 비율로 크기 균일하게 고정 & CSS style의 clamp로 글자크기 자동 조절 */}
-          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px'}}>
-            {choices.map((c: string, i: number) => (
-              <button key={i} style={style.choiceBtn} onClick={() => handleAnswer(c)}>
-                {c}
+          {/* 💡 빈칸이 확실히 뚫린 문법 문제 출력 */}
+          <h2 style={styles.questionText}>{currentQ.sentence}</h2>
+
+          {/* 4지선다 보기 버튼들 */}
+          <div style={styles.grid}>
+            {currentQ.options.map((opt, idx) => (
+              <button key={idx} onClick={() => handleAnswer(opt)} style={styles.optionBtn}>
+                {opt}
               </button>
             ))}
           </div>
         </div>
-      )}
+      </div>
+    );
+  }
+
+  // 3. 게임 종료 화면
+  return (
+    <div style={styles.container}>
+      <div style={styles.card}>
+        <h1 style={{fontSize: '28px', color: '#1e293b', marginBottom: '10px'}}>🎉 게임 종료!</h1>
+        <p style={{fontSize: '18px', color: '#64748b', marginBottom: '20px'}}>{studentName} ({grade}) 학생의 최종 성적</p>
+        
+        <div style={styles.finalScoreBox}>
+          <span style={{fontSize: '16px', color: '#475569'}}>최종 점수</span>
+          <strong style={{fontSize: '40px', color: '#2563eb', display: 'block'}}>{score}점</strong>
+          <span style={{fontSize: '14px', color: '#64748b', marginTop: '5px'}}>최고 도달: STAGE {stage}</span>
+        </div>
+
+        <button onClick={() => setGameState('LOBBY')} style={styles.startBtn}>
+          처음으로 돌아가기 (랭킹 확인)
+        </button>
+      </div>
     </div>
   );
 }
+
+// 🎨 디자인 꾸미기 (CSS 스타일)
+const styles = {
+  container: { minHeight: '100vh', backgroundColor: '#f1f5f9', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', fontFamily: 'sans-serif' },
+  card: { backgroundColor: 'white', padding: '30px', borderRadius: '20px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)', width: '100%', maxWidth: '500px', textAlign: 'center' },
+  title: { fontSize: '28px', fontWeight: 'bold', color: '#1e293b', marginBottom: '25px' },
+  inputSection: { display: 'flex', gap: '10px', marginBottom: '20px' },
+  input: { flex: 1, padding: '12px 15px', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '16px', outline: 'none' },
+  select: { padding: '12px', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '16px', backgroundColor: 'white' },
+  startBtn: { width: '100%', padding: '15px', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '12px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', transition: '0.2s', boxShadow: '0 4px 12px rgba(37,99,235,0.2)' },
+  rankContainer: { marginTop: '30px', display: 'flex', flexDirection: 'column', gap: '15px' },
+  rankBox: { backgroundColor: '#f8fafc', padding: '15px 20px', borderRadius: '12px', border: '1px solid #e2e8f0', textAlign: 'left' },
+  rankTitle: { fontSize: '16px', fontWeight: 'bold', color: '#334155', marginBottom: '10px', borderBottom: '1px solid #e2e8f0', paddingBottom: '8px' },
+  rankRow: { display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: '15px', color: '#475569' },
+  empty: { color: '#94a3b8', fontSize: '14px', textAlign: 'center', margin: '10px 0' },
+  gameHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', fontSize: '16px', fontWeight: 'bold' },
+  badge: { backgroundColor: '#e0f2fe', color: '#0369a1', padding: '5px 12px', borderRadius: '20px', fontSize: '14px' },
+  timer: { color: '#ef4444' },
+  scoreText: { color: '#475569' },
+  lives: { fontSize: '18px' },
+  progressBg: { width: '100%', height: '8px', backgroundColor: '#e2e8f0', borderRadius: '4px', overflow: 'hidden', marginBottom: '8px' },
+  progressBar: { height: '100%', backgroundColor: '#2563eb', transition: 'width 0.3s' },
+  qNum: { fontSize: '13px', color: '#94a3b8', textAlign: 'right', marginBottom: '20px' },
+  questionText: { fontSize: '24px', fontWeight: 'bold', color: '#0f172a', margin: '30px 0 40px 0', wordBreak: 'keep-all' },
+  grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' },
+  optionBtn: { padding: '18px', backgroundColor: '#f8fafc', border: '2px solid #e2e8f0', borderRadius: '12px', fontSize: '18px', fontWeight: '600', color: '#334155', cursor: 'pointer', transition: 'all 0.2s' },
+  finalScoreBox: { backgroundColor: '#f8fafc', padding: '25px', borderRadius: '16px', border: '1px solid #e2e8f0', margin: '20px 0 30px 0' }
+};
