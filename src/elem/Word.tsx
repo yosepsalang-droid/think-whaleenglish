@@ -348,39 +348,33 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
 
   // 💡 구글 앱스 스크립트 웹앱으로 미션 완료 로그를 전송하는 함수
 
+  // 💡 구글 앱스 스크립트 웹앱으로 미션 완료 로그를 전송하는 함수
   const sendLogToGoogleSheet = async (finalScore: number) => {
-
     try {
-
-      // 💡 [변경] 내부에 적혀있던 웹앱 URL 변수를 지우고, CONFIG.WEB_APP_URL을 직접 호출합니다.
-
       await fetch(CONFIG.WEB_APP_URL, {
-
         method: "POST",
-
         headers: {
-
           "Content-Type": "text/plain;charset=utf-8",
-
         },
-
         body: JSON.stringify({
-
           type: "saveLog",
-
-          studentId: studentId,
-
-          studentName: studentName,
-
-          taskType: "단어게임",
-
-          status: "완료",
-
-          score: String(finalScore)
-
+          // 💡 [추가] config.ts에 정의된 ELEM_MANAGE 시트(또는 탭 이름)로 저장해 달라고 백엔드에 요청!
+          sheetName: CONFIG.SHEETS?.ELEM_MANAGE || "ELEM_MANAGE", 
+          targetSheet: "ELEM_MANAGE", // (앱스스크립트 변수명 호환을 위해 함께 첨부)
+          
+          // 💡 이미지(image_dde8bf.png)의 B~F열 순서와 일치하는 데이터
+          studentId: studentId,       // B열: StudentID
+          studentName: studentName,   // C열: StudentName
+          taskType: "단어게임",       // D열: TaskType
+          status: "완료",             // E열: Status
+          score: String(finalScore)   // F열: Score
         }),
-
       });
+      console.log("ELEM_MANAGE 시트에 로그 적재 성공");
+    } catch (err) {
+      console.error("구글 시트 로그 전송 실패:", err);
+    }
+  };
 
       console.log("구글 시트에 로그 적재 성공");
 
