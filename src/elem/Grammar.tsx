@@ -4,13 +4,14 @@ import { CONFIG } from '../config';
 // 🚨 레벨 설정 (1: 240_1~3권, 2: 240_4~6권, 3: 520_1~3권)
 const GAME_LEVEL = 1;
 
-export default function Grammar({ onBack }: { onBack: () => void }) {
+// 💡 여기에 student?: any 를 추가하여 App.tsx에서 넘겨주는 에러를 해결했습니다!
+export default function Grammar({ onBack, student }: { onBack: () => void, student?: any }) {
   // 화면 상태: 'LOBBY' (시작/랭킹화면), 'GAME' (게임중), 'RESULT' (종료)
   const [gameState, setGameState] = useState('LOBBY');
   
-  // 사용자 정보
-  const [studentName, setStudentName] = useState('');
-  const [grade, setGrade] = useState('초5');
+  // 사용자 정보 (App.tsx에서 넘겨준 student가 있으면 그 이름을 기본값으로 씁니다)
+  const [studentName, setStudentName] = useState(student?.name || '');
+  const [grade, setGrade] = useState(student?.grade || '초5');
   
   // 게임 진행 상태
   const [stage, setStage] = useState(1);
@@ -129,7 +130,7 @@ export default function Grammar({ onBack }: { onBack: () => void }) {
     let newScore = score;
 
     if (selectedOption === currentQ.answer) {
-      // 💡 남은 시간 비례 점수 (최대 100점 ~ 최소 10점 단위로 스케일업!)
+      // 💡 남은 시간 비례 점수
       const earnedPoints = Math.max(1, Math.round((timeLeft / 10) * 10)) * 10;
       newScore = score + earnedPoints;
       setScore(newScore);
