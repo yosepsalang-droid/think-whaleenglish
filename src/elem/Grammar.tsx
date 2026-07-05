@@ -19,11 +19,12 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
   const [rankings, setRankings] = useState<{thisMonth: any[], lastMonth: any[]}>({ thisMonth: [], lastMonth: [] });
   const [loadingRank, setLoadingRank] = useState(false);
 
-  // 1️⃣ 랭킹 및 시트 데이터 불러오기
+  // 1️⃣ 랭킹 및 시트 데이터 불러오기 (✅ CORS 방지 헤더 추가)
   useEffect(() => {
     setLoadingRank(true);
     fetch(CONFIG.WEB_APP_URL, {
       method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ type: "getRanking", taskType: "문법게임" })
     })
     .then(res => res.json())
@@ -66,17 +67,16 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
     }
   };
 
-  // 2️⃣ 동적 문제 생성 로직 (✅ 빈칸 무조건 나오도록 로직 완전 수정)
+  // 2️⃣ 동적 문제 생성 로직
   const generateProblem = (pool: any[], currentStage: number) => {
     const targetBooks = getBooksForStage(currentStage);
     const stagePool = pool.filter(item => targetBooks.includes(item.book));
 
-    if (stagePool.length < 4) return null; // 문제 부족
+    if (stagePool.length < 4) return null; 
     
     const target = stagePool[Math.floor(Math.random() * stagePool.length)];
-    const tokens = target.eng.split(' '); // 공백 기준으로 정확히 분리
+    const tokens = target.eng.split(' '); 
 
-    // 알파벳 3글자 이상 포함된 토큰만 후보로 선택
     const candidateIndices = tokens
       .map((t: string, i: number) => /[a-zA-Z]{3,}/.test(t) ? i : -1)
       .filter((i: number) => i !== -1);
@@ -86,14 +86,12 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
       : 0;
     
     const originalToken = tokens[targetIndex];
-    const answerMatch = originalToken.match(/[a-zA-Z]+/); // 순수 영단어만 추출 (문장 부호 무시)
+    const answerMatch = originalToken.match(/[a-zA-Z]+/); 
     const targetWord = answerMatch ? answerMatch[0] : originalToken;
     
-    // 타겟 단어가 포함된 토큰에서 '영단어 부분만' 빈칸으로 치환 (점, 쉼표 보존)
     tokens[targetIndex] = originalToken.replace(/[a-zA-Z]+/, '__________');
-    const sentence = tokens.join(' '); // 문장 재조립
+    const sentence = tokens.join(' '); 
     
-    // 오답 생성
     const wrong = Array.from(new Set(pool.flatMap(d => d.eng.split(/\s+/).map((w:string) => w.replace(/[^a-zA-Z]/g, ''))).filter(w => w.length > 2)))
       .filter(w => w.toLowerCase() !== targetWord.toLowerCase())
       .sort(() => 0.5 - Math.random())
@@ -144,11 +142,10 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
     });
   };
 
-  // 5️⃣ 정답 처리 로직 (✅ 남은 초 비례, 최대 10점 적용)
+  // 5️⃣ 정답 처리 로직
   const handleAnswer = (selectedOption: string) => {
     let newScore = score;
     if (selectedOption === currentQ.answer) {
-      // 맞췄을 때 점수: 1 ~ 10점 (남은 시간에 비례)
       const earnedPoints = Math.max(1, timeLeft); 
       newScore = score + earnedPoints;
       setScore(newScore);
@@ -164,7 +161,7 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
     moveToNextStage(newScore);
   };
 
-  // 6️⃣ 다음 단계 이동 및 알림 화면 적용 (✅ TRANSITION 화면 추가)
+  // 6️⃣ 다음 단계 이동 및 알림 화면 적용
   const moveToNextStage = (currentScore: number) => {
     if (qCount < 10) {
       const nextQuestion = generateProblem(allData, stage);
@@ -185,30 +182,42 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
       setQCount(1);
       setCurrentQ(nextQuestion);
       setTimeLeft(10);
-      // 게임 멈추고 전환 화면 띄우기
       setGameState('TRANSITION');
     } else {
       endGame(currentScore);
     }
   };
 
-  // 7️⃣ 종료 및 점수 저장
+  // 7️⃣ 종료 및 점수 저장 (✅ CORS 차단 방지 및 실패 시 자동 재시도 로직 적용!)
   const endGame = (finalScore: number) => {
     setGameState('RESULT');
-    fetch(CONFIG.WEB_APP_URL, {
-      method: 'POST',
-      body: JSON.stringify({
-        type: "saveLog",
-        studentName: studentName,
-        grade: student?.grade || "미지정",
-        score: finalScore,
-        stage: stage,
-        taskType: "문법게임"
-      })
-    }).catch(err => console.error(err));
+    
+    const payload = {
+      type: "saveLog",
+      studentName: studentName.trim(), // 이름 앞뒤 공백 제거
+      grade: student?.grade || "미지정",
+      score: finalScore,
+      stage: stage,
+      taskType: "문법게임"
+    };
+
+    const sendLog = () => {
+      return fetch(CONFIG.WEB_APP_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // preflight 방지 핵심
+        body: JSON.stringify(payload)
+      });
+    };
+
+    sendLog().catch(err => {
+      console.error("1차 저장 실패, 1초 뒤 재시도합니다:", err);
+      setTimeout(() => {
+        sendLog().catch(e => console.error("최종 저장 실패:", e));
+      }, 1000);
+    });
   };
 
-  const myRankIndex = rankings.thisMonth.findIndex(r => r.studentName === studentName);
+  const myRankIndex = rankings.thisMonth.findIndex(r => r.studentName === studentName.trim());
   const myRankText = myRankIndex !== -1 ? `${myRankIndex + 1}위` : '-';
   const myCurrentScore = myRankIndex !== -1 ? rankings.thisMonth[myRankIndex].score : 0;
 
@@ -230,10 +239,17 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
               readOnly={!!student?.name}
             />
             {studentName && (
-              <div style={styles.myStats}>
-                <span style={{color:'#475569'}}>🏆 랭킹: <strong style={{color:'#d97706'}}>{myRankText}</strong></span>
-                <span style={{color: '#cbd5e1'}}>|</span>
-                <span style={{color:'#475569'}}>🔥 현재 점수: <strong style={{color:'#2563eb'}}>{myCurrentScore}점</strong></span>
+              /* ✅ 요청하신 2줄 레이아웃 (위: 타이틀 / 아래: 수치) */
+              <div style={styles.myStatsContainer}>
+                <div style={styles.statCol}>
+                  <span style={styles.statLabel}>🏆 내 랭킹</span>
+                  <strong style={styles.statRankValue}>{myRankText}</strong>
+                </div>
+                <div style={styles.statDivider} />
+                <div style={styles.statCol}>
+                  <span style={styles.statLabel}>🔥 현재 점수</span>
+                  <strong style={styles.statScoreValue}>{myCurrentScore}점</strong>
+                </div>
               </div>
             )}
           </div>
@@ -272,7 +288,6 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
     );
   }
 
-  // ✅ 새로운 알림 화면: 단계 넘어갈 때 대기
   if (gameState === 'TRANSITION') {
     return (
       <div style={styles.container}>
@@ -298,6 +313,10 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
 
   if (gameState === 'GAME') {
     const progressPercent = ((((stage - 1) * 10) + qCount) / 100) * 100;
+    
+    /* ✅ 초 카운트다운 비례 게이지 계산 및 색상 변경 (3초 이하 빨강, 5초 이하 주황) */
+    const timerPercent = (timeLeft / 10) * 100;
+    const timerBarColor = timeLeft <= 3 ? '#ef4444' : (timeLeft <= 5 ? '#f97316' : '#10b981');
 
     return (
       <div style={styles.container}>
@@ -308,9 +327,17 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
             <span style={styles.scoreText}>점수: {score}</span>
             <span style={styles.lives}>{"❤️".repeat(lives)}</span>
           </div>
+
+          {/* ✅ 1. 남은 시간 실시간 카운트다운 게이지 (새로 추가됨) */}
+          <div style={styles.timerBg}>
+            <div style={{...styles.timerBar, width: `${timerPercent}%`, backgroundColor: timerBarColor}} />
+          </div>
+
+          {/* 2. 전체 스테이지 진행률 바 */}
           <div style={styles.progressBg}>
             <div style={{...styles.progressBar, width: `${progressPercent}%`}} />
           </div>
+
           <p style={{fontSize:'16px', color:'#64748b', textAlign:'center', marginTop: '10px'}}>{currentQ?.kor}</p>
           <h2 style={styles.questionText}>{currentQ?.sentence}</h2>
           <div style={styles.grid}>
@@ -323,7 +350,6 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
     );
   }
 
-  // ✅ 결과 화면 수정: 리로드 하지 않고 로비로 이동
   return (
     <div style={styles.container}>
       <div style={styles.card}>
@@ -336,7 +362,7 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
         </div>
         <button 
           onClick={() => {
-            setGameState('LOBBY'); // 로그아웃 방지, 로비로 돌아감
+            setGameState('LOBBY'); 
             setStage(1);
             setQCount(1);
             setScore(0);
@@ -350,28 +376,41 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
   );
 }
 
-// ✅ 다크 모드 무시를 위한 색상 하드코딩 강화
+// ✅ 스타일 시트 보강
 const styles: { [key: string]: React.CSSProperties } = {
   container: { minHeight: '100vh', backgroundColor: '#f1f5f9', color: '#0f172a', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', fontFamily: 'Pretendard, sans-serif' },
   card: { backgroundColor: '#ffffff', color: '#0f172a', padding: '30px', borderRadius: '20px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)', width: '100%', maxWidth: '600px', textAlign: 'center' },
   backBtn: { position: 'absolute', top: '20px', left: '20px', padding: '10px 15px', borderRadius: '10px', background: '#e2e8f0', color: '#0f172a', border: 'none', cursor: 'pointer', fontWeight: 'bold' },
   title: { fontSize: '28px', fontWeight: 'bold', color: '#1e293b', marginBottom: '25px' },
   myInfoBox: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 20px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '25px' },
-  nameInput: { fontSize: '18px', fontWeight: 'bold', color: '#0f172a', backgroundColor: 'transparent', border: 'none', outline: 'none', width: '100px' },
-  myStats: { display: 'flex', gap: '12px', fontSize: '15px' },
+  nameInput: { fontSize: '18px', fontWeight: 'bold', color: '#0f172a', backgroundColor: 'transparent', border: 'none', outline: 'none', width: '110px' },
+  
+  /* ✅ 로비 2줄 랭킹/점수 레이아웃 스타일 */
+  myStatsContainer: { display: 'flex', alignItems: 'center', gap: '15px', backgroundColor: '#ffffff', padding: '8px 16px', borderRadius: '10px', border: '1px solid #cbd5e1', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' },
+  statCol: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' },
+  statLabel: { fontSize: '12px', color: '#64748b', fontWeight: 'bold' },
+  statRankValue: { fontSize: '17px', color: '#d97706', fontWeight: '800' },
+  statScoreValue: { fontSize: '17px', color: '#2563eb', fontWeight: '800' },
+  statDivider: { width: '1px', height: '28px', backgroundColor: '#e2e8f0' },
+  
   rankContainer: { display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '30px' },
   rankBox: { backgroundColor: '#ffffff', padding: '15px 20px', borderRadius: '12px', border: '1px solid #e2e8f0', textAlign: 'left', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' },
   rankTitle: { fontSize: '16px', fontWeight: 'bold', color: '#334155', marginBottom: '10px', borderBottom: '1px solid #e2e8f0', paddingBottom: '8px' },
   rankRow: { display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: '15px' },
   empty: { color: '#94a3b8', fontSize: '14px', textAlign: 'center', margin: '10px 0' },
   startBtn: { width: '100%', padding: '18px', backgroundColor: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '12px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', transition: 'background 0.2s' },
-  gameHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', fontSize: '16px', fontWeight: 'bold' },
+  gameHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', fontSize: '16px', fontWeight: 'bold' },
   badge: { backgroundColor: '#e0f2fe', color: '#0369a1', padding: '5px 12px', borderRadius: '20px', fontSize: '14px' },
   timer: { color: '#ef4444', fontWeight: '800' },
   scoreText: { color: '#475569' },
   lives: { fontSize: '18px' },
-  progressBg: { width: '100%', height: '8px', backgroundColor: '#e2e8f0', borderRadius: '4px', overflow: 'hidden', marginBottom: '8px' },
-  progressBar: { height: '100%', backgroundColor: '#2563eb', transition: 'width 0.3s' },
+  
+  /* ✅ 카운트다운 타이머 게이지 스타일 */
+  timerBg: { width: '100%', height: '10px', backgroundColor: '#f1f5f9', borderRadius: '5px', overflow: 'hidden', marginBottom: '8px', border: '1px solid #e2e8f0' },
+  timerBar: { height: '100%', transition: 'width 1s linear, background-color 0.3s' },
+  
+  progressBg: { width: '100%', height: '6px', backgroundColor: '#e2e8f0', borderRadius: '3px', overflow: 'hidden', marginBottom: '8px' },
+  progressBar: { height: '100%', backgroundColor: '#3b82f6', transition: 'width 0.3s' },
   questionText: { fontSize: '28px', fontWeight: 'bold', color: '#0f172a', margin: '20px 0 40px 0', wordBreak: 'keep-all' },
   grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' },
   optionBtn: { padding: '20px', backgroundColor: '#f8fafc', border: '2px solid #e2e8f0', borderRadius: '12px', fontSize: '18px', fontWeight: '600', color: '#334155', cursor: 'pointer' },
