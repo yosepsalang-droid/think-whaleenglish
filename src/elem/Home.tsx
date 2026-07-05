@@ -21,6 +21,8 @@ export default function Home({ student, onNavigate, onLogout }: HomeProps) {
     { id: 'sentence', title: '🧩 문장 배열 게임', desc: '어순 감각을 키우는 덩어리 학습', color: '#56cfe1' },
     { id: 'chat', title: '🤖 AI 고래 대화', desc: '오늘 배운 문장으로 AI와 톡하기', color: '#72efdd' },
     { id: 'grammar', title: '⚡ 스피드 문법', desc: '도전! 실시간 문법 랭킹전', color: '#64dfdf' },
+    // 👇 [이 한 줄을 추가!] 로비 화면에 5번째 단어 타자 게임 버튼이 생깁니다!
+    { id: 'wordMaster', title: '⌨️ Word Master', desc: '스피드 타자로 단어 완벽 마스터!', color: '#48cae4' },
   ];
 
   return (

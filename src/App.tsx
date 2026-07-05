@@ -6,6 +6,7 @@ import Word from './elem/Word';
 import Sentence from './elem/Sentence';
 import WhaleChat from './elem/WhaleChat';
 import Grammar from './elem/Grammar';
+import WordMaster from './elem/WordMaster'; // 👈 [이 한 줄을 추가!] 새로 만든 타자 게임 불러오기
 
 // 📘 중등부 학습 컴포넌트
 import Voca from './mid/Voca';
@@ -140,6 +141,8 @@ export default function App() {
           {currentMenu === 'sentence' && <Sentence onBack={() => setCurrentMenu('home')} />}
           {currentMenu === 'chat' && <WhaleChat onBack={() => setCurrentMenu('home')} />}
           {currentMenu === 'grammar' && <Grammar student={loggedInStudent} onBack={() => setCurrentMenu('home')} />}
+          {/* 👇 [이 한 줄을 추가!] wordMaster 메뉴를 누르면 타자 게임 화면을 켜줍니다 */}
+          {currentMenu === 'wordMaster' && <WordMaster studentName={loggedInStudent.name} grade={loggedInStudent.grade} onBack={() => setCurrentMenu('home')} />}
         </div>
       );
     }
