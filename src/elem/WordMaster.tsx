@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { CONFIG } from './config'; // 💡 필요시 '../config' 등 파일 위치에 맞게 경로만 맞춰주세요.
+import { CONFIG } from '../config'; // 💡 필요시 '../config' 등 파일 위치에 맞게 경로만 맞춰주세요.
 
 // 📝 구글 시트에서 불러올 단어 데이터 타입
 interface WordItem {
