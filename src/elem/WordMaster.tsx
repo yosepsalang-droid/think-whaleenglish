@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { CONFIG } from '../config'; // 💡 필요시 '../config' 등 파일 위치에 맞게 경로만 맞춰주세요.
+import { CONFIG } from '../config'; // 💡 파일 위치에 맞게 경로만 맞춰주세요.
 
 // 📝 구글 시트에서 불러올 단어 데이터 타입
 interface WordItem {
@@ -77,25 +77,35 @@ export default function WordMaster({
     fetchWords();
   }, []);
 
-  // 2️⃣ 교재 드롭다운 정렬 (요청하신 240 > 520 > 860 > 1240 > 1680 순서 보장)
+  // 2️⃣ 고래영어 교재 드롭다운 정렬 (시리즈: 240 > 520 > 860 > 1240 > 1680 순서 보장 + 각 권 1~6권 순서 보장)
   const bookList = useMemo(() => {
     const unique = Array.from(new Set(allWords.map((w) => w.book))).filter(Boolean);
-    const order = ['240', '520', '860', '1240', '1680'];
+    const seriesOrder = ['240', '520', '860', '1240', '1680'];
 
     return unique.sort((a, b) => {
-      const numA = a.match(/\d+/)?.[0] || '';
-      const numB = b.match(/\d+/)?.[0] || '';
-      const idxA = order.indexOf(numA);
-      const idxB = order.indexOf(numB);
+      // 시리즈 숫자 추출 (예: "520 2권" -> "520")
+      const seriesA = a.match(/\d+/)?.[0] || '';
+      const seriesB = b.match(/\d+/)?.[0] || '';
+      const idxA = seriesOrder.indexOf(seriesA);
+      const idxB = seriesOrder.indexOf(seriesB);
       const posA = idxA === -1 ? 9999 : idxA;
       const posB = idxB === -1 ? 9999 : idxB;
 
+      // 1순위: 시리즈 순서 정렬
       if (posA !== posB) return posA - posB;
+
+      // 2순위: 같은 시리즈 내에서 권수 정렬 (예: 1권 -> 2권 -> 6권)
+      const volA = parseInt(a.replace(/[^0-9]/g, '').replace(seriesA, '') || '0', 10);
+      const volB = parseInt(b.replace(/[^0-9]/g, '').replace(seriesB, '') || '0', 10);
+      
+      if (volA !== volB) return volA - volB;
+
+      // 3순위: 텍스트 기본 정렬
       return a.localeCompare(b);
     });
   }, [allWords]);
 
-  // 🎯 문제 전환 시 입력창에 자동 포커스
+  // 🎯 문제 전환 또는 오답 시 입력창에 자동 포커스
   useEffect(() => {
     if (gameState === 'PLAYING' && inputRef.current) {
       inputRef.current.focus();
@@ -140,7 +150,7 @@ export default function WordMaster({
   // 4️⃣ 정답 제출 및 점수 계산 로직
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentWord || !userAnswer.trim()) return;
+    if (!currentWord || !userAnswer.trim() || feedback?.isCorrect) return;
 
     const isCorrect = userAnswer.trim().toLowerCase() === currentWord.eng.toLowerCase();
     speakWord(currentWord.eng);
@@ -176,7 +186,10 @@ export default function WordMaster({
       setAttempts((prev) => prev + 1);
       setCombo(0);
       setFeedback({ isCorrect: false, msg: 'Oops! 다시 한번 타이핑 해보세요! 🔍' });
-      if (inputRef.current) inputRef.current.select();
+      if (inputRef.current) {
+        inputRef.current.focus();
+        inputRef.current.select();
+      }
     }
   };
 
@@ -195,7 +208,7 @@ export default function WordMaster({
     };
 
     try {
-      // CORS 차단을 막기 위해 text/plain 헤더 사용 (Grammar.tsx 방식 동일)
+      // CORS 차단을 막기 위해 text/plain 헤더 사용
       await fetch(CONFIG.WEB_APP_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -229,11 +242,11 @@ export default function WordMaster({
         <button onClick={onBack} style={styles.backBtn}>⬅ 돌아가기</button>
         <div style={styles.card}>
           <h1 style={styles.title}>⌨️ Word Master 스피드 타자</h1>
-          <p style={styles.subtitle}>{studentName} ({grade}) 학생, 도전할 교재를 선택하세요!</p>
+          <p style={styles.subtitle}>{studentName} ({grade}) 학생, 도전할 고래영어 교재를 선택하세요!</p>
           <div style={styles.bookGrid}>
             {bookList.map((b) => (
               <button key={b} onClick={() => startGame(b)} style={styles.bookBtn}>
-                📘 {b} 교재 도전 (20문제)
+                📘 {b} 도전 (20문제)
               </button>
             ))}
           </div>
@@ -247,9 +260,9 @@ export default function WordMaster({
     return (
       <div style={styles.container}>
         <div style={styles.card}>
-          <h1 style={{ fontSize: '32px', color: '#10b981', marginBottom: '10px' }}>🎉 미션 완료! 🎉</h1>
+          <h1 style={{ fontSize: '32px', color: '#10b981', margin: '0 0 10px 0' }}>🎉 미션 완료! 🎉</h1>
           <p style={{ fontSize: '18px', color: '#64748b', marginBottom: '20px' }}>
-            {selectedBook} 교재 단어 마스터 달성!
+            {selectedBook} 단어 마스터 달성!
           </p>
           <div style={styles.scoreBox}>
             <span style={{ fontSize: '16px', color: '#166534', fontWeight: 'bold' }}>최종 획득 점수</span>
@@ -286,7 +299,7 @@ export default function WordMaster({
         </div>
 
         {/* 콤보 배지 (2콤보 이상일 때 등장) */}
-        <div style={{ minHeight: '30px', margin: '10px 0' }}>
+        <div style={{ minHeight: '30px', margin: '10px 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {combo >= 2 && <span style={styles.comboBadge}>🔥 {combo} COMBO (+{combo * 5}점 보너스!)</span>}
         </div>
 
@@ -308,7 +321,10 @@ export default function WordMaster({
             ref={inputRef}
             type="text"
             value={userAnswer}
-            onChange={(e) => setUserAnswer(e.target.value)}
+            onChange={(e) => {
+              setUserAnswer(e.target.value);
+              if (feedback && !feedback.isCorrect) setFeedback(null); // 다시 치기 시작하면 오답 메시지 지우기
+            }}
             disabled={feedback?.isCorrect === true}
             placeholder="영어 단어를 타이핑하세요"
             autoComplete="off"
@@ -334,10 +350,11 @@ export default function WordMaster({
 
         {/* 피드백 메시지 & 힌트 버튼 */}
         <div style={styles.footerRow}>
-          <div style={{ minHeight: '24px' }}>
+          <div style={{ minHeight: '24px', flex: 1, textAlign: 'left' }}>
             {feedback && (
               <span style={{
                 fontWeight: 'bold',
+                fontSize: '14px',
                 color: feedback.isCorrect ? '#166534' : '#dc2626'
               }}>
                 {feedback.msg}
@@ -362,31 +379,67 @@ export default function WordMaster({
 
 // ================= 🎨 스타일 시트 (다크모드 방지 & 반응형 보강) =================
 const styles: { [key: string]: React.CSSProperties } = {
-  container: { minHeight: '100vh', backgroundColor: '#f1f5f9', color: '#0f172a', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', fontFamily: 'Pretendard, sans-serif' },
-  card: { backgroundColor: '#ffffff', color: '#0f172a', padding: '30px', borderRadius: '20px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)', width: '100%', maxWidth: '550px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' },
-  backBtn: { position: 'absolute', top: '20px', left: '20px', padding: '10px 15px', borderRadius: '10px', background: '#e2e8f0', color: '#0f172a', border: 'none', cursor: 'pointer', fontWeight: 'bold' },
-  title: { fontSize: '28px', fontWeight: '800', color: '#1e293b', margin: '0 0 10px 0' },
-  subtitle: { fontSize: '15px', color: '#64748b', marginBottom: '25px' },
-  bookGrid: { display: 'grid', gridTemplateColumns: '1fr', gap: '12px', width: '100%' },
-  bookBtn: { padding: '18px', backgroundColor: '#f8fafc', border: '2px solid #e2e8f0', borderRadius: '14px', fontSize: '18px', fontWeight: 'bold', color: '#334155', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' },
+  container: { 
+    minHeight: '100vh', 
+    backgroundColor: '#f1f5f9', 
+    color: '#0f172a', 
+    display: 'flex', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    padding: '20px', 
+    boxSizing: 'border-box',
+    fontFamily: 'Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif' 
+  },
+  card: { 
+    backgroundColor: '#ffffff', 
+    color: '#0f172a', 
+    padding: '30px', 
+    borderRadius: '20px', 
+    boxShadow: '0 10px 25px rgba(0,0,0,0.05)', 
+    width: '100%', 
+    maxWidth: '550px', 
+    textAlign: 'center', 
+    display: 'flex', 
+    flexDirection: 'column', 
+    alignItems: 'center',
+    position: 'relative',
+    boxSizing: 'border-box'
+  },
+  backBtn: { 
+    position: 'absolute', 
+    top: '20px', 
+    left: '20px', 
+    padding: '10px 15px', 
+    borderRadius: '10px', 
+    background: '#e2e8f0', 
+    color: '#0f172a', 
+    border: 'none', 
+    cursor: 'pointer', 
+    fontWeight: 'bold',
+    fontSize: '14px'
+  },
+  title: { fontSize: '26px', fontWeight: '800', color: '#1e293b', margin: '10px 0 10px 0', wordBreak: 'keep-all' },
+  subtitle: { fontSize: '15px', color: '#64748b', marginBottom: '25px', wordBreak: 'keep-all' },
+  bookGrid: { display: 'grid', gridTemplateColumns: '1fr', gap: '10px', width: '100%', maxHeight: '60vh', overflowY: 'auto', paddingRight: '4px' },
+  bookBtn: { padding: '16px', backgroundColor: '#f8fafc', border: '2px solid #e2e8f0', borderRadius: '14px', fontSize: '16px', fontWeight: 'bold', color: '#334155', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', textAlign: 'left' },
   
-  gameHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '12px', fontSize: '16px', fontWeight: 'bold' },
-  badge: { backgroundColor: '#e0f2fe', color: '#0369a1', padding: '6px 14px', borderRadius: '20px', fontSize: '15px' },
+  gameHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '12px', fontSize: '15px', fontWeight: 'bold' },
+  badge: { backgroundColor: '#e0f2fe', color: '#0369a1', padding: '6px 14px', borderRadius: '20px', fontSize: '14px' },
   scoreText: { color: '#d97706', fontSize: '18px' },
   progressBg: { width: '100%', height: '8px', backgroundColor: '#e2e8f0', borderRadius: '4px', overflow: 'hidden', marginBottom: '5px' },
   progressBar: { height: '100%', backgroundColor: '#2563eb', transition: 'width 0.3s ease' },
-  comboBadge: { backgroundColor: '#fef3c7', color: '#d97706', padding: '6px 16px', borderRadius: '20px', fontSize: '14px', fontWeight: '800', border: '1px solid #fde68a' },
+  comboBadge: { backgroundColor: '#fef3c7', color: '#d97706', padding: '6px 16px', borderRadius: '20px', fontSize: '14px', fontWeight: '800', border: '1px solid #fde68a', animation: 'bounce 0.3s ease' },
   
-  questionBox: { backgroundColor: '#f8fafc', width: '100%', padding: '35px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', margin: '10px 0 25px 0', boxSizing: 'border-box' },
-  korText: { fontSize: '32px', fontWeight: '900', color: '#0f172a', margin: 0, wordBreak: 'keep-all' },
+  questionBox: { backgroundColor: '#f8fafc', width: '100%', padding: '35px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', margin: '10px 0 20px 0', boxSizing: 'border-box' },
+  korText: { fontSize: '28px', fontWeight: '900', color: '#0f172a', margin: 0, wordBreak: 'keep-all', lineHeight: '1.4' },
   hintText: { fontSize: '16px', color: '#64748b', marginTop: '15px', marginBottom: 0 },
   
-  input: { width: '100%', padding: '18px', fontSize: '22px', fontWeight: 'bold', borderRadius: '14px', border: '2px solid #cbd5e1', textAlign: 'center', outline: 'none', boxSizing: 'border-box', marginBottom: '12px', color: '#0f172a' },
-  submitBtn: { width: '100%', padding: '18px', color: '#ffffff', border: 'none', borderRadius: '14px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', transition: 'background 0.2s' },
+  input: { width: '100%', padding: '16px', fontSize: '20px', fontWeight: 'bold', borderRadius: '14px', border: '2px solid #cbd5e1', textAlign: 'center', outline: 'none', boxSizing: 'border-box', marginBottom: '12px', color: '#0f172a' },
+  submitBtn: { width: '100%', padding: '16px', color: '#ffffff', border: 'none', borderRadius: '14px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', transition: 'background 0.2s', boxSizing: 'border-box' },
   
-  footerRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: '15px', minHeight: '30px' },
-  hintBtn: { background: 'transparent', border: 'none', color: '#64748b', fontSize: '14px', cursor: 'pointer', textDecoration: 'underline', fontWeight: '600' },
+  footerRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: '10px', minHeight: '30px' },
+  hintBtn: { background: 'transparent', border: 'none', color: '#64748b', fontSize: '13px', cursor: 'pointer', textDecoration: 'underline', fontWeight: '600', padding: '4px 0', whiteSpace: 'nowrap' },
   
-  scoreBox: { backgroundColor: '#f0fdf4', border: '2px solid #bbf7d0', padding: '30px', borderRadius: '20px', width: '80%', margin: '20px 0' },
-  finishBtn: { width: '100%', padding: '18px', backgroundColor: '#10b981', color: '#ffffff', border: 'none', borderRadius: '14px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 12px rgba(16,185,129,0.2)' }
+  scoreBox: { backgroundColor: '#f0fdf4', border: '2px solid #bbf7d0', padding: '25px', borderRadius: '20px', width: '100%', margin: '20px 0', boxSizing: 'border-box' },
+  finishBtn: { width: '100%', padding: '16px', backgroundColor: '#10b981', color: '#ffffff', border: 'none', borderRadius: '14px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 12px rgba(16,185,129,0.2)', boxSizing: 'border-box' }
 };
