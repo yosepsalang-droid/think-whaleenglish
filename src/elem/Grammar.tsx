@@ -382,12 +382,12 @@ const styles: { [key: string]: React.CSSProperties } = {
   card: { backgroundColor: '#ffffff', color: '#0f172a', padding: '30px', borderRadius: '20px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)', width: '100%', maxWidth: '600px', textAlign: 'center' },
   backBtn: { position: 'absolute', top: '20px', left: '20px', padding: '10px 15px', borderRadius: '10px', background: '#e2e8f0', color: '#0f172a', border: 'none', cursor: 'pointer', fontWeight: 'bold' },
   title: { fontSize: '28px', fontWeight: 'bold', color: '#1e293b', marginBottom: '25px' },
-  myInfoBox: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 20px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '25px' },
-  nameInput: { fontSize: '18px', fontWeight: 'bold', color: '#0f172a', backgroundColor: 'transparent', border: 'none', outline: 'none', width: '110px' },
+  // ✅ 로비 모바일 반응형(자동 줄바꿈) 레이아웃 스타일
+  myInfoBox: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: '15px', padding: '15px 20px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '25px' },
+  nameInput: { fontSize: '18px', fontWeight: 'bold', color: '#0f172a', backgroundColor: 'transparent', border: 'none', outline: 'none', width: '110px', textAlign: 'center' },
   
-  /* ✅ 로비 2줄 랭킹/점수 레이아웃 스타일 */
-  myStatsContainer: { display: 'flex', alignItems: 'center', gap: '15px', backgroundColor: '#ffffff', padding: '8px 16px', borderRadius: '10px', border: '1px solid #cbd5e1', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' },
-  statCol: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' },
+  myStatsContainer: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: '15px', backgroundColor: '#ffffff', padding: '10px 20px', borderRadius: '10px', border: '1px solid #cbd5e1', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' },
+  statCol: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', minWidth: '80px' },
   statLabel: { fontSize: '12px', color: '#64748b', fontWeight: 'bold' },
   statRankValue: { fontSize: '17px', color: '#d97706', fontWeight: '800' },
   statScoreValue: { fontSize: '17px', color: '#2563eb', fontWeight: '800' },

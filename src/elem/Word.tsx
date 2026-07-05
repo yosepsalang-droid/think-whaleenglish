@@ -93,15 +93,23 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
     const order = ['240', '520', '860', '1240', '1680'];
     
     return uniqueBooks.sort((a, b) => {
-      const indexA = order.findIndex(o => a.includes(o));
-      const indexB = order.findIndex(o => b.includes(o));
+      // 🚨 "1240"이 "240"을 포함하고 있어서 생기던 버그 해결!
+      // 책 이름에서 숫자만 정확히 뽑아내어(예: "1240_1" -> "1240") 비교합니다.
+      const numA = a.match(/\d+/)?.[0] || '';
+      const numB = b.match(/\d+/)?.[0] || '';
       
-      // order에 정의되지 않은 책은 뒤로 보냄
-      if (indexA === -1) return 1;
-      if (indexB === -1) return -1;
-      return indexA - indexB;
+      const indexA = order.indexOf(numA);
+      const indexB = order.indexOf(numB);
+      
+      const posA = indexA === -1 ? 9999 : indexA;
+      const posB = indexB === -1 ? 9999 : indexB;
+      
+      if (posA !== posB) {
+        return posA - posB;
+      }
+      return a.localeCompare(b);
     });
-  }, [allWords]);
+  }, [allWords])
 
   const units = useMemo(() => {
     const filtered = allWords.filter(w => normalize(w.book) === normalize(book));
