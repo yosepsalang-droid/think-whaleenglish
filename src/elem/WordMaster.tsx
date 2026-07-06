@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { CONFIG } from '../config'; // 💡 파일 위치에 맞게 경로만 맞춰주세요.
+import { CONFIG } from '../config'; 
 
 // 📝 구글 시트에서 불러올 단어 데이터 타입
 interface WordItem {
@@ -34,7 +34,7 @@ export default function WordMaster({
   const [allWords, setAllWords] = useState<WordItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // 🏆 [핵심 추가!] 자체적으로 내 랭킹과 내 점수를 계산하기 위한 state
+  // 🏆 자체적으로 내 랭킹과 내 점수를 계산하기 위한 state
   const [myRank, setMyRank] = useState<number | null>(externalMyRank);
   const [myTotalScore, setMyTotalScore] = useState<number>(externalTotalScore);
   const [loadingRank, setLoadingRank] = useState<boolean>(true);
@@ -46,8 +46,8 @@ export default function WordMaster({
 
   const [userAnswer, setUserAnswer] = useState<string>('');
   const [score, setScore] = useState<number>(0);
-  const [attempts, setAttempts] = useState<number>(0); // 현재 문제 오답 횟수
-  const [combo, setCombo] = useState<number>(0); // 연속 정답 콤보
+  const [attempts, setAttempts] = useState<number>(0); 
+  const [combo, setCombo] = useState<number>(0); 
   const [showHint, setShowHint] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ isCorrect: boolean; msg: string } | null>(null);
 
@@ -60,7 +60,7 @@ export default function WordMaster({
       try {
         const response = await fetch(CONFIG.SHEETS.ELEM_WORD);
         const csvText = await response.text();
-        const rows = csvText.split(/\r?\n/).slice(1); // 헤더 제외
+        const rows = csvText.split(/\r?\n/).slice(1); 
 
         const parsed: WordItem[] = rows
           .map((row) => {
@@ -87,10 +87,10 @@ export default function WordMaster({
     fetchWords();
   }, []);
 
-  // 🏆 [핵심 추가!] 시트에서 기록을 읽어와 "이번 달 내 순위와 총점"만 정확히 계산!
+  // 🏆 [수정됨] 이번 달 모든 게임 점수 합산 로직 (D열 기준)
   const fetchAndCalculateMyRank = () => {
     setLoadingRank(true);
-    const logSheetUrl = CONFIG.SHEETS.GRAMMAR_LOG || CONFIG.SHEETS.WORD_LOG;
+    const logSheetUrl = CONFIG.SHEETS.GRAMMAR_LOG; 
     
     if (!logSheetUrl || !studentName.trim()) {
       setLoadingRank(false);
@@ -104,21 +104,21 @@ export default function WordMaster({
         
         const now = new Date();
         const currentYear = now.getFullYear();
-        const currentMonth = now.getMonth() + 1; // 1~12월
+        const currentMonth = now.getMonth() + 1;
 
         const thisMonthScores: { [name: string]: number } = {};
 
         rows.forEach(row => {
           const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-          if (cols.length < 5) return;
+          // 데이터 구조: [0:ts, 1:name, 2:grade, 3:score, 4:stage, 5:type]
+          if (cols.length < 4) return;
 
-          const dateStr = cols[0]?.replace(/^"|"$/g, '').trim(); // 날짜
-          const name = cols[1]?.replace(/^"|"$/g, '').trim();   // 이름
-          const scoreVal = parseInt(cols[4]?.replace(/^"|"$/g, '').trim() || '0', 10); // 점수
+          const dateStr = cols[0]?.replace(/^"|"$/g, '').trim(); 
+          const name = cols[1]?.replace(/^"|"$/g, '').trim();   
+          const scoreVal = parseInt(cols[3]?.replace(/^"|"$/g, '').trim() || '0', 10); // D열(점수)
 
           if (!name || isNaN(scoreVal) || scoreVal <= 0) return;
 
-          // 날짜에서 연도와 월 추출
           let rowYear = 0;
           let rowMonth = 0;
           const match = dateStr.match(/(\d{4})[./-]\s*(\d{1,2})/);
@@ -127,21 +127,19 @@ export default function WordMaster({
             rowMonth = parseInt(match[2], 10);
           }
 
-          // 이번 달 기록만 합산
+          // 이번 달 기록만 합산 (모든 task_type 통합)
           if (rowYear === currentYear && rowMonth === currentMonth) {
             thisMonthScores[name] = (thisMonthScores[name] || 0) + scoreVal;
           }
         });
 
-        // 점수 내림차순으로 정렬하여 랭킹 매기기
         const sortedList = Object.entries(thisMonthScores)
           .map(([name, total]) => ({ name, total }))
           .sort((a, b) => b.total - a.total);
 
-        // 내 이름 찾기
         const myIdx = sortedList.findIndex(item => item.name === studentName.trim());
         if (myIdx !== -1) {
-          setMyRank(myIdx + 1); // 인덱스 + 1 = 내 순위
+          setMyRank(myIdx + 1);
           setMyTotalScore(sortedList[myIdx].total);
         } else {
           setMyRank(null);
@@ -156,12 +154,10 @@ export default function WordMaster({
       });
   };
 
-  // 💡 처음 들어왔을 때나 학생 이름이 바뀔 때 자동 계산 실행
   useEffect(() => {
     fetchAndCalculateMyRank();
   }, [studentName]);
 
-  // 2️⃣ 고래영어 교재 드롭다운 정렬
   const bookList = useMemo(() => {
     const unique = Array.from(new Set(allWords.map((w) => w.book))).filter(Boolean);
     const seriesOrder = ['240', '520', '860', '1240', '1680'];
@@ -185,14 +181,12 @@ export default function WordMaster({
     });
   }, [allWords]);
 
-  // 🎯 문제 전환 또는 오답 시 입력창에 자동 포커스
   useEffect(() => {
     if (gameState === 'PLAYING' && inputRef.current) {
       inputRef.current.focus();
     }
   }, [gameState, currentIndex]);
 
-  // 3️⃣ 게임 시작
   const startGame = (bookName: string) => {
     setSelectedBook(bookName);
     const filtered = allWords.filter((w) => w.book === bookName);
@@ -214,7 +208,6 @@ export default function WordMaster({
     setGameState('PLAYING');
   };
 
-  // 🔊 영어 단어 음성 읽어주기
   const speakWord = (text: string) => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
@@ -225,7 +218,6 @@ export default function WordMaster({
     }
   };
 
-  // 4️⃣ 정답 제출 및 점수 계산 로직
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentWord || !userAnswer.trim() || feedback?.isCorrect) return;
@@ -268,7 +260,6 @@ export default function WordMaster({
     }
   };
 
-  // 5️⃣ [핵심] 게임 종료 후 점수 저장 + 즉시 내 랭킹 갱신 (재시도 로직 보강!)
   const handleFinishGame = (finalScore: number) => {
     setGameState('RESULT');
 
@@ -292,7 +283,7 @@ export default function WordMaster({
 
     const refreshAfterSave = () => {
       onGameComplete?.();
-      fetchAndCalculateMyRank(); // 💡 게임 끝난 점수 즉시 반영!
+      fetchAndCalculateMyRank();
     };
 
     sendLog()
@@ -307,8 +298,6 @@ export default function WordMaster({
       });
   };
 
-  // ================= 🎨 화면 렌더링 =================
-
   if (isLoading) {
     return (
       <div style={styles.container}>
@@ -317,34 +306,25 @@ export default function WordMaster({
     );
   }
 
-  // 1. 교재 선택 화면 (LOBBY)
   if (gameState === 'SELECT_BOOK') {
     const myRankText = myRank !== null ? `${myRank}위` : '-';
-
     return (
       <div style={styles.container}>
         <button onClick={onBack} style={styles.backBtn}>⬅ 돌아가기</button>
         <div style={styles.card}>
           <h1 style={styles.title}>⌨️ Word Master 스피드 타자</h1>
           <p style={styles.subtitle}>{studentName} ({grade}) 학생, 도전할 고래영어 교재를 선택하세요!</p>
-
-          {/* ✅ 요청하신 대로 '전체 랭킹' 없이 딱 '개인 랭킹과 점수'만 깔끔하게 출력! */}
           <div style={styles.myStatsContainer}>
             <div style={styles.statCol}>
               <span style={styles.statLabel}>🏅 내 랭킹</span>
-              <strong style={styles.statRankValue}>
-                {loadingRank ? '계산 중...' : myRankText}
-              </strong>
+              <strong style={styles.statRankValue}>{loadingRank ? '계산 중...' : myRankText}</strong>
             </div>
             <div style={styles.statDivider} />
             <div style={styles.statCol}>
               <span style={styles.statLabel}>🔥 총 합산 점수</span>
-              <strong style={styles.statScoreValue}>
-                {loadingRank ? '계산 중...' : `${myTotalScore.toLocaleString()}점`}
-              </strong>
+              <strong style={styles.statScoreValue}>{loadingRank ? '계산 중...' : `${myTotalScore.toLocaleString()}점`}</strong>
             </div>
           </div>
-
           <div style={styles.bookGrid}>
             {bookList.map((b) => (
               <button key={b} onClick={() => startGame(b)} style={styles.bookBtn} title={`${b} 도전 (20문제)`}>
@@ -357,55 +337,37 @@ export default function WordMaster({
     );
   }
 
-  // 2. 게임 결과 화면 (RESULT)
   if (gameState === 'RESULT') {
     return (
       <div style={styles.container}>
         <div style={styles.card}>
           <h1 style={{ fontSize: '32px', color: '#10b981', margin: '0 0 10px 0' }}>🎉 미션 완료! 🎉</h1>
-          <p style={{ fontSize: '18px', color: '#64748b', marginBottom: '20px' }}>
-            {selectedBook} 단어 마스터 달성!
-          </p>
+          <p style={{ fontSize: '18px', color: '#64748b', marginBottom: '20px' }}>{selectedBook} 단어 마스터 달성!</p>
           <div style={styles.scoreBox}>
             <span style={{ fontSize: '16px', color: '#166534', fontWeight: 'bold' }}>최종 획득 점수</span>
-            <strong style={{ fontSize: '48px', color: '#166534', display: 'block', margin: '10px 0' }}>
-              {score}점
-            </strong>
+            <strong style={{ fontSize: '48px', color: '#166534', display: 'block', margin: '10px 0' }}>{score}점</strong>
           </div>
-          <button onClick={() => { setGameState('SELECT_BOOK'); onGameComplete?.(); fetchAndCalculateMyRank(); }} style={styles.finishBtn}>
-            다른 교재 도전하기 🚀
-          </button>
-          <button onClick={onBack} style={{ ...styles.finishBtn, backgroundColor: '#64748b', marginTop: '10px' }}>
-            홈으로 돌아가기
-          </button>
+          <button onClick={() => { setGameState('SELECT_BOOK'); onGameComplete?.(); fetchAndCalculateMyRank(); }} style={styles.finishBtn}>다른 교재 도전하기 🚀</button>
+          <button onClick={onBack} style={{ ...styles.finishBtn, backgroundColor: '#64748b', marginTop: '10px' }}>홈으로 돌아가기</button>
         </div>
       </div>
     );
   }
 
-  // 3. 게임 진행 화면 (PLAYING)
   const progressPercent = ((currentIndex + 1) / gameWords.length) * 100;
-
   return (
     <div style={styles.container}>
       <div style={styles.card}>
-        {/* 상단 진행 상태 & 점수 */}
         <div style={styles.gameHeader}>
           <span style={styles.badge}>📘 {selectedBook} ({currentIndex + 1} / {gameWords.length})</span>
           <span style={styles.scoreText}>🏆 {score}점</span>
         </div>
-
-        {/* 진행도 바 */}
         <div style={styles.progressBg}>
           <div style={{ ...styles.progressBar, width: `${progressPercent}%` }} />
         </div>
-
-        {/* 콤보 배지 */}
         <div style={{ minHeight: '30px', margin: '10px 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {combo >= 2 && <span style={styles.comboBadge}>🔥 {combo} COMBO (+{combo * 5}점 보너스!)</span>}
         </div>
-
-        {/* 출제된 단어 뜻 & 힌트 */}
         <div style={styles.questionBox}>
           <h2 style={styles.korText}>{currentWord?.kor}</h2>
           {showHint && (
@@ -416,8 +378,6 @@ export default function WordMaster({
             </p>
           )}
         </div>
-
-        {/* 단어 입력 폼 */}
         <form onSubmit={handleSubmit} style={{ width: '100%' }}>
           <input
             ref={inputRef}
@@ -449,27 +409,14 @@ export default function WordMaster({
             정답 제출 ↵
           </button>
         </form>
-
-        {/* 피드백 메시지 & 힌트 버튼 */}
         <div style={styles.footerRow}>
           <div style={{ minHeight: '24px', flex: 1, textAlign: 'left' }}>
             {feedback && (
-              <span style={{
-                fontWeight: 'bold',
-                fontSize: '14px',
-                color: feedback.isCorrect ? '#166534' : '#dc2626'
-              }}>
-                {feedback.msg}
-              </span>
+              <span style={{ fontWeight: 'bold', fontSize: '14px', color: feedback.isCorrect ? '#166534' : '#dc2626' }}>{feedback.msg}</span>
             )}
           </div>
-
           {!showHint && !feedback?.isCorrect && (
-            <button
-              type="button"
-              onClick={() => { setShowHint(true); setAttempts((p) => p + 1); }}
-              style={styles.hintBtn}
-            >
+            <button type="button" onClick={() => { setShowHint(true); setAttempts((p) => p + 1); }} style={styles.hintBtn}>
               💡 첫 글자 힌트 보기 (-10점)
             </button>
           )}
@@ -479,47 +426,10 @@ export default function WordMaster({
   );
 }
 
-// ================= 🎨 스타일 시트 =================
 const styles: { [key: string]: React.CSSProperties } = {
-  container: { 
-    minHeight: '100vh', 
-    backgroundColor: '#f1f5f9', 
-    color: '#0f172a', 
-    display: 'flex', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    padding: '20px', 
-    boxSizing: 'border-box',
-    fontFamily: 'Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif' 
-  },
-  card: { 
-    backgroundColor: '#ffffff', 
-    color: '#0f172a', 
-    padding: '30px', 
-    borderRadius: '20px', 
-    boxShadow: '0 10px 25px rgba(0,0,0,0.05)', 
-    width: '100%', 
-    maxWidth: '550px', 
-    textAlign: 'center', 
-    display: 'flex', 
-    flexDirection: 'column', 
-    alignItems: 'center',
-    position: 'relative',
-    boxSizing: 'border-box'
-  },
-  backBtn: { 
-    position: 'absolute', 
-    top: '20px', 
-    left: '20px', 
-    padding: '10px 15px', 
-    borderRadius: '10px', 
-    background: '#e2e8f0', 
-    color: '#0f172a', 
-    border: 'none', 
-    cursor: 'pointer', 
-    fontWeight: 'bold',
-    fontSize: '14px'
-  },
+  container: { minHeight: '100vh', backgroundColor: '#f1f5f9', color: '#0f172a', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', boxSizing: 'border-box', fontFamily: 'Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif' },
+  card: { backgroundColor: '#ffffff', color: '#0f172a', padding: '30px', borderRadius: '20px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)', width: '100%', maxWidth: '550px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', boxSizing: 'border-box' },
+  backBtn: { position: 'absolute', top: '20px', left: '20px', padding: '10px 15px', borderRadius: '10px', background: '#e2e8f0', color: '#0f172a', border: 'none', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' },
   title: { fontSize: '26px', fontWeight: '800', color: '#1e293b', margin: '10px 0 10px 0', wordBreak: 'keep-all' },
   subtitle: { fontSize: '15px', color: '#64748b', marginBottom: '20px', wordBreak: 'keep-all' },
   myStatsContainer: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: '15px', backgroundColor: '#f8fafc', padding: '12px 20px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '20px', width: '100%', boxSizing: 'border-box' },
@@ -530,24 +440,19 @@ const styles: { [key: string]: React.CSSProperties } = {
   statDivider: { width: '1px', height: '28px', backgroundColor: '#e2e8f0' },
   bookGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', boxSizing: 'border-box', width: '100%', maxHeight: '55vh', overflowY: 'auto', paddingRight: '2px' },
   bookBtn: { padding: '10px 6px', backgroundColor: '#f8fafc', border: '2px solid #e2e8f0', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold', color: '#334155', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', boxSizing: 'border-box' },
-  
   gameHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '12px', fontSize: '15px', fontWeight: 'bold' },
   badge: { backgroundColor: '#e0f2fe', color: '#0369a1', padding: '6px 14px', borderRadius: '20px', fontSize: '14px' },
   scoreText: { color: '#d97706', fontSize: '18px' },
   progressBg: { width: '100%', height: '8px', backgroundColor: '#e2e8f0', borderRadius: '4px', overflow: 'hidden', marginBottom: '5px' },
   progressBar: { height: '100%', backgroundColor: '#2563eb', transition: 'width 0.3s ease' },
   comboBadge: { backgroundColor: '#fef3c7', color: '#d97706', padding: '6px 16px', borderRadius: '20px', fontSize: '14px', fontWeight: '800', border: '1px solid #fde68a', animation: 'bounce 0.3s ease' },
-  
   questionBox: { backgroundColor: '#f8fafc', width: '100%', padding: '35px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', margin: '10px 0 20px 0', boxSizing: 'border-box' },
   korText: { fontSize: '28px', fontWeight: '900', color: '#0f172a', margin: 0, wordBreak: 'keep-all', lineHeight: '1.4' },
   hintText: { fontSize: '16px', color: '#64748b', marginTop: '15px', marginBottom: 0 },
-  
   input: { width: '100%', padding: '16px', fontSize: '20px', fontWeight: 'bold', borderRadius: '14px', border: '2px solid #cbd5e1', textAlign: 'center', outline: 'none', boxSizing: 'border-box', marginBottom: '12px', color: '#0f172a' },
   submitBtn: { width: '100%', padding: '16px', color: '#ffffff', border: 'none', borderRadius: '14px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', transition: 'background 0.2s', boxSizing: 'border-box' },
-  
   footerRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: '10px', minHeight: '30px' },
   hintBtn: { background: 'transparent', border: 'none', color: '#64748b', fontSize: '13px', cursor: 'pointer', textDecoration: 'underline', fontWeight: '600', padding: '4px 0', whiteSpace: 'nowrap' },
-  
   scoreBox: { backgroundColor: '#f0fdf4', border: '2px solid #bbf7d0', padding: '25px', borderRadius: '20px', width: '100%', margin: '20px 0', boxSizing: 'border-box' },
   finishBtn: { width: '100%', padding: '16px', backgroundColor: '#10b981', color: '#ffffff', border: 'none', borderRadius: '14px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 12px rgba(16,185,129,0.2)', boxSizing: 'border-box' }
 };

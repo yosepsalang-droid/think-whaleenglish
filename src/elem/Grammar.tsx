@@ -69,7 +69,7 @@ export default function Grammar({
   const fetchAndCalculateRankings = () => {
     setLoadingRank(true);
     // 문법 로그 시트 URL (CONFIG.SHEETS.GRAMMAR_LOG 가 없다면 기본 단어 로그나 지정된 시트 사용)
-    const logSheetUrl = CONFIG.SHEETS.GRAMMAR_LOG || CONFIG.SHEETS.WORD_LOG;
+    const logSheetUrl = CONFIG.SHEETS.GRAMMAR_LOG;
     
     if (!logSheetUrl) {
       setLoadingRank(false);
