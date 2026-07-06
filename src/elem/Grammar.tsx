@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { CONFIG } from '../config';
-import type { RankEntry } from '../utils/grammarLogRanking';
+
+// 💡 랭킹 데이터 타입 정의
+interface RankEntry {
+  studentName: string;
+  score: number;
+}
 
 interface GrammarProps {
   onBack: () => void;
@@ -16,11 +21,12 @@ export default function Grammar({
   onBack,
   student,
   totalScore = 0,
-  myRank = null,
-  rankings = { thisMonth: [], lastMonth: [] },
-  loadingRank = false,
+  myRank: externalMyRank = null,
+  rankings: externalRankings = { thisMonth: [], lastMonth: [] },
+  loadingRank: externalLoadingRank = false,
   onGameComplete,
-}: GrammarProps) {  // 💡 상태(LOBBY, GAME, TRANSITION, RESULT)
+}: GrammarProps) {
+  // 💡 상태(LOBBY, GAME, TRANSITION, RESULT)
   const [gameState, setGameState] = useState('LOBBY');
   const [studentName, setStudentName] = useState(student?.name || '');
   
@@ -34,8 +40,16 @@ export default function Grammar({
   const [allData, setAllData] = useState<any[]>([]);
   const [currentQ, setCurrentQ] = useState<any>(null);
 
+  // 🏆 자체 랭킹 계산을 위한 state
+  const [rankings, setRankings] = useState<{ thisMonth: RankEntry[]; lastMonth: RankEntry[] }>({ thisMonth: [], lastMonth: [] });
+  const [loadingRank, setLoadingRank] = useState(true);
+  const [myRank, setMyRank] = useState<number | null>(externalMyRank);
+  const [myTotalScore, setMyTotalScore] = useState<number>(totalScore);
+
+  // 1️⃣ 교재 문제 데이터 불러오기
   useEffect(() => {
-    fetch(CONFIG.SHEETS.ELEM_GRAMMAR)      .then(res => res.text())
+    fetch(CONFIG.SHEETS.ELEM_GRAMMAR)
+      .then(res => res.text())
       .then(text => {
         const rows = text.split(/\r?\n/).slice(1);
         const parsed = rows.map(r => { 
@@ -50,6 +64,103 @@ export default function Grammar({
         setAllData(parsed);
       });
   }, []);
+
+  // 🏆 [핵심 추가!] 시트에서 기록 읽어와 이번달/지난달 랭킹 계산하기
+  const fetchAndCalculateRankings = () => {
+    setLoadingRank(true);
+    // 문법 로그 시트 URL (CONFIG.SHEETS.GRAMMAR_LOG 가 없다면 기본 단어 로그나 지정된 시트 사용)
+    const logSheetUrl = CONFIG.SHEETS.GRAMMAR_LOG || CONFIG.SHEETS.WORD_LOG;
+    
+    if (!logSheetUrl) {
+      setLoadingRank(false);
+      return;
+    }
+
+    fetch(logSheetUrl)
+      .then(res => res.text())
+      .then(text => {
+        const rows = text.split(/\r?\n/).slice(1);
+        
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1; // 1~12
+        
+        // 지난달 연도 및 월 계산
+        const lastMonthYear = currentMonth === 1 ? currentYear - 1 : currentYear;
+        const lastMonth = currentMonth === 1 ? 12 : currentMonth - 1;
+
+        const thisMonthScores: { [name: string]: number } = {};
+        const lastMonthScores: { [name: string]: number } = {};
+
+        rows.forEach(row => {
+          const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+          if (cols.length < 5) return;
+
+          const dateStr = cols[0]?.replace(/^"|"$/g, '').trim(); // 날짜 (예: "2026. 7. 5 오후 11:26:12")
+          const name = cols[1]?.replace(/^"|"$/g, '').trim();   // 이름
+          const taskType = cols[2]?.replace(/^"|"$/g, '').trim();// 학습종류
+          const scoreVal = parseInt(cols[4]?.replace(/^"|"$/g, '').trim() || '0', 10); // 점수
+
+          if (!name || isNaN(scoreVal) || scoreVal <= 0) return;
+
+          // 날짜에서 연도와 월 추출 (한글 형식, ISO 형식 모두 지원)
+          let rowYear = 0;
+          let rowMonth = 0;
+
+          const match = dateStr.match(/(\d{4})[./-]\s*(\d{1,2})/);
+          if (match) {
+            rowYear = parseInt(match[1], 10);
+            rowMonth = parseInt(match[2], 10);
+          }
+
+          // 이번달 데이터 합산
+          if (rowYear === currentYear && rowMonth === currentMonth) {
+            thisMonthScores[name] = (thisMonthScores[name] || 0) + scoreVal;
+          }
+          // 지난달 데이터 합산
+          if (rowYear === lastMonthYear && rowMonth === lastMonth) {
+            lastMonthScores[name] = (lastMonthScores[name] || 0) + scoreVal;
+          }
+        });
+
+        // 객체를 배열로 변환하고 점수 내림차순 정렬
+        const thisMonthList = Object.entries(thisMonthScores)
+          .map(([studentName, score]) => ({ studentName, score }))
+          .sort((a, b) => b.score - a.score);
+
+        const lastMonthList = Object.entries(lastMonthScores)
+          .map(([studentName, score]) => ({ studentName, score }))
+          .sort((a, b) => b.score - a.score);
+
+        setRankings({
+          thisMonth: thisMonthList,
+          lastMonth: lastMonthList
+        });
+
+        // 내 이름이 있으면 내 랭킹과 총점 업데이트
+        if (studentName.trim()) {
+          const myIdx = thisMonthList.findIndex(item => item.studentName === studentName.trim());
+          if (myIdx !== -1) {
+            setMyRank(myIdx + 1);
+            setMyTotalScore(thisMonthList[myIdx].score);
+          } else {
+            setMyRank(null);
+            setMyTotalScore(0);
+          }
+        }
+
+        setLoadingRank(false);
+      })
+      .catch(err => {
+        console.error("랭킹 데이터 불러오기 실패:", err);
+        setLoadingRank(false);
+      });
+  };
+
+  // 로비 진입 시, 그리고 이름이 바뀔 때마다 랭킹 계산 실행
+  useEffect(() => {
+    fetchAndCalculateRankings();
+  }, [studentName]);
 
   const getBooksForStage = (currentStage: number) => {
     switch (currentStage) {
@@ -210,7 +321,10 @@ export default function Grammar({
       });
     };
 
-    const refreshRankings = () => onGameComplete?.();
+    const refreshRankings = () => {
+      onGameComplete?.();
+      fetchAndCalculateRankings(); // 💡 게임 종료 후 랭킹 즉시 갱신!
+    };
 
     sendLog()
       .then(() => refreshRankings())
@@ -225,6 +339,7 @@ export default function Grammar({
   };
 
   const myRankText = myRank !== null ? `${myRank}위` : '-';
+  
   // ================= 🎨 화면 렌더링 =================
   if (gameState === 'LOBBY') {
     return (
@@ -243,7 +358,6 @@ export default function Grammar({
               readOnly={!!student?.name}
             />
             {studentName && (
-              /* ✅ 요청하신 2줄 레이아웃 (위: 타이틀 / 아래: 수치) */
               <div style={styles.myStatsContainer}>
                 <div style={styles.statCol}>
                   <span style={styles.statLabel}>🏆 내 랭킹</span>
@@ -252,8 +366,9 @@ export default function Grammar({
                 <div style={styles.statDivider} />
                 <div style={styles.statCol}>
                   <span style={styles.statLabel}>🔥 총 합산 점수</span>
-                  <strong style={styles.statScoreValue}>{totalScore.toLocaleString()}점</strong>
-                </div>              </div>
+                  <strong style={styles.statScoreValue}>{myTotalScore.toLocaleString()}점</strong>
+                </div>              
+              </div>
             )}
           </div>
           
@@ -316,8 +431,6 @@ export default function Grammar({
 
   if (gameState === 'GAME') {
     const progressPercent = ((((stage - 1) * 10) + qCount) / 100) * 100;
-    
-    /* ✅ 초 카운트다운 비례 게이지 계산 및 색상 변경 (3초 이하 빨강, 5초 이하 주황) */
     const timerPercent = (timeLeft / 10) * 100;
     const timerBarColor = timeLeft <= 3 ? '#ef4444' : (timeLeft <= 5 ? '#f97316' : '#10b981');
 
@@ -331,12 +444,10 @@ export default function Grammar({
             <span style={styles.lives}>{"❤️".repeat(lives)}</span>
           </div>
 
-          {/* ✅ 1. 남은 시간 실시간 카운트다운 게이지 (새로 추가됨) */}
           <div style={styles.timerBg}>
             <div style={{...styles.timerBar, width: `${timerPercent}%`, backgroundColor: timerBarColor}} />
           </div>
 
-          {/* 2. 전체 스테이지 진행률 바 */}
           <div style={styles.progressBg}>
             <div style={{...styles.progressBar, width: `${progressPercent}%`}} />
           </div>
@@ -370,6 +481,7 @@ export default function Grammar({
             setQCount(1);
             setScore(0);
             onGameComplete?.();
+            fetchAndCalculateRankings(); // 💡 다시 시작할 때도 랭킹 갱신!
           }} 
           style={styles.startBtn}
         >          처음으로 돌아가기
@@ -379,23 +491,19 @@ export default function Grammar({
   );
 }
 
-// ✅ 스타일 시트 보강
 const styles: { [key: string]: React.CSSProperties } = {
   container: { minHeight: '100vh', backgroundColor: '#f1f5f9', color: '#0f172a', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', fontFamily: 'Pretendard, sans-serif' },
   card: { backgroundColor: '#ffffff', color: '#0f172a', padding: '30px', borderRadius: '20px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)', width: '100%', maxWidth: '600px', textAlign: 'center' },
   backBtn: { position: 'absolute', top: '20px', left: '20px', padding: '10px 15px', borderRadius: '10px', background: '#e2e8f0', color: '#0f172a', border: 'none', cursor: 'pointer', fontWeight: 'bold' },
   title: { fontSize: '28px', fontWeight: 'bold', color: '#1e293b', marginBottom: '25px' },
-  // ✅ 로비 모바일 반응형(자동 줄바꿈) 레이아웃 스타일
   myInfoBox: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: '15px', padding: '15px 20px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '25px' },
   nameInput: { fontSize: '18px', fontWeight: 'bold', color: '#0f172a', backgroundColor: 'transparent', border: 'none', outline: 'none', width: '110px', textAlign: 'center' },
-  
   myStatsContainer: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: '15px', backgroundColor: '#ffffff', padding: '10px 20px', borderRadius: '10px', border: '1px solid #cbd5e1', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' },
   statCol: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', minWidth: '80px' },
   statLabel: { fontSize: '12px', color: '#64748b', fontWeight: 'bold' },
   statRankValue: { fontSize: '17px', color: '#d97706', fontWeight: '800' },
   statScoreValue: { fontSize: '17px', color: '#2563eb', fontWeight: '800' },
   statDivider: { width: '1px', height: '28px', backgroundColor: '#e2e8f0' },
-  
   rankContainer: { display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '30px' },
   rankBox: { backgroundColor: '#ffffff', padding: '15px 20px', borderRadius: '12px', border: '1px solid #e2e8f0', textAlign: 'left', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' },
   rankTitle: { fontSize: '16px', fontWeight: 'bold', color: '#334155', marginBottom: '10px', borderBottom: '1px solid #e2e8f0', paddingBottom: '8px' },
@@ -407,11 +515,8 @@ const styles: { [key: string]: React.CSSProperties } = {
   timer: { color: '#ef4444', fontWeight: '800' },
   scoreText: { color: '#475569' },
   lives: { fontSize: '18px' },
-  
-  /* ✅ 카운트다운 타이머 게이지 스타일 */
   timerBg: { width: '100%', height: '10px', backgroundColor: '#f1f5f9', borderRadius: '5px', overflow: 'hidden', marginBottom: '8px', border: '1px solid #e2e8f0' },
   timerBar: { height: '100%', transition: 'width 1s linear, background-color 0.3s' },
-  
   progressBg: { width: '100%', height: '6px', backgroundColor: '#e2e8f0', borderRadius: '3px', overflow: 'hidden', marginBottom: '8px' },
   progressBar: { height: '100%', backgroundColor: '#3b82f6', transition: 'width 0.3s' },
   questionText: { fontSize: '28px', fontWeight: 'bold', color: '#0f172a', margin: '20px 0 40px 0', wordBreak: 'keep-all' },

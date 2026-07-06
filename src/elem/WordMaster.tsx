@@ -25,14 +25,19 @@ export default function WordMaster({
   onBack,
   studentName = '테스트학생',
   grade = '초5',
-  totalScore = 0,
-  myRank = null,
-  loadingRank = false,
+  totalScore: externalTotalScore = 0,
+  myRank: externalMyRank = null,
+  loadingRank: externalLoadingRank = false,
   onGameComplete,
 }: WordMasterProps) {
   // --- 상태 관리 (State) ---
   const [allWords, setAllWords] = useState<WordItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  // 🏆 [핵심 추가!] 자체적으로 내 랭킹과 내 점수를 계산하기 위한 state
+  const [myRank, setMyRank] = useState<number | null>(externalMyRank);
+  const [myTotalScore, setMyTotalScore] = useState<number>(externalTotalScore);
+  const [loadingRank, setLoadingRank] = useState<boolean>(true);
 
   const [gameState, setGameState] = useState<'SELECT_BOOK' | 'PLAYING' | 'RESULT'>('SELECT_BOOK');
   const [selectedBook, setSelectedBook] = useState<string>('');
@@ -59,7 +64,6 @@ export default function WordMaster({
 
         const parsed: WordItem[] = rows
           .map((row) => {
-            // 따옴표 내 쉼표를 무시하는 안전한 CSV 분리 규칙
             const cells = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
             return {
               book: cells[0]?.replace(/^"|"$/g, '').trim() || '',
@@ -83,13 +87,86 @@ export default function WordMaster({
     fetchWords();
   }, []);
 
-  // 2️⃣ 고래영어 교재 드롭다운 정렬 (시리즈: 240 > 520 > 860 > 1240 > 1680 순서 보장 + 각 권 1~6권 순서 보장)
+  // 🏆 [핵심 추가!] 시트에서 기록을 읽어와 "이번 달 내 순위와 총점"만 정확히 계산!
+  const fetchAndCalculateMyRank = () => {
+    setLoadingRank(true);
+    const logSheetUrl = CONFIG.SHEETS.GRAMMAR_LOG || CONFIG.SHEETS.WORD_LOG;
+    
+    if (!logSheetUrl || !studentName.trim()) {
+      setLoadingRank(false);
+      return;
+    }
+
+    fetch(logSheetUrl)
+      .then(res => res.text())
+      .then(text => {
+        const rows = text.split(/\r?\n/).slice(1);
+        
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1; // 1~12월
+
+        const thisMonthScores: { [name: string]: number } = {};
+
+        rows.forEach(row => {
+          const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+          if (cols.length < 5) return;
+
+          const dateStr = cols[0]?.replace(/^"|"$/g, '').trim(); // 날짜
+          const name = cols[1]?.replace(/^"|"$/g, '').trim();   // 이름
+          const scoreVal = parseInt(cols[4]?.replace(/^"|"$/g, '').trim() || '0', 10); // 점수
+
+          if (!name || isNaN(scoreVal) || scoreVal <= 0) return;
+
+          // 날짜에서 연도와 월 추출
+          let rowYear = 0;
+          let rowMonth = 0;
+          const match = dateStr.match(/(\d{4})[./-]\s*(\d{1,2})/);
+          if (match) {
+            rowYear = parseInt(match[1], 10);
+            rowMonth = parseInt(match[2], 10);
+          }
+
+          // 이번 달 기록만 합산
+          if (rowYear === currentYear && rowMonth === currentMonth) {
+            thisMonthScores[name] = (thisMonthScores[name] || 0) + scoreVal;
+          }
+        });
+
+        // 점수 내림차순으로 정렬하여 랭킹 매기기
+        const sortedList = Object.entries(thisMonthScores)
+          .map(([name, total]) => ({ name, total }))
+          .sort((a, b) => b.total - a.total);
+
+        // 내 이름 찾기
+        const myIdx = sortedList.findIndex(item => item.name === studentName.trim());
+        if (myIdx !== -1) {
+          setMyRank(myIdx + 1); // 인덱스 + 1 = 내 순위
+          setMyTotalScore(sortedList[myIdx].total);
+        } else {
+          setMyRank(null);
+          setMyTotalScore(0);
+        }
+
+        setLoadingRank(false);
+      })
+      .catch(err => {
+        console.error("내 랭킹 계산 실패:", err);
+        setLoadingRank(false);
+      });
+  };
+
+  // 💡 처음 들어왔을 때나 학생 이름이 바뀔 때 자동 계산 실행
+  useEffect(() => {
+    fetchAndCalculateMyRank();
+  }, [studentName]);
+
+  // 2️⃣ 고래영어 교재 드롭다운 정렬
   const bookList = useMemo(() => {
     const unique = Array.from(new Set(allWords.map((w) => w.book))).filter(Boolean);
     const seriesOrder = ['240', '520', '860', '1240', '1680'];
 
     return unique.sort((a, b) => {
-      // 시리즈 숫자 추출 (예: "520 2권" -> "520")
       const seriesA = a.match(/\d+/)?.[0] || '';
       const seriesB = b.match(/\d+/)?.[0] || '';
       const idxA = seriesOrder.indexOf(seriesA);
@@ -97,16 +174,13 @@ export default function WordMaster({
       const posA = idxA === -1 ? 9999 : idxA;
       const posB = idxB === -1 ? 9999 : idxB;
 
-      // 1순위: 시리즈 순서 정렬
       if (posA !== posB) return posA - posB;
 
-      // 2순위: 같은 시리즈 내에서 권수 정렬 (예: 1권 -> 2권 -> 6권)
       const volA = parseInt(a.replace(/[^0-9]/g, '').replace(seriesA, '') || '0', 10);
       const volB = parseInt(b.replace(/[^0-9]/g, '').replace(seriesB, '') || '0', 10);
       
       if (volA !== volB) return volA - volB;
 
-      // 3순위: 텍스트 기본 정렬
       return a.localeCompare(b);
     });
   }, [allWords]);
@@ -118,12 +192,10 @@ export default function WordMaster({
     }
   }, [gameState, currentIndex]);
 
-  // 3️⃣ 게임 시작 (랜덤 20문제 추출)
+  // 3️⃣ 게임 시작
   const startGame = (bookName: string) => {
     setSelectedBook(bookName);
     const filtered = allWords.filter((w) => w.book === bookName);
-
-    // 랜덤으로 섞어서 20개만 추출 (20개 미만이면 전체 사용)
     const shuffled = [...filtered].sort(() => Math.random() - 0.5).slice(0, 20);
 
     if (shuffled.length === 0) {
@@ -162,7 +234,6 @@ export default function WordMaster({
     speakWord(currentWord.eng);
 
     if (isCorrect) {
-      // 💡 [흥미 유발 점수 규칙] 기본 50점 - (오답 횟수 * 10점, 최소 10점 보장) + 콤보당 5점 보너스!
       const baseScore = Math.max(10, 50 - attempts * 10);
       const comboBonus = combo * 5;
       const earnedPoints = baseScore + comboBonus;
@@ -183,12 +254,10 @@ export default function WordMaster({
           setShowHint(false);
           setFeedback(null);
         } else {
-          // 🎉 20문제 완수 시 종료 및 시트 저장 함수 호출
           handleFinishGame(nextScore);
         }
       }, 1300);
     } else {
-      // ❌ 오답 시 처리: 콤보 초기화, 하트/점수 차감 유도
       setAttempts((prev) => prev + 1);
       setCombo(0);
       setFeedback({ isCorrect: false, msg: 'Oops! 다시 한번 타이핑 해보세요! 🔍' });
@@ -199,36 +268,43 @@ export default function WordMaster({
     }
   };
 
-  // 5️⃣ [핵심] 게임 종료 후 구글 앱스 스크립트(WEB_APP_URL)로 점수 전송
-  const handleFinishGame = async (finalScore: number) => {
+  // 5️⃣ [핵심] 게임 종료 후 점수 저장 + 즉시 내 랭킹 갱신 (재시도 로직 보강!)
+  const handleFinishGame = (finalScore: number) => {
     setGameState('RESULT');
 
     const payload = {
       type: 'saveLog',
-      taskType: '단어게임', // Grammar.tsx의 '문법게임'과 구분되면서 동일 시트에 저장
+      taskType: '단어게임',
       studentName: studentName.trim(),
       grade: grade,
       score: finalScore,
-      stage: selectedBook, // 진행한 교재 이름 기록
-      sheetName: 'GRAMMAR_LOG', // 💡 Ranking.tsx에서 합산할 수 있도록 동일한 시트에 적재
+      stage: selectedBook,
+      sheetName: 'GRAMMAR_LOG',
     };
 
-    try {
-      // CORS 차단을 막기 위해 text/plain 헤더 사용
-      await fetch(CONFIG.WEB_APP_URL, {
+    const sendLog = () => {
+      return fetch(CONFIG.WEB_APP_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(payload),
       });
-      console.log('단어게임 점수가 시트에 성공적으로 기록되었습니다.');
-    } catch (err) {
-      console.error('점수 저장 통신 실패:', err);
-    }
+    };
 
-    // 부모 컴포넌트에 최종 점수 전달 (필요 시 로비 랭킹 갱신용)
-    if (onGameComplete) {
-      onGameComplete();
-    }
+    const refreshAfterSave = () => {
+      onGameComplete?.();
+      fetchAndCalculateMyRank(); // 💡 게임 끝난 점수 즉시 반영!
+    };
+
+    sendLog()
+      .then(() => refreshAfterSave())
+      .catch((err) => {
+        console.error('1차 저장 통신 실패, 1초 뒤 재시도:', err);
+        setTimeout(() => {
+          sendLog()
+            .then(() => refreshAfterSave())
+            .catch((e) => console.error('최종 저장 실패:', e));
+        }, 1000);
+      });
   };
 
   // ================= 🎨 화면 렌더링 =================
@@ -252,18 +328,19 @@ export default function WordMaster({
           <h1 style={styles.title}>⌨️ Word Master 스피드 타자</h1>
           <p style={styles.subtitle}>{studentName} ({grade}) 학생, 도전할 고래영어 교재를 선택하세요!</p>
 
+          {/* ✅ 요청하신 대로 '전체 랭킹' 없이 딱 '개인 랭킹과 점수'만 깔끔하게 출력! */}
           <div style={styles.myStatsContainer}>
             <div style={styles.statCol}>
               <span style={styles.statLabel}>🏅 내 랭킹</span>
               <strong style={styles.statRankValue}>
-                {loadingRank ? '...' : myRankText}
+                {loadingRank ? '계산 중...' : myRankText}
               </strong>
             </div>
             <div style={styles.statDivider} />
             <div style={styles.statCol}>
               <span style={styles.statLabel}>🔥 총 합산 점수</span>
               <strong style={styles.statScoreValue}>
-                {loadingRank ? '...' : `${totalScore.toLocaleString()}점`}
+                {loadingRank ? '계산 중...' : `${myTotalScore.toLocaleString()}점`}
               </strong>
             </div>
           </div>
@@ -295,11 +372,11 @@ export default function WordMaster({
               {score}점
             </strong>
           </div>
-          <button onClick={() => { setGameState('SELECT_BOOK'); onGameComplete?.(); }} style={styles.finishBtn}>
+          <button onClick={() => { setGameState('SELECT_BOOK'); onGameComplete?.(); fetchAndCalculateMyRank(); }} style={styles.finishBtn}>
             다른 교재 도전하기 🚀
           </button>
           <button onClick={onBack} style={{ ...styles.finishBtn, backgroundColor: '#64748b', marginTop: '10px' }}>
-            홈으로 돌아가기 (랭킹 확인)
+            홈으로 돌아가기
           </button>
         </div>
       </div>
@@ -323,7 +400,7 @@ export default function WordMaster({
           <div style={{ ...styles.progressBar, width: `${progressPercent}%` }} />
         </div>
 
-        {/* 콤보 배지 (2콤보 이상일 때 등장) */}
+        {/* 콤보 배지 */}
         <div style={{ minHeight: '30px', margin: '10px 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {combo >= 2 && <span style={styles.comboBadge}>🔥 {combo} COMBO (+{combo * 5}점 보너스!)</span>}
         </div>
@@ -348,7 +425,7 @@ export default function WordMaster({
             value={userAnswer}
             onChange={(e) => {
               setUserAnswer(e.target.value);
-              if (feedback && !feedback.isCorrect) setFeedback(null); // 다시 치기 시작하면 오답 메시지 지우기
+              if (feedback && !feedback.isCorrect) setFeedback(null);
             }}
             disabled={feedback?.isCorrect === true}
             placeholder="영어 단어를 타이핑하세요"
@@ -402,7 +479,7 @@ export default function WordMaster({
   );
 }
 
-// ================= 🎨 스타일 시트 (다크모드 방지 & 반응형 보강) =================
+// ================= 🎨 스타일 시트 =================
 const styles: { [key: string]: React.CSSProperties } = {
   container: { 
     minHeight: '100vh', 
@@ -465,12 +542,4 @@ const styles: { [key: string]: React.CSSProperties } = {
   korText: { fontSize: '28px', fontWeight: '900', color: '#0f172a', margin: 0, wordBreak: 'keep-all', lineHeight: '1.4' },
   hintText: { fontSize: '16px', color: '#64748b', marginTop: '15px', marginBottom: 0 },
   
-  input: { width: '100%', padding: '16px', fontSize: '20px', fontWeight: 'bold', borderRadius: '14px', border: '2px solid #cbd5e1', textAlign: 'center', outline: 'none', boxSizing: 'border-box', marginBottom: '12px', color: '#0f172a' },
-  submitBtn: { width: '100%', padding: '16px', color: '#ffffff', border: 'none', borderRadius: '14px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', transition: 'background 0.2s', boxSizing: 'border-box' },
-  
-  footerRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: '10px', minHeight: '30px' },
-  hintBtn: { background: 'transparent', border: 'none', color: '#64748b', fontSize: '13px', cursor: 'pointer', textDecoration: 'underline', fontWeight: '600', padding: '4px 0', whiteSpace: 'nowrap' },
-  
-  scoreBox: { backgroundColor: '#f0fdf4', border: '2px solid #bbf7d0', padding: '25px', borderRadius: '20px', width: '100%', margin: '20px 0', boxSizing: 'border-box' },
-  finishBtn: { width: '100%', padding: '16px', backgroundColor: '#10b981', color: '#ffffff', border: 'none', borderRadius: '14px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 12px rgba(16,185,129,0.2)', boxSizing: 'border-box' }
-};
+  input: { width: '100%', padding: '16px', fontSize: '20px', fontWeight: 'bold', borderRadius: '1
