@@ -65,10 +65,9 @@ export default function Grammar({
       });
   }, []);
 
-  // 🏆 [핵심 추가!] 시트에서 기록 읽어와 이번달/지난달 랭킹 계산하기
+  // 🏆 [핵심 수정 완료!] cols[3]을 점수로 가져와 이번달/지난달 랭킹 계산하기
   const fetchAndCalculateRankings = () => {
     setLoadingRank(true);
-    // 문법 로그 시트 URL (CONFIG.SHEETS.GRAMMAR_LOG 가 없다면 기본 단어 로그나 지정된 시트 사용)
     const logSheetUrl = CONFIG.SHEETS.GRAMMAR_LOG;
     
     if (!logSheetUrl) {
@@ -94,16 +93,15 @@ export default function Grammar({
 
         rows.forEach(row => {
           const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-          if (cols.length < 5) return;
+          if (cols.length < 4) return;
 
-          const dateStr = cols[0]?.replace(/^"|"$/g, '').trim(); // 날짜 (예: "2026. 7. 5 오후 11:26:12")
-          const name = cols[1]?.replace(/^"|"$/g, '').trim();   // 이름
-          const taskType = cols[2]?.replace(/^"|"$/g, '').trim();// 학습종류
-          const scoreVal = parseInt(cols[4]?.replace(/^"|"$/g, '').trim() || '0', 10); // 점수
+          const dateStr = cols[0]?.replace(/^"|"$/g, '').trim(); // 0열: 날짜
+          const name = cols[1]?.replace(/^"|"$/g, '').trim();    // 1열: 이름
+          const scoreVal = parseInt(cols[3]?.replace(/^"|"$/g, '').trim() || '0', 10); // ⭐3열: 점수로 정확히 수정!
 
           if (!name || isNaN(scoreVal) || scoreVal <= 0) return;
 
-          // 날짜에서 연도와 월 추출 (한글 형식, ISO 형식 모두 지원)
+          // 날짜에서 연도와 월 추출
           let rowYear = 0;
           let rowMonth = 0;
 
@@ -299,7 +297,7 @@ export default function Grammar({
     }
   };
 
-  // 7️⃣ 종료 및 점수 저장 (✅ CORS 차단 방지 및 실패 시 자동 재시도 로직 적용!)
+  // 7️⃣ 종료 및 점수 저장
   const endGame = (finalScore: number) => {
     setGameState('RESULT');
     
@@ -323,7 +321,7 @@ export default function Grammar({
 
     const refreshRankings = () => {
       onGameComplete?.();
-      fetchAndCalculateRankings(); // 💡 게임 종료 후 랭킹 즉시 갱신!
+      fetchAndCalculateRankings(); 
     };
 
     sendLog()
@@ -481,7 +479,7 @@ export default function Grammar({
             setQCount(1);
             setScore(0);
             onGameComplete?.();
-            fetchAndCalculateRankings(); // 💡 다시 시작할 때도 랭킹 갱신!
+            fetchAndCalculateRankings();
           }} 
           style={styles.startBtn}
         >          처음으로 돌아가기
