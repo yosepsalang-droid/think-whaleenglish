@@ -15,13 +15,19 @@ interface WordMasterProps {
   onBack: () => void;
   studentName?: string;
   grade?: string;
-  onGameComplete?: (finalScore: number) => void;
+  totalScore?: number;
+  myRank?: number | null;
+  loadingRank?: boolean;
+  onGameComplete?: () => void;
 }
 
 export default function WordMaster({
   onBack,
   studentName = '테스트학생',
   grade = '초5',
+  totalScore = 0,
+  myRank = null,
+  loadingRank = false,
   onGameComplete,
 }: WordMasterProps) {
   // --- 상태 관리 (State) ---
@@ -221,7 +227,7 @@ export default function WordMaster({
 
     // 부모 컴포넌트에 최종 점수 전달 (필요 시 로비 랭킹 갱신용)
     if (onGameComplete) {
-      onGameComplete(finalScore);
+      onGameComplete();
     }
   };
 
@@ -237,16 +243,35 @@ export default function WordMaster({
 
   // 1. 교재 선택 화면 (LOBBY)
   if (gameState === 'SELECT_BOOK') {
+    const myRankText = myRank !== null ? `${myRank}위` : '-';
+
     return (
       <div style={styles.container}>
         <button onClick={onBack} style={styles.backBtn}>⬅ 돌아가기</button>
         <div style={styles.card}>
           <h1 style={styles.title}>⌨️ Word Master 스피드 타자</h1>
           <p style={styles.subtitle}>{studentName} ({grade}) 학생, 도전할 고래영어 교재를 선택하세요!</p>
+
+          <div style={styles.myStatsContainer}>
+            <div style={styles.statCol}>
+              <span style={styles.statLabel}>🏅 내 랭킹</span>
+              <strong style={styles.statRankValue}>
+                {loadingRank ? '...' : myRankText}
+              </strong>
+            </div>
+            <div style={styles.statDivider} />
+            <div style={styles.statCol}>
+              <span style={styles.statLabel}>🔥 총 합산 점수</span>
+              <strong style={styles.statScoreValue}>
+                {loadingRank ? '...' : `${totalScore.toLocaleString()}점`}
+              </strong>
+            </div>
+          </div>
+
           <div style={styles.bookGrid}>
             {bookList.map((b) => (
-              <button key={b} onClick={() => startGame(b)} style={styles.bookBtn}>
-                📘 {b} 도전 (20문제)
+              <button key={b} onClick={() => startGame(b)} style={styles.bookBtn} title={`${b} 도전 (20문제)`}>
+                📘 {b}
               </button>
             ))}
           </div>
@@ -270,7 +295,7 @@ export default function WordMaster({
               {score}점
             </strong>
           </div>
-          <button onClick={() => setGameState('SELECT_BOOK')} style={styles.finishBtn}>
+          <button onClick={() => { setGameState('SELECT_BOOK'); onGameComplete?.(); }} style={styles.finishBtn}>
             다른 교재 도전하기 🚀
           </button>
           <button onClick={onBack} style={{ ...styles.finishBtn, backgroundColor: '#64748b', marginTop: '10px' }}>
@@ -419,9 +444,15 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '14px'
   },
   title: { fontSize: '26px', fontWeight: '800', color: '#1e293b', margin: '10px 0 10px 0', wordBreak: 'keep-all' },
-  subtitle: { fontSize: '15px', color: '#64748b', marginBottom: '25px', wordBreak: 'keep-all' },
-  bookGrid: { display: 'grid', gridTemplateColumns: '1fr', gap: '10px', width: '100%', maxHeight: '60vh', overflowY: 'auto', paddingRight: '4px' },
-  bookBtn: { padding: '16px', backgroundColor: '#f8fafc', border: '2px solid #e2e8f0', borderRadius: '14px', fontSize: '16px', fontWeight: 'bold', color: '#334155', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', textAlign: 'left' },
+  subtitle: { fontSize: '15px', color: '#64748b', marginBottom: '20px', wordBreak: 'keep-all' },
+  myStatsContainer: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: '15px', backgroundColor: '#f8fafc', padding: '12px 20px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '20px', width: '100%', boxSizing: 'border-box' },
+  statCol: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', minWidth: '90px' },
+  statLabel: { fontSize: '12px', color: '#64748b', fontWeight: 'bold' },
+  statRankValue: { fontSize: '17px', color: '#d97706', fontWeight: '800' },
+  statScoreValue: { fontSize: '17px', color: '#2563eb', fontWeight: '800' },
+  statDivider: { width: '1px', height: '28px', backgroundColor: '#e2e8f0' },
+  bookGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', boxSizing: 'border-box', width: '100%', maxHeight: '55vh', overflowY: 'auto', paddingRight: '2px' },
+  bookBtn: { padding: '10px 6px', backgroundColor: '#f8fafc', border: '2px solid #e2e8f0', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold', color: '#334155', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', boxSizing: 'border-box' },
   
   gameHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '12px', fontSize: '15px', fontWeight: 'bold' },
   badge: { backgroundColor: '#e0f2fe', color: '#0369a1', padding: '6px 14px', borderRadius: '20px', fontSize: '14px' },

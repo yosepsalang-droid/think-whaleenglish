@@ -1,8 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { CONFIG } from '../config';
+import type { RankEntry } from '../utils/grammarLogRanking';
 
-export default function Grammar({ onBack, student }: { onBack: () => void, student?: any }) {
-  // 💡 상태(LOBBY, GAME, TRANSITION, RESULT)
+interface GrammarProps {
+  onBack: () => void;
+  student?: { name?: string; grade?: string };
+  totalScore?: number;
+  myRank?: number | null;
+  rankings?: { thisMonth: RankEntry[]; lastMonth: RankEntry[] };
+  loadingRank?: boolean;
+  onGameComplete?: () => void;
+}
+
+export default function Grammar({
+  onBack,
+  student,
+  totalScore = 0,
+  myRank = null,
+  rankings = { thisMonth: [], lastMonth: [] },
+  loadingRank = false,
+  onGameComplete,
+}: GrammarProps) {  // 💡 상태(LOBBY, GAME, TRANSITION, RESULT)
   const [gameState, setGameState] = useState('LOBBY');
   const [studentName, setStudentName] = useState(student?.name || '');
   
@@ -15,27 +33,9 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
   
   const [allData, setAllData] = useState<any[]>([]);
   const [currentQ, setCurrentQ] = useState<any>(null);
-  
-  const [rankings, setRankings] = useState<{thisMonth: any[], lastMonth: any[]}>({ thisMonth: [], lastMonth: [] });
-  const [loadingRank, setLoadingRank] = useState(false);
 
-  // 1️⃣ 랭킹 및 시트 데이터 불러오기 (✅ CORS 방지 헤더 추가)
   useEffect(() => {
-    setLoadingRank(true);
-    fetch(CONFIG.WEB_APP_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ type: "getRanking", taskType: "문법게임" })
-    })
-    .then(res => res.json())
-    .then(data => {
-      setRankings({ thisMonth: data.thisMonth || [], lastMonth: data.lastMonth || [] });
-      setLoadingRank(false);
-    })
-    .catch(() => setLoadingRank(false));
-
-    fetch(CONFIG.SHEETS.ELEM_GRAMMAR)
-      .then(res => res.text())
+    fetch(CONFIG.SHEETS.ELEM_GRAMMAR)      .then(res => res.text())
       .then(text => {
         const rows = text.split(/\r?\n/).slice(1);
         const parsed = rows.map(r => { 
@@ -194,33 +194,37 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
     
     const payload = {
       type: "saveLog",
-      studentName: studentName.trim(), // 이름 앞뒤 공백 제거
+      studentName: studentName.trim(),
       grade: student?.grade || "미지정",
       score: finalScore,
       stage: stage,
-      taskType: "문법게임"
+      taskType: "문법게임",
+      sheetName: 'GRAMMAR_LOG',
     };
 
     const sendLog = () => {
       return fetch(CONFIG.WEB_APP_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // preflight 방지 핵심
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(payload)
       });
     };
 
-    sendLog().catch(err => {
-      console.error("1차 저장 실패, 1초 뒤 재시도합니다:", err);
-      setTimeout(() => {
-        sendLog().catch(e => console.error("최종 저장 실패:", e));
-      }, 1000);
-    });
+    const refreshRankings = () => onGameComplete?.();
+
+    sendLog()
+      .then(() => refreshRankings())
+      .catch(err => {
+        console.error("1차 저장 실패, 1초 뒤 재시도합니다:", err);
+        setTimeout(() => {
+          sendLog()
+            .then(() => refreshRankings())
+            .catch(e => console.error("최종 저장 실패:", e));
+        }, 1000);
+      });
   };
 
-  const myRankIndex = rankings.thisMonth.findIndex(r => r.studentName === studentName.trim());
-  const myRankText = myRankIndex !== -1 ? `${myRankIndex + 1}위` : '-';
-  const myCurrentScore = myRankIndex !== -1 ? rankings.thisMonth[myRankIndex].score : 0;
-
+  const myRankText = myRank !== null ? `${myRank}위` : '-';
   // ================= 🎨 화면 렌더링 =================
   if (gameState === 'LOBBY') {
     return (
@@ -247,10 +251,9 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
                 </div>
                 <div style={styles.statDivider} />
                 <div style={styles.statCol}>
-                  <span style={styles.statLabel}>🔥 현재 점수</span>
-                  <strong style={styles.statScoreValue}>{myCurrentScore}점</strong>
-                </div>
-              </div>
+                  <span style={styles.statLabel}>🔥 총 합산 점수</span>
+                  <strong style={styles.statScoreValue}>{totalScore.toLocaleString()}점</strong>
+                </div>              </div>
             )}
           </div>
           
@@ -366,10 +369,10 @@ export default function Grammar({ onBack, student }: { onBack: () => void, stude
             setStage(1);
             setQCount(1);
             setScore(0);
+            onGameComplete?.();
           }} 
           style={styles.startBtn}
-        >
-          처음으로 돌아가기
+        >          처음으로 돌아가기
         </button>
       </div>
     </div>

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { fetchIntegratedRankings, type IntegratedRankingResult } from './utils/grammarLogRanking';
 
 // 🧸 초등부 컴포넌트
 import Home from './elem/Home';
@@ -24,6 +25,31 @@ export default function App() {
   const [loggedInStudent, setLoggedInStudent] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [studentMode, setStudentMode] = useState<'elementary' | 'middle' | null>(null);
+  const [integratedRank, setIntegratedRank] = useState<IntegratedRankingResult & { loading: boolean }>({
+    totalScore: 0,
+    myRank: null,
+    thisMonth: [],
+    lastMonth: [],
+    loading: false,
+  });
+
+  const refreshIntegratedRank = useCallback(async (studentName: string) => {
+    setIntegratedRank((prev) => ({ ...prev, loading: true }));
+    const result = await fetchIntegratedRankings(studentName);
+    setIntegratedRank({ ...result, loading: false });
+  }, []);
+
+  const handleGameComplete = useCallback(() => {
+    if (loggedInStudent?.name) {
+      refreshIntegratedRank(loggedInStudent.name);
+    }
+  }, [loggedInStudent, refreshIntegratedRank]);
+
+  useEffect(() => {
+    if (loggedInStudent && studentMode === 'elementary') {
+      refreshIntegratedRank(loggedInStudent.name);
+    }
+  }, [loggedInStudent, studentMode, refreshIntegratedRank]);
 
   useEffect(() => {
     const fetchStudents = async () => {
@@ -140,9 +166,28 @@ export default function App() {
           {currentMenu === 'word' && <Word onBack={() => setCurrentMenu('home')} />}
           {currentMenu === 'sentence' && <Sentence onBack={() => setCurrentMenu('home')} />}
           {currentMenu === 'chat' && <WhaleChat onBack={() => setCurrentMenu('home')} />}
-          {currentMenu === 'grammar' && <Grammar student={loggedInStudent} onBack={() => setCurrentMenu('home')} />}
-          {/* 👇 [이 한 줄을 추가!] wordMaster 메뉴를 누르면 타자 게임 화면을 켜줍니다 */}
-          {currentMenu === 'wordMaster' && <WordMaster studentName={loggedInStudent.name} grade={loggedInStudent.grade} onBack={() => setCurrentMenu('home')} />}
+          {currentMenu === 'grammar' && (
+            <Grammar
+              student={loggedInStudent}
+              onBack={() => setCurrentMenu('home')}
+              totalScore={integratedRank.totalScore}
+              myRank={integratedRank.myRank}
+              rankings={{ thisMonth: integratedRank.thisMonth, lastMonth: integratedRank.lastMonth }}
+              loadingRank={integratedRank.loading}
+              onGameComplete={handleGameComplete}
+            />
+          )}
+          {currentMenu === 'wordMaster' && (
+            <WordMaster
+              studentName={loggedInStudent.name}
+              grade={loggedInStudent.grade}
+              onBack={() => setCurrentMenu('home')}
+              totalScore={integratedRank.totalScore}
+              myRank={integratedRank.myRank}
+              loadingRank={integratedRank.loading}
+              onGameComplete={handleGameComplete}
+            />
+          )}
         </div>
       );
     }
