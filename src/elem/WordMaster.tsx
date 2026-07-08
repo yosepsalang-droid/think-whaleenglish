@@ -46,9 +46,11 @@ export default function WordMaster({
 
   const [userAnswer, setUserAnswer] = useState<string>('');
   const [score, setScore] = useState<number>(0);
-  const [attempts, setAttempts] = useState<number>(0); 
-  const [combo, setCombo] = useState<number>(0); 
+  const [attempts, setAttempts] = useState<number>(0);
+  const [wrongCount, setWrongCount] = useState<number>(0);
+  const [combo, setCombo] = useState<number>(0);
   const [showHint, setShowHint] = useState<boolean>(false);
+  const [showHalfHint, setShowHalfHint] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ isCorrect: boolean; msg: string } | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -201,10 +203,12 @@ export default function WordMaster({
     setCurrentIndex(0);
     setScore(0);
     setAttempts(0);
+    setWrongCount(0);
     setCombo(0);
     setUserAnswer('');
     setFeedback(null);
     setShowHint(false);
+    setShowHalfHint(false);
     setGameState('PLAYING');
   };
 
@@ -218,6 +222,50 @@ export default function WordMaster({
     }
   };
 
+  const generateHalfHint = (word: string): string => {
+    const chars = word.split('');
+    const letterIndices = chars
+      .map((c, i) => (/[a-zA-Z]/.test(c) ? i : -1))
+      .filter((i) => i !== -1);
+    const visibleCount = Math.max(1, Math.floor(letterIndices.length * 0.5));
+
+    const visibleSet = new Set(letterIndices.slice(0, visibleCount));
+    return chars.map((c, i) => (visibleSet.has(i) ? c : '_')).join('');
+  };
+
+  const resetQuestionState = () => {
+    setUserAnswer('');
+    setAttempts(0);
+    setWrongCount(0);
+    setShowHint(false);
+    setShowHalfHint(false);
+    setFeedback(null);
+  };
+
+  const moveToNextQuestion = (currentScore: number, delayMs = 0) => {
+    const advance = () => {
+      if (currentIndex + 1 < gameWords.length) {
+        setCurrentIndex((prev) => prev + 1);
+        resetQuestionState();
+      } else {
+        handleFinishGame(currentScore);
+      }
+    };
+
+    if (delayMs > 0) {
+      setTimeout(advance, delayMs);
+    } else {
+      advance();
+    }
+  };
+
+  const calculateEarnedPoints = (withHalfHint: boolean) => {
+    const baseScore = Math.max(10, 50 - attempts * 10);
+    const comboBonus = combo * 5;
+    const rawPoints = baseScore + comboBonus;
+    return withHalfHint ? Math.floor(rawPoints * 0.5) : rawPoints;
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentWord || !userAnswer.trim() || feedback?.isCorrect) return;
@@ -226,9 +274,7 @@ export default function WordMaster({
     speakWord(currentWord.eng);
 
     if (isCorrect) {
-      const baseScore = Math.max(10, 50 - attempts * 10);
-      const comboBonus = combo * 5;
-      const earnedPoints = baseScore + comboBonus;
+      const earnedPoints = calculateEarnedPoints(showHalfHint);
       const nextScore = score + earnedPoints;
 
       setScore(nextScore);
@@ -236,28 +282,43 @@ export default function WordMaster({
 
       const praises = ['Perfect! ✨', 'Awesome! 🔥', 'Great Job! 👍', 'Unbelievable! 🚀'];
       const randomPraise = praises[Math.floor(Math.random() * praises.length)];
-      setFeedback({ isCorrect: true, msg: `${randomPraise} (+${earnedPoints}점)` });
+      const penaltyNote = showHalfHint ? ' (50% 힌트 감점 적용)' : '';
+      setFeedback({ isCorrect: true, msg: `${randomPraise} (+${earnedPoints}점)${penaltyNote}` });
 
-      setTimeout(() => {
-        if (currentIndex + 1 < gameWords.length) {
-          setCurrentIndex((prev) => prev + 1);
-          setUserAnswer('');
-          setAttempts(0);
-          setShowHint(false);
-          setFeedback(null);
-        } else {
-          handleFinishGame(nextScore);
-        }
-      }, 1300);
+      moveToNextQuestion(nextScore, 1300);
     } else {
+      const nextWrongCount = wrongCount + 1;
+      setWrongCount(nextWrongCount);
       setAttempts((prev) => prev + 1);
       setCombo(0);
-      setFeedback({ isCorrect: false, msg: 'Oops! 다시 한번 타이핑 해보세요! 🔍' });
+
+      if (nextWrongCount >= 3) {
+        setShowHalfHint(true);
+        setFeedback({
+          isCorrect: false,
+          msg: '💡 3번 틀렸어요! 50% 힌트가 열렸습니다. (정답 시 50% 감점)',
+        });
+      } else {
+        setFeedback({ isCorrect: false, msg: 'Oops! 다시 한번 타이핑 해보세요! 🔍' });
+      }
+
       if (inputRef.current) {
         inputRef.current.focus();
         inputRef.current.select();
       }
     }
+  };
+
+  const handleSkipQuestion = () => {
+    if (!currentWord || feedback?.isCorrect) return;
+
+    setCombo(0);
+    setFeedback({ isCorrect: false, msg: '⏩ 패스! 0점 처리 후 다음 문제로 이동합니다.' });
+    moveToNextQuestion(score, 600);
+  };
+
+  const handleBackDuringGame = () => {
+    handleFinishGame(score);
   };
 
   const handleFinishGame = (finalScore: number) => {
@@ -357,6 +418,7 @@ export default function WordMaster({
   const progressPercent = ((currentIndex + 1) / gameWords.length) * 100;
   return (
     <div style={styles.container}>
+      <button onClick={handleBackDuringGame} style={styles.backBtn}>⬅ 돌아가기</button>
       <div style={styles.card}>
         <div style={styles.gameHeader}>
           <span style={styles.badge}>📘 {selectedBook} ({currentIndex + 1} / {gameWords.length})</span>
@@ -370,7 +432,14 @@ export default function WordMaster({
         </div>
         <div style={styles.questionBox}>
           <h2 style={styles.korText}>{currentWord?.kor}</h2>
-          {showHint && (
+          {showHalfHint && currentWord && (
+            <p style={styles.hintText}>
+              💡 50% 힌트: <strong style={{ letterSpacing: '3px', color: '#dc2626', fontFamily: 'monospace' }}>
+                {generateHalfHint(currentWord.eng)}
+              </strong>
+            </p>
+          )}
+          {showHint && !showHalfHint && (
             <p style={styles.hintText}>
               💡 힌트: <strong style={{ letterSpacing: '4px', color: '#2563eb' }}>
                 {currentWord?.eng[0]} {currentWord?.eng.slice(1).replace(/[a-zA-Z]/g, '_ ')}
@@ -409,13 +478,21 @@ export default function WordMaster({
             정답 제출 ↵
           </button>
         </form>
+        <button
+          type="button"
+          onClick={handleSkipQuestion}
+          disabled={feedback?.isCorrect === true}
+          style={styles.skipBtn}
+        >
+          ⏩ 다음 문제로 넘어가기 (0점)
+        </button>
         <div style={styles.footerRow}>
           <div style={{ minHeight: '24px', flex: 1, textAlign: 'left' }}>
             {feedback && (
               <span style={{ fontWeight: 'bold', fontSize: '14px', color: feedback.isCorrect ? '#166534' : '#dc2626' }}>{feedback.msg}</span>
             )}
           </div>
-          {!showHint && !feedback?.isCorrect && (
+          {!showHint && !showHalfHint && !feedback?.isCorrect && (
             <button type="button" onClick={() => { setShowHint(true); setAttempts((p) => p + 1); }} style={styles.hintBtn}>
               💡 첫 글자 힌트 보기 (-10점)
             </button>
@@ -451,6 +528,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   hintText: { fontSize: '16px', color: '#64748b', marginTop: '15px', marginBottom: 0 },
   input: { width: '100%', padding: '16px', fontSize: '20px', fontWeight: 'bold', borderRadius: '14px', border: '2px solid #cbd5e1', textAlign: 'center', outline: 'none', boxSizing: 'border-box', marginBottom: '12px', color: '#0f172a' },
   submitBtn: { width: '100%', padding: '16px', color: '#ffffff', border: 'none', borderRadius: '14px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', transition: 'background 0.2s', boxSizing: 'border-box' },
+  skipBtn: { width: '100%', padding: '12px', marginTop: '8px', backgroundColor: '#f8fafc', color: '#64748b', border: '2px solid #e2e8f0', borderRadius: '12px', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer', boxSizing: 'border-box' },
   footerRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: '10px', minHeight: '30px' },
   hintBtn: { background: 'transparent', border: 'none', color: '#64748b', fontSize: '13px', cursor: 'pointer', textDecoration: 'underline', fontWeight: '600', padding: '4px 0', whiteSpace: 'nowrap' },
   scoreBox: { backgroundColor: '#f0fdf4', border: '2px solid #bbf7d0', padding: '25px', borderRadius: '20px', width: '100%', margin: '20px 0', boxSizing: 'border-box' },
