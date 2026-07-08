@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CONFIG } from '../config';
+import { CONFIG, withCacheBust } from '../config';
 
 // 💡 랭킹 데이터 타입 정의
 interface RankEntry {
@@ -14,7 +14,7 @@ interface GrammarProps {
   myRank?: number | null;
   rankings?: { thisMonth: RankEntry[]; lastMonth: RankEntry[] };
   loadingRank?: boolean;
-  onGameComplete?: () => void;
+  onGameComplete?: (addedScore?: number) => void;
 }
 
 export default function Grammar({
@@ -66,25 +66,24 @@ export default function Grammar({
   }, []);
 
   // 🏆 [핵심 수정 완료!] cols[3]을 점수로 가져와 이번달/지난달 랭킹 계산하기
-  const fetchAndCalculateRankings = () => {
-    setLoadingRank(true);
+  const fetchAndCalculateRankings = (options?: { delayMs?: number }) => {
+    const { delayMs = 0 } = options ?? {};
     const logSheetUrl = CONFIG.SHEETS.GRAMMAR_LOG;
-    
-    if (!logSheetUrl) {
-      setLoadingRank(false);
-      return;
-    }
 
-    fetch(logSheetUrl)
+    if (!logSheetUrl) return;
+
+    setLoadingRank(true);
+
+    const doFetch = () => {
+      fetch(withCacheBust(logSheetUrl))
       .then(res => res.text())
       .then(text => {
         const rows = text.split(/\r?\n/).slice(1);
         
         const now = new Date();
         const currentYear = now.getFullYear();
-        const currentMonth = now.getMonth() + 1; // 1~12
+        const currentMonth = now.getMonth() + 1;
         
-        // 지난달 연도 및 월 계산
         const lastMonthYear = currentMonth === 1 ? currentYear - 1 : currentYear;
         const lastMonth = currentMonth === 1 ? 12 : currentMonth - 1;
 
@@ -95,13 +94,12 @@ export default function Grammar({
           const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
           if (cols.length < 4) return;
 
-          const dateStr = cols[0]?.replace(/^"|"$/g, '').trim(); // 0열: 날짜
-          const name = cols[1]?.replace(/^"|"$/g, '').trim();    // 1열: 이름
-          const scoreVal = parseInt(cols[3]?.replace(/^"|"$/g, '').trim() || '0', 10); // ⭐3열: 점수로 정확히 수정!
+          const dateStr = cols[0]?.replace(/^"|"$/g, '').trim();
+          const name = cols[1]?.replace(/^"|"$/g, '').trim();
+          const scoreVal = parseInt(cols[3]?.replace(/^"|"$/g, '').trim() || '0', 10);
 
           if (!name || isNaN(scoreVal) || scoreVal <= 0) return;
 
-          // 날짜에서 연도와 월 추출
           let rowYear = 0;
           let rowMonth = 0;
 
@@ -111,17 +109,14 @@ export default function Grammar({
             rowMonth = parseInt(match[2], 10);
           }
 
-          // 이번달 데이터 합산
           if (rowYear === currentYear && rowMonth === currentMonth) {
             thisMonthScores[name] = (thisMonthScores[name] || 0) + scoreVal;
           }
-          // 지난달 데이터 합산
           if (rowYear === lastMonthYear && rowMonth === lastMonth) {
             lastMonthScores[name] = (lastMonthScores[name] || 0) + scoreVal;
           }
         });
 
-        // 객체를 배열로 변환하고 점수 내림차순 정렬
         const thisMonthList = Object.entries(thisMonthScores)
           .map(([studentName, score]) => ({ studentName, score }))
           .sort((a, b) => b.score - a.score);
@@ -135,15 +130,11 @@ export default function Grammar({
           lastMonth: lastMonthList
         });
 
-        // 내 이름이 있으면 내 랭킹과 총점 업데이트
         if (studentName.trim()) {
           const myIdx = thisMonthList.findIndex(item => item.studentName === studentName.trim());
           if (myIdx !== -1) {
             setMyRank(myIdx + 1);
-            setMyTotalScore(thisMonthList[myIdx].score);
-          } else {
-            setMyRank(null);
-            setMyTotalScore(0);
+            setMyTotalScore((prev) => Math.max(prev, thisMonthList[myIdx].score));
           }
         }
 
@@ -153,6 +144,13 @@ export default function Grammar({
         console.error("랭킹 데이터 불러오기 실패:", err);
         setLoadingRank(false);
       });
+    };
+
+    if (delayMs > 0) {
+      setTimeout(doFetch, delayMs);
+    } else {
+      doFetch();
+    }
   };
 
   // 로비 진입 시, 그리고 이름이 바뀔 때마다 랭킹 계산 실행
@@ -300,6 +298,7 @@ export default function Grammar({
   // 7️⃣ 종료 및 점수 저장
   const endGame = (finalScore: number) => {
     setGameState('RESULT');
+    setMyTotalScore((prev) => prev + finalScore);
     
     const payload = {
       type: "saveLog",
@@ -320,8 +319,8 @@ export default function Grammar({
     };
 
     const refreshRankings = () => {
-      onGameComplete?.();
-      fetchAndCalculateRankings(); 
+      onGameComplete?.(finalScore);
+      fetchAndCalculateRankings({ delayMs: 1500 });
     };
 
     sendLog()
@@ -373,7 +372,7 @@ export default function Grammar({
           <div style={styles.rankContainer}>
             <div style={styles.rankBox}>
               <h3 style={styles.rankTitle}>🏆 지난달 명예의 전당 (TOP 3)</h3>
-              {loadingRank ? <p style={{color: '#64748b'}}>불러오는 중...</p> : (
+              {loadingRank && rankings.lastMonth.length === 0 ? <p style={{color: '#64748b'}}>불러오는 중...</p> : (
                 rankings.lastMonth.length === 0 ? <p style={styles.empty}>아직 기록이 없습니다.</p> :
                 rankings.lastMonth.slice(0,3).map((r: any, idx: number) => (
                   <div key={idx} style={styles.rankRow}>
@@ -386,7 +385,7 @@ export default function Grammar({
 
             <div style={styles.rankBox}>
               <h3 style={styles.rankTitle}>🔥 이번달 실시간 랭킹 (TOP 5)</h3>
-              {loadingRank ? <p style={{color: '#64748b'}}>불러오는 중...</p> : (
+              {loadingRank && rankings.thisMonth.length === 0 ? <p style={{color: '#64748b'}}>불러오는 중...</p> : (
                 rankings.thisMonth.length === 0 ? <p style={styles.empty}>아직 기록이 없습니다.</p> :
                 rankings.thisMonth.slice(0,5).map((r: any, idx: number) => (
                   <div key={idx} style={styles.rankRow}>

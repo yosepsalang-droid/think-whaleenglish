@@ -1,4 +1,4 @@
-import { CONFIG } from '../config';
+import { CONFIG, withCacheBust } from '../config';
 
 export interface RankEntry {
   studentName: string;
@@ -79,7 +79,7 @@ export async function fetchIntegratedRankings(studentName: string): Promise<Inte
   };
 
   try {
-    const response = await fetch(CONFIG.SHEETS.GRAMMAR_LOG);
+    const response = await fetch(withCacheBust(CONFIG.SHEETS.GRAMMAR_LOG));
     const csvText = await response.text();
     const lines = csvText.split(/\r?\n/).filter((line) => line.trim());
 

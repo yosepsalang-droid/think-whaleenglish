@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { CONFIG } from '../config'; 
+import { CONFIG, withCacheBust } from '../config'; 
 
 // 📝 구글 시트에서 불러올 단어 데이터 타입
 interface WordItem {
@@ -18,7 +18,7 @@ interface WordMasterProps {
   totalScore?: number;
   myRank?: number | null;
   loadingRank?: boolean;
-  onGameComplete?: () => void;
+  onGameComplete?: (addedScore?: number) => void;
 }
 
 export default function WordMaster({
@@ -89,17 +89,17 @@ export default function WordMaster({
     fetchWords();
   }, []);
 
-  // 🏆 [수정됨] 이번 달 모든 게임 점수 합산 로직 (D열 기준)
-  const fetchAndCalculateMyRank = () => {
-    setLoadingRank(true);
-    const logSheetUrl = CONFIG.SHEETS.GRAMMAR_LOG; 
-    
-    if (!logSheetUrl || !studentName.trim()) {
-      setLoadingRank(false);
-      return;
-    }
+  // 🏆 이번 달 모든 게임 점수 합산 로직 (D열 기준)
+  const fetchAndCalculateMyRank = (options?: { delayMs?: number }) => {
+    const { delayMs = 0 } = options ?? {};
+    const logSheetUrl = CONFIG.SHEETS.GRAMMAR_LOG;
 
-    fetch(logSheetUrl)
+    if (!logSheetUrl || !studentName.trim()) return;
+
+    setLoadingRank(true);
+
+    const doFetch = () => {
+      fetch(withCacheBust(logSheetUrl))
       .then(res => res.text())
       .then(text => {
         const rows = text.split(/\r?\n/).slice(1);
@@ -112,12 +112,11 @@ export default function WordMaster({
 
         rows.forEach(row => {
           const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-          // 데이터 구조: [0:ts, 1:name, 2:grade, 3:score, 4:stage, 5:type]
           if (cols.length < 4) return;
 
           const dateStr = cols[0]?.replace(/^"|"$/g, '').trim(); 
           const name = cols[1]?.replace(/^"|"$/g, '').trim();   
-          const scoreVal = parseInt(cols[3]?.replace(/^"|"$/g, '').trim() || '0', 10); // D열(점수)
+          const scoreVal = parseInt(cols[3]?.replace(/^"|"$/g, '').trim() || '0', 10);
 
           if (!name || isNaN(scoreVal) || scoreVal <= 0) return;
 
@@ -129,7 +128,6 @@ export default function WordMaster({
             rowMonth = parseInt(match[2], 10);
           }
 
-          // 이번 달 기록만 합산 (모든 task_type 통합)
           if (rowYear === currentYear && rowMonth === currentMonth) {
             thisMonthScores[name] = (thisMonthScores[name] || 0) + scoreVal;
           }
@@ -142,10 +140,7 @@ export default function WordMaster({
         const myIdx = sortedList.findIndex(item => item.name === studentName.trim());
         if (myIdx !== -1) {
           setMyRank(myIdx + 1);
-          setMyTotalScore(sortedList[myIdx].total);
-        } else {
-          setMyRank(null);
-          setMyTotalScore(0);
+          setMyTotalScore((prev) => Math.max(prev, sortedList[myIdx].total));
         }
 
         setLoadingRank(false);
@@ -154,6 +149,13 @@ export default function WordMaster({
         console.error("내 랭킹 계산 실패:", err);
         setLoadingRank(false);
       });
+    };
+
+    if (delayMs > 0) {
+      setTimeout(doFetch, delayMs);
+    } else {
+      doFetch();
+    }
   };
 
   useEffect(() => {
@@ -323,6 +325,7 @@ export default function WordMaster({
 
   const handleFinishGame = (finalScore: number) => {
     setGameState('RESULT');
+    setMyTotalScore((prev) => prev + finalScore);
 
     const payload = {
       type: 'saveLog',
@@ -343,8 +346,8 @@ export default function WordMaster({
     };
 
     const refreshAfterSave = () => {
-      onGameComplete?.();
-      fetchAndCalculateMyRank();
+      onGameComplete?.(finalScore);
+      fetchAndCalculateMyRank({ delayMs: 1500 });
     };
 
     sendLog()
@@ -378,12 +381,12 @@ export default function WordMaster({
           <div style={styles.myStatsContainer}>
             <div style={styles.statCol}>
               <span style={styles.statLabel}>🏅 내 랭킹</span>
-              <strong style={styles.statRankValue}>{loadingRank ? '계산 중...' : myRankText}</strong>
+              <strong style={styles.statRankValue}>{myRankText}</strong>
             </div>
             <div style={styles.statDivider} />
             <div style={styles.statCol}>
               <span style={styles.statLabel}>🔥 총 합산 점수</span>
-              <strong style={styles.statScoreValue}>{loadingRank ? '계산 중...' : `${myTotalScore.toLocaleString()}점`}</strong>
+              <strong style={styles.statScoreValue}>{`${myTotalScore.toLocaleString()}점`}</strong>
             </div>
           </div>
           <div style={styles.bookGrid}>

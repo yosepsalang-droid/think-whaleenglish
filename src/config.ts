@@ -39,3 +39,9 @@ export const CONFIG = {
       MODEL: "gemini-1.5-flash",
     }
   };
+
+/** 구글 시트 CSV 캐시 방지용 타임스탬프 파라미터 추가 */
+export const withCacheBust = (url: string): string => {
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}t=${Date.now()}`;
+};

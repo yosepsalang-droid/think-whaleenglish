@@ -180,13 +180,12 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
         },
         body: JSON.stringify({
           type: "saveLog",
-          sheetName: CONFIG.SHEETS?.ELEM_MANAGE || "ELEM_MANAGE",
-          targetSheet: "ELEM_MANAGE",
+          sheetName: "ELEM_MANAGE",
           studentId: studentId,
           studentName: studentName,
           taskType: "단어게임",
           status: "완료",
-          score: String(finalScore)
+          score: String(finalScore),
         }),
       });
       console.log("구글 시트에 로그 적재 성공");

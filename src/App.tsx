@@ -33,15 +33,29 @@ export default function App() {
     loading: false,
   });
 
-  const refreshIntegratedRank = useCallback(async (studentName: string) => {
-    setIntegratedRank((prev) => ({ ...prev, loading: true }));
+  const refreshIntegratedRank = useCallback(async (studentName: string, optimisticAddedScore = 0) => {
+    setIntegratedRank((prev) => ({
+      ...prev,
+      loading: true,
+      totalScore: optimisticAddedScore > 0 ? prev.totalScore + optimisticAddedScore : prev.totalScore,
+    }));
+
+    if (optimisticAddedScore > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+
     const result = await fetchIntegratedRankings(studentName);
-    setIntegratedRank({ ...result, loading: false });
+    setIntegratedRank((prev) => ({
+      ...result,
+      loading: false,
+      totalScore: Math.max(prev.totalScore, result.totalScore),
+      myRank: result.myRank ?? prev.myRank,
+    }));
   }, []);
 
-  const handleGameComplete = useCallback(() => {
+  const handleGameComplete = useCallback((addedScore = 0) => {
     if (loggedInStudent?.name) {
-      refreshIntegratedRank(loggedInStudent.name);
+      refreshIntegratedRank(loggedInStudent.name, addedScore);
     }
   }, [loggedInStudent, refreshIntegratedRank]);
 
@@ -163,8 +177,20 @@ export default function App() {
       return (
         <div>
           {currentMenu === 'home' && <Home student={loggedInStudent} onNavigate={setCurrentMenu} onLogout={() => { setIsLoggedIn(false); setId(''); setStudentMode(null); }} />}
-          {currentMenu === 'word' && <Word onBack={() => setCurrentMenu('home')} />}
-          {currentMenu === 'sentence' && <Sentence onBack={() => setCurrentMenu('home')} />}
+          {currentMenu === 'word' && (
+            <Word
+              onBack={() => setCurrentMenu('home')}
+              studentId={loggedInStudent.id}
+              studentName={loggedInStudent.name}
+            />
+          )}
+          {currentMenu === 'sentence' && (
+            <Sentence
+              onBack={() => setCurrentMenu('home')}
+              studentId={loggedInStudent.id}
+              studentName={loggedInStudent.name}
+            />
+          )}
           {currentMenu === 'chat' && <WhaleChat onBack={() => setCurrentMenu('home')} />}
           {currentMenu === 'grammar' && (
             <Grammar

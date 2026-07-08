@@ -211,11 +211,12 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
         },
         body: JSON.stringify({
           type: "saveLog",
+          sheetName: "ELEM_MANAGE",
           studentId: studentId,
           studentName: studentName,
-          taskType: "문장배열", // 💡 구글 시트에 "문장배열" 통계로 묶여 들어갑니다.
+          taskType: "문장배열",
           status: "완료",
-          score: String(finalScore)
+          score: String(finalScore),
         }),
       });
       console.log("구글 시트에 문장배열 로그 적재 성공");
