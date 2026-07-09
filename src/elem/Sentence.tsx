@@ -201,9 +201,18 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
     }
   };
 
-  // 💡 [신규 추가] 구글 앱스 스크립트로 문장배열 게임 완료 로그 전송
+  // 💡 [수정됨] 구글 앱스 스크립트로 문장배열 게임 완료 로그 전송
   const sendLogToGoogleSheet = async (finalScore: number) => {
+    // 🎯 [추가] 100점 만점(맞춘 개수가 총 문제 수와 일치)일 때만 시트에 데이터 전송
+    if (finalScore !== currentSentenceList.length || currentSentenceList.length === 0) {
+      console.log("100점 만점이 아니므로 구글 시트에 기록을 전송하지 않습니다.");
+      return;
+    }
+
     try {
+      // 🎯 [수정] 선택된 교재/유닛/데이 정보를 결합하여 TaskType 생성
+      const detailedTaskType = `문장배열 (${book}_${unit}_${day})`;
+
       await fetch(CONFIG.WEB_APP_URL, {
         method: "POST",
         headers: {
@@ -214,7 +223,7 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
           sheetName: "ELEM_MANAGE",
           studentId: studentId,
           studentName: studentName,
-          taskType: "문장배열",
+          taskType: detailedTaskType, // 🎯 [수정] 문장배열 (520_2_4) 형태로 전송
           status: "완료",
           score: String(finalScore),
         }),
