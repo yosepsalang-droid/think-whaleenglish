@@ -164,6 +164,7 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
+      text = text.replace(/[^a-zA-Z]/g, '');
       utterance.lang = 'en-US';
       utterance.rate = 0.9;
       window.speechSynthesis.speak(utterance);
@@ -172,7 +173,16 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
 
   // 💡 구글 앱스 스크립트 웹앱으로 미션 완료 로그를 전송하는 함수
   const sendLogToGoogleSheet = async (finalScore: number) => {
+    // 🎯 [추가] 100점 만점(맞춘 개수가 총 문제 수와 일치)일 때만 시트에 데이터 전송
+    if (finalScore !== currentWordList.length || currentWordList.length === 0) {
+      console.log("100점 만점이 아니므로 구글 시트에 기록을 전송하지 않습니다.");
+      return;
+    }
+
     try {
+      // 🎯 [수정] 현재 선택되어 적용된 교재 정보를 시리즈_유닛_데이 형태로 변환
+      const detailedTaskType = `단어게임 (${book}_${unit}_${day})`;
+
       await fetch(CONFIG.WEB_APP_URL, {
         method: "POST",
         headers: {
@@ -183,7 +193,7 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
           sheetName: "ELEM_MANAGE",
           studentId: studentId,
           studentName: studentName,
-          taskType: "단어게임",
+          taskType: detailedTaskType, // 🎯 [수정] 단어게임 (520_2_4) 형태로 전송
           status: "완료",
           score: String(finalScore),
         }),
