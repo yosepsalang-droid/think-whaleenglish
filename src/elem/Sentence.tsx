@@ -114,9 +114,27 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
     fetchGoogleSheet();
   }, []);
 
-  // 2️⃣ 실시간 드롭다운 바인딩
+  // 2️⃣ 실시간 드롭다운 바인딩 (💡 [수정] 교재 정렬 순서 적용: 240 > 520 > 860 > 1240 > 1680)
   const books = useMemo(() => {
-    return Array.from(new Set(allSentences.map(s => s.book?.trim()))).filter(Boolean).sort();
+    const uniqueBooks = Array.from(new Set(allSentences.map(s => s.book?.trim()))).filter(Boolean);
+    const order = ['240', '520', '860', '1240', '1680'];
+    
+    return uniqueBooks.sort((a, b) => {
+      // 책 이름에서 숫자만 정확히 뽑아내어(예: "1240_1" -> "1240") 순서를 비교합니다.
+      const numA = a.match(/\d+/)?.[0] || '';
+      const numB = b.match(/\d+/)?.[0] || '';
+      
+      const indexA = order.indexOf(numA);
+      const indexB = order.indexOf(numB);
+      
+      const posA = indexA === -1 ? 9999 : indexA;
+      const posB = indexB === -1 ? 9999 : indexB;
+      
+      if (posA !== posB) {
+        return posA - posB;
+      }
+      return a.localeCompare(b);
+    });
   }, [allSentences]);
 
   const units = useMemo(() => {
