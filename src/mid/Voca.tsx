@@ -33,43 +33,40 @@ export default function Voca({ onBack, currentBook, studentId, studentName }: Vo
   const [attemptCount, setAttemptCount] = useState(1);
   const [isRetestMode, setIsRetestMode] = useState(false);
 
-  // 💡 [핵심] 오늘 날짜 및 이번 달 기준 정보 생성
-  const { todayStr, currentMonthStr, todayFormatted } = useMemo(() => {
+  // 💡 [변경] 실제 오늘 날짜(초기 월 단위 정산용) 설정
+  const { realTodayStr, currentMonthStr } = useMemo(() => {
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
-    const week = ['일', '월', '화', '수', '목', '금', '토'][now.getDay()];
-    
     return {
-      todayStr: `${year}-${month}-${day}`, // YYYY-MM-DD (저장용)
-      currentMonthStr: `${year}-${month}`, // YYYY-MM (월 단위 체크용)
-      todayFormatted: `${year}. ${month}. ${day} (${week})` // UI 출력용
+      realTodayStr: `${year}-${month}-${day}`, // 실제 YYYY-MM-DD
+      currentMonthStr: `${year}-${month}`      // YYYY-MM (월 단위 체크용)
     };
   }, []);
 
-  // 💡 오늘 이 과목을 완료했는지 상태 관리
-  const [isTodayFinished, setIsTodayFinished] = useState(false);
+  // 💡 [추가] 사용자가 선택하는 날짜 상태 (기본값은 실제 오늘 날짜)
+  const [selectedDate, setSelectedDate] = useState(realTodayStr);
+  const [isDateFinished, setIsDateFinished] = useState(false);
+
+  // 💡 [추가] 선택된 날짜를 UI 출력용으로 예쁘게 포맷팅
+  const selectedDateFormatted = useMemo(() => {
+    const d = new Date(selectedDate);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const week = ['일', '월', '화', '수', '목', '금', '토'][d.getDay()];
+    return `${year}. ${month}. ${day} (${week})`;
+  }, [selectedDate]);
 
   // -------------------------------------------------------------
   // 🛠️ [교사 LMS 연동 대기 함수] 
-  // 원장님, 나중에 LMS나 Make.com(텔레그램봇) 연동하실 때 이 함수 내부만 API fetch 코드로 바꾸시면 끝납니다!
   // -------------------------------------------------------------
   const sendToTeacherLMS = async (logData: { studentId: string; studentName: string; date: string; book: string; status: string; score?: number; attempt?: number; note?: string }) => {
     console.log(`[LMS 전송 완료] 학생: ${logData.studentName}, 날짜: ${logData.date}, 상태: ${logData.status}, 사유: ${logData.note || '일반 기록'}`);
-    
-    /* [나중에 LMS 완성되면 사용하실 코드 예시]
-    try {
-      await fetch("https://원장님LMS서버주소/api/voca-log", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(logData)
-      });
-    } catch(e) { console.error("LMS 전송 실패", e); }
-    */
   };
 
-  // 💡 [월 단위 초기화 및 로컬스토리지 제어 로직]
+  // 💡 [변경] 1. 월 단위 초기화 및 정산 (컴포넌트 마운트 시 1회 실행)
   useEffect(() => {
     if (!studentId) return;
 
@@ -77,14 +74,11 @@ export default function Voca({ onBack, currentBook, studentId, studentName }: Vo
     const savedData = localStorage.getItem(storageKey);
     
     if (savedData) {
-      const parsed = JSON.parse(savedData); // { month: "2026-06", records: { "2026-06-24": {...} } }
+      const parsed = JSON.parse(savedData); 
       
-      // 🚨 [매월 1일 월 단위 초기화 검사] 저장된 월과 현재 월이 다르면 실행
+      // 🚨 매월 1일 월 단위 초기화 검사
       if (parsed.month !== currentMonthStr) {
         const lastMonthRecords = parsed.records || {};
-        
-        // 지난달에 완료하지 못한 날(기록이 없거나 상태가 '미완료'인 날)을 추출하여 교사 LMS에 전송 유도
-        // 지난달의 총 일수를 계산하여 루프를 돕니다.
         const [lastYear, lastMonth] = parsed.month.split('-').map(Number);
         const daysInLastMonth = new Date(lastYear, lastMonth, 0).getDate();
 
@@ -93,7 +87,6 @@ export default function Voca({ onBack, currentBook, studentId, studentName }: Vo
           const record: DailyRecord = lastMonthRecords[dayStr];
           
           if (!record || record.status === '미완료') {
-            // 미완료된 데이터를 교사 LMS에 자동 전송
             sendToTeacherLMS({
               studentId,
               studentName,
@@ -104,24 +97,35 @@ export default function Voca({ onBack, currentBook, studentId, studentName }: Vo
             });
           }
         }
-
-        // 지난달 정산이 끝났으므로 이번 달 새로운 규격으로 스토리지를 초기화합니다.
+        // 새로운 달 규격으로 초기화
         const newMonthData = { month: currentMonthStr, records: {} };
         localStorage.setItem(storageKey, JSON.stringify(newMonthData));
-        setIsTodayFinished(false);
-      } else {
-        // 같은 달이라면, 오늘 날짜의 기록이 '완료'인지 확인해서 UI에 띄워줍니다.
-        const todayRecord = parsed.records[todayStr];
-        if (todayRecord && todayRecord.status === '완료') {
-          setIsTodayFinished(true);
-        }
       }
     } else {
-      // 최초 사용자라면 이번 달 데이터 세팅
+      // 최초 사용자
       const initialData = { month: currentMonthStr, records: {} };
       localStorage.setItem(storageKey, JSON.stringify(initialData));
     }
-  }, [studentId, currentMonthStr, todayStr, studentName]);
+  }, [studentId, currentMonthStr, studentName]);
+
+  // 💡 [추가] 2. 선택한 날짜가 바뀔 때마다 해당 날짜의 완료 여부를 로컬스토리지에서 체크
+  useEffect(() => {
+    if (!studentId || !selectedDate) return;
+    
+    const storageKey = `voca_log_${studentId}`;
+    const savedData = localStorage.getItem(storageKey);
+    
+    if (savedData) {
+      const parsed = JSON.parse(savedData);
+      const targetRecord = parsed.records[selectedDate];
+      if (targetRecord && targetRecord.status === '완료') {
+        setIsDateFinished(true);
+      } else {
+        setIsDateFinished(false);
+      }
+    }
+  }, [studentId, selectedDate]);
+
 
   // 💡 단어 데이터 가져오기
   useEffect(() => {
@@ -163,10 +167,12 @@ export default function Voca({ onBack, currentBook, studentId, studentName }: Vo
 
   const startGame = () => {
     if (!selectedBook) return alert("교재를 선택해주세요.");
+    if (!selectedDate) return alert("학습 날짜를 선택해주세요.");
+
     const filtered = allWords.filter(w => w.book === selectedBook);
     if (filtered.length === 0) return alert("선택하신 교재의 단어 데이터가 시트에 없습니다.");
     
-    // 시작할 때 미리 로컬스토리지에 '미완료' 상태로 기본 기록을 생성/유지하여 학습을 유도합니다.
+    // 시작할 때 미리 로컬스토리지에 '미완료' 상태로 기본 기록 생성
     saveProgressToLocal('미완료', 0, 1);
 
     const shuffledWords = [...filtered].sort(() => Math.random() - 0.5).slice(0, 100);
@@ -224,14 +230,17 @@ export default function Voca({ onBack, currentBook, studentId, studentName }: Vo
     }
   }, [currentIndex, gameState, questions, selectedOption]);
 
-  // 💡 로컬스토리지 상태 업데이트 공통 함수
+  // 💡 [변경] 지정된 날짜(selectedDate)에 저장되도록 수정
   const saveProgressToLocal = (status: '완료' | '미완료', finalScore: number, finalAttempt: number) => {
     const storageKey = `voca_log_${studentId}`;
     const savedData = localStorage.getItem(storageKey);
     if (savedData) {
       const parsed = JSON.parse(savedData);
-      parsed.records[todayStr] = {
-        date: todayStr,
+      // 만약 records 객체가 비정상적으로 없다면 방어코드
+      if (!parsed.records) parsed.records = {}; 
+
+      parsed.records[selectedDate] = {
+        date: selectedDate,
         book: selectedBook,
         status: status,
         score: finalScore,
@@ -266,26 +275,23 @@ export default function Voca({ onBack, currentBook, studentId, studentName }: Vo
       } else {
         // 💡 오답 재시험 없이 한 방에 100점 맞고 다 끝낸 경우
         if (wrongQuestions.length === 0 && isCorrect) {
-          setIsTodayFinished(true);
+          setIsDateFinished(true); // 💡 상태 업데이트
           saveProgressToLocal('완료', score + (isCorrect ? 1 : 0), attemptCount);
-          // 실시간으로 교사 LMS 알림 전송
-          sendToTeacherLMS({ studentId, studentName, date: todayStr, book: selectedBook, status: '완료', score: score + 1, attempt: attemptCount });
+          sendToTeacherLMS({ studentId, studentName, date: selectedDate, book: selectedBook, status: '완료', score: score + 1, attempt: attemptCount });
         }
         setGameState('result');
       }
     }, 1500);
   };
 
-  // 💡 오답 재시험을 거쳐 최종 Pass 도장을 받았을 때 처리 함수
   const handleFinalPass = () => {
-    setIsTodayFinished(true);
+    setIsDateFinished(true); // 💡 상태 업데이트
     saveProgressToLocal('완료', questions.length, attemptCount);
     
-    // 최종 통과 데이터를 교사 LMS로 축하 메시지와 함께 전송
     sendToTeacherLMS({
       studentId,
       studentName,
-      date: todayStr,
+      date: selectedDate,
       book: selectedBook,
       status: '완료',
       score: questions.length,
@@ -326,34 +332,45 @@ export default function Voca({ onBack, currentBook, studentId, studentName }: Vo
           <div style={{ fontSize: '14px', color: '#8e8e93', fontWeight: '600', marginBottom: '16px' }}>
             학생 이름: <span style={{ color: '#111', fontWeight: '800' }}>{studentName} ({studentId})</span>
           </div>
+
+          {/* 💡 [추가] 날짜 선택기 추가 */}
+          <div style={{ textAlign: 'left', marginBottom: '12px' }}>
+            <label style={{ fontSize: '13px', fontWeight: '700', color: '#8e8e93', marginLeft: '4px', marginBottom: '8px', display: 'block' }}>학습 날짜 선택</label>
+            <input 
+              type="date" 
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '1px solid #d1d1d6', fontSize: '16px', fontWeight: '600', color: '#333', backgroundColor: '#f9f9f9', outline: 'none', boxSizing: 'border-box' }}
+            />
+          </div>
           
           <div style={{ textAlign: 'left', marginBottom: '16px' }}>
             <label style={{ fontSize: '13px', fontWeight: '700', color: '#8e8e93', marginLeft: '4px', marginBottom: '8px', display: 'block' }}>교재 선택</label>
-            <select value={selectedBook} onChange={(e) => setSelectedBook(e.target.value)} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '1px solid #d1d1d6', fontSize: '16px', fontWeight: '600', color: '#333', backgroundColor: '#f9f9f9', outline: 'none' }}>
+            <select value={selectedBook} onChange={(e) => setSelectedBook(e.target.value)} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '1px solid #d1d1d6', fontSize: '16px', fontWeight: '600', color: '#333', backgroundColor: '#f9f9f9', outline: 'none', boxSizing: 'border-box' }}>
               <option value="">교재를 선택해주세요</option>
               {books.map(b => <option key={b} value={b}>{b}</option>)}
             </select>
           </div>
 
-          {/* 💡 [요청하신 부분] 교재 선택 아래에 현재 날짜 및 완료/미완료 유도 보드 디자인 */}
+          {/* 💡 [수정] 현재 날짜 대신 '선택된 날짜(selectedDateFormatted)'와 상태를 출력 */}
           <div style={{ 
-            background: isTodayFinished ? '#f6fbf6' : '#fff8f8', 
-            border: `1px solid ${isTodayFinished ? '#c8e6c9' : '#ffcdd2'}`,
+            background: isDateFinished ? '#f6fbf6' : '#fff8f8', 
+            border: `1px solid ${isDateFinished ? '#c8e6c9' : '#ffcdd2'}`,
             borderRadius: '16px', padding: '16px', marginBottom: '28px',
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             transition: 'all 0.3s ease'
           }}>
             <div style={{ textAlign: 'left' }}>
-              <span style={{ fontSize: '11px', fontWeight: 800, color: '#8e8e93', display: 'block', marginBottom: '2px' }}>TODAY's STATUS</span>
-              <span style={{ fontSize: '15px', fontWeight: 800, color: '#111' }}>{todayFormatted}</span>
+              <span style={{ fontSize: '11px', fontWeight: 800, color: '#8e8e93', display: 'block', marginBottom: '2px' }}>학습일 상태</span>
+              <span style={{ fontSize: '15px', fontWeight: 800, color: '#111' }}>{selectedDateFormatted}</span>
             </div>
             <div style={{
-              background: isTodayFinished ? '#4caf50' : '#ef5350',
+              background: isDateFinished ? '#4caf50' : '#ef5350',
               color: 'white', fontSize: '13px', fontWeight: 800,
               padding: '6px 14px', borderRadius: '20px',
-              boxShadow: isTodayFinished ? '0 2px 8px rgba(76,175,80,0.3)' : '0 2px 8px rgba(239,83,80,0.3)'
+              boxShadow: isDateFinished ? '0 2px 8px rgba(76,175,80,0.3)' : '0 2px 8px rgba(239,83,80,0.3)'
             }}>
-              {isTodayFinished ? '오늘 학습 완료 ⭕' : '오늘 미완료 ❌'}
+              {isDateFinished ? '해당일 완료 ⭕' : '해당일 미완료 ❌'}
             </div>
           </div>
           
@@ -419,7 +436,6 @@ export default function Voca({ onBack, currentBook, studentId, studentName }: Vo
                 <span style={{ fontSize: '24px', fontWeight: '800', color: '#1b5e20' }}>{attemptCount}회차 시험 만에 통과!</span>
               </div>
 
-              {/* 💡 처음 화면으로 갈 때 완료 도장을 쾅 찍어줍니다. */}
               <button onClick={handleFinalPass} style={{ width: '100%', padding: '18px', background: '#111', color: 'white', border: 'none', borderRadius: '16px', fontSize: '18px', fontWeight: '700', cursor: 'pointer' }}>
                 처음 화면으로 이동 (완료 도장 찍기)
               </button>
