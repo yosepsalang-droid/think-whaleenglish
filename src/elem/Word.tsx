@@ -15,7 +15,7 @@ interface WordProps {
   studentName?: string;
 }
 
-// 💡 [추가] 문자열 유사도(일치율) 계산 함수 (Levenshtein Distance 기반)
+// 💡 문자열 유사도(일치율) 계산 함수
 const calculateSimilarity = (str1: string, str2: string) => {
   const s1 = str1.toLowerCase().replace(/[^a-z0-9]/g, '');
   const s2 = str2.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -24,23 +24,15 @@ const calculateSimilarity = (str1: string, str2: string) => {
   if (s1.length === 0 || s2.length === 0) return 0;
 
   const matrix = [];
-  for (let i = 0; i <= s1.length; i++) {
-    matrix[i] = [i];
-  }
-  for (let j = 0; j <= s2.length; j++) {
-    matrix[0][j] = j;
-  }
+  for (let i = 0; i <= s1.length; i++) { matrix[i] = [i]; }
+  for (let j = 0; j <= s2.length; j++) { matrix[0][j] = j; }
 
   for (let i = 1; i <= s1.length; i++) {
     for (let j = 1; j <= s2.length; j++) {
       if (s1[i - 1] === s2[j - 1]) {
         matrix[i][j] = matrix[i - 1][j - 1];
       } else {
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j - 1] + 1,
-          matrix[i][j - 1] + 1,
-          matrix[i - 1][j] + 1
-        );
+        matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j] + 1);
       }
     }
   }
@@ -67,9 +59,13 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
   const [userAnswer, setUserAnswer] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // 💡 [추가] 녹음 상태 및 시도 횟수 관련 State
   const [isRecording, setIsRecording] = useState(false);
   const [totalAttempts, setTotalAttempts] = useState(0); 
+
+  // 💡 [추가] 단계별 통과 상태 및 정확도 표시용 State
+  const [isTextPassed, setIsTextPassed] = useState(false);
+  const [isVoicePassed, setIsVoicePassed] = useState(false);
+  const [lastSimilarity, setLastSimilarity] = useState<number | null>(null);
 
   const currentWord = currentWordList[currentIndex];
 
@@ -81,14 +77,9 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
     let inQuotes = false;
     for (let i = 0; i < row.length; i++) {
       const char = row[i];
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === ',' && !inQuotes) {
-        result.push(current.trim());
-        current = '';
-      } else {
-        current += char;
-      }
+      if (char === '"') { inQuotes = !inQuotes; } 
+      else if (char === ',' && !inQuotes) { result.push(current.trim()); current = ''; } 
+      else { current += char; }
     }
     result.push(current.trim());
     return result;
@@ -105,19 +96,12 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
           if (index === 0 || !row.trim()) return;
           const cells = parseCSVRow(row);
           if (cells.length >= 5 && cells[0] && cells[3] && cells[4]) {
-            parsedWords.push({
-              book: cells[0],
-              lesson: cells[1],
-              day: cells[2],
-              eng: cells[3],
-              kor: cells[4]
-            });
+            parsedWords.push({ book: cells[0], lesson: cells[1], day: cells[2], eng: cells[3], kor: cells[4] });
           }
         });
         setAllWords(parsedWords);
         setIsLoading(false);
       } catch (error) {
-        console.error("구글 시트 로딩 실패:", error);
         alert("구글 시트 데이터를 가져오지 못했습니다.");
         setIsLoading(false);
       }
@@ -133,10 +117,7 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
       const numB = b.match(/\d+/)?.[0] || '';
       const indexA = order.indexOf(numA);
       const indexB = order.indexOf(numB);
-      const posA = indexA === -1 ? 9999 : indexA;
-      const posB = indexB === -1 ? 9999 : indexB;
-      if (posA !== posB) return posA - posB;
-      return a.localeCompare(b);
+      return (indexA === -1 ? 9999 : indexA) - (indexB === -1 ? 9999 : indexB) || a.localeCompare(b);
     });
   }, [allWords]);
 
@@ -146,58 +127,69 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
   }, [allWords, book]);
 
   const days = useMemo(() => {
-    const filtered = allWords.filter(w =>
-      normalize(w.book) === normalize(book) &&
-      normalize(w.lesson) === normalize(unit)
-    );
+    const filtered = allWords.filter(w => normalize(w.book) === normalize(book) && normalize(w.lesson) === normalize(unit));
     return Array.from(new Set(filtered.map(w => w.day?.trim()))).filter(Boolean);
   }, [allWords, book, unit]);
 
   const filterWords = (targetBook: string, targetLesson: string, targetDay: string) => {
-    const filtered = allWords.filter(w => {
-      return normalize(w.book) === normalize(targetBook) &&
-             normalize(w.lesson) === normalize(targetLesson) &&
-             normalize(w.day) === normalize(targetDay);
-    });
+    const filtered = allWords.filter(w => normalize(w.book) === normalize(targetBook) && normalize(w.lesson) === normalize(targetLesson) && normalize(w.day) === normalize(targetDay));
     if (filtered.length > 0) {
-      const examFormat = filtered.map((w, idx) => ({ id: idx + 1, kor: w.kor, eng: w.eng }));
-      setCurrentWordList(examFormat);
-      setAppliedProgress(`${targetBook} ${targetLesson} ${targetDay}`);
+      setCurrentWordList(filtered.map((w, idx) => ({ id: idx + 1, kor: w.kor, eng: w.eng })));
     } else {
-      setCurrentWordList([{ id: 1, kor: '해당 범위에 등록된 단어가 없습니다.', eng: 'none' }]);
-      setAppliedProgress(`${targetBook} ${targetLesson} ${targetDay}`);
+      setCurrentWordList([{ id: 1, kor: '해당 범위에 단어가 없습니다.', eng: 'none' }]);
     }
+    setAppliedProgress(`${targetBook} ${targetLesson} ${targetDay}`);
+    resetGameState();
+  };
+
+  const resetGameState = () => {
     setCurrentIndex(0);
     setScore(0);
     setIsFinished(false);
-    setFeedback(null);
-    setUserAnswer('');
-    setTotalAttempts(0); // 💡 새 게임 시작 시 시도 횟수 초기화
+    setTotalAttempts(0);
   };
 
+  // 💡 [추가] 다음 문제로 넘어갈 때마다 상태 초기화
   useEffect(() => {
     setUserAnswer('');
     setFeedback(null);
-  }, [currentWordList, currentIndex]);
+    setIsTextPassed(false);
+    setIsVoicePassed(false);
+    setLastSimilarity(null);
+    if (inputRef.current) inputRef.current.focus();
+  }, [currentIndex, currentWordList]);
 
   const speakWord = (text: string) => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
-      text = text.replace(/[^a-zA-Z]/g, '');
       utterance.lang = 'en-US';
       utterance.rate = 0.9;
       window.speechSynthesis.speak(utterance);
     }
   };
 
-  // 💡 [추가] 음성 인식 시작 함수
+  // 💡 1단계: 텍스트 제출 처리
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentWord || currentWord.eng === 'none' || !userAnswer.trim()) return;
+    
+    setTotalAttempts(prev => prev + 1);
+    const isCorrect = userAnswer.trim().toLowerCase() === currentWord.eng.toLowerCase();
+    
+    if (isCorrect) {
+      setIsTextPassed(true);
+      setFeedback({ isCorrect: true, msg: "스펠링 정답! 🎉 이제 녹음 버튼을 눌러 정확하게 읽어주세요." });
+      speakWord(currentWord.eng); // 정답 맞추면 한번 읽어줌
+    } else {
+      setFeedback({ isCorrect: false, msg: `오답입니다. 다시 시도하세요.` });
+      setUserAnswer(''); // 오답 시 입력창 비우기
+    }
+  };
+
   const startRecording = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      alert("이 브라우저에서는 음성 인식을 지원하지 않습니다. 크롬(Chrome)을 사용해주세요.");
-      return;
-    }
+    if (!SpeechRecognition) return alert("크롬(Chrome)을 사용해주세요.");
 
     const recognition = new SpeechRecognition();
     recognition.lang = 'en-US';
@@ -214,94 +206,61 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
       checkVoiceAnswer(transcript);
     };
 
-    recognition.onerror = (event: any) => {
+    recognition.onerror = () => {
       setIsRecording(false);
-      setFeedback({ isCorrect: false, msg: "음성 인식 중 오류가 발생했습니다. 다시 눌러주세요." });
+      setFeedback({ isCorrect: false, msg: "음성 인식 오류가 발생했습니다. 다시 눌러주세요." });
     };
 
-    recognition.onend = () => {
-      setIsRecording(false);
-    };
-
+    recognition.onend = () => setIsRecording(false);
     recognition.start();
   };
 
-  // 💡 [추가] 음성 인식 결과 검사 로직 (90% 이상 통과)
+  // 💡 2단계: 음성 인식 결과 검사 및 다음 문제 이동
   const checkVoiceAnswer = (transcript: string) => {
     if (!currentWord || currentWord.eng === 'none') return;
-    
-    setTotalAttempts(prev => prev + 1); // 시도 횟수 증가
+    setTotalAttempts(prev => prev + 1);
 
     const similarity = calculateSimilarity(transcript, currentWord.eng);
+    setLastSimilarity(similarity);
 
     if (similarity >= 90) {
-      handleCorrectAnswer(transcript, similarity);
+      setIsVoicePassed(true);
+      speakWord(currentWord.eng);
+      const nextScore = score + 1;
+      setScore(nextScore);
+      
+      setFeedback({ isCorrect: true, msg: `훌륭해요! 발음 통과! 👏 (인식: ${transcript})` });
+
+      setTimeout(() => {
+        if (currentIndex + 1 < currentWordList.length) {
+          setCurrentIndex(prev => prev + 1);
+        } else {
+          setIsFinished(true);
+          sendLogToGoogleSheet(nextScore, totalAttempts + 1);
+        }
+      }, 2000);
     } else {
-      setFeedback({ isCorrect: false, msg: `인식: "${transcript}" (일치율: ${similarity.toFixed(0)}%) - 다시 시도하세요.` });
+      setFeedback({ isCorrect: false, msg: `인식: "${transcript}" - 다시 시도하세요.` });
     }
   };
 
-  const handleCorrectAnswer = (userSpokenOrTyped: string, similarity: number = 100) => {
-    speakWord(currentWord.eng);
-    const nextScore = score + 1;
-    setScore(nextScore);
-    
-    const msg = similarity < 100 
-      ? `정답입니다! 👍 (인식: ${userSpokenOrTyped}, 일치율: ${similarity.toFixed(0)}%)` 
-      : '정답입니다! 👍';
-
-    setFeedback({ isCorrect: true, msg });
-
-    setTimeout(() => {
-      if (currentIndex + 1 < currentWordList.length) {
-        setCurrentIndex(prev => prev + 1);
-      } else {
-        setIsFinished(true);
-        sendLogToGoogleSheet(nextScore, totalAttempts + 1); // 💡 최종 시도 횟수 전달
-      }
-    }, 1500);
-  };
-
-  // 💡 [수정] 텍스트 입력 검사 로직
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentWord || currentWord.eng === 'none' || !userAnswer.trim()) return;
-    
-    setTotalAttempts(prev => prev + 1); // 시도 횟수 증가
-    const isCorrect = userAnswer.trim().toLowerCase() === currentWord.eng.toLowerCase();
-    
-    if (isCorrect) {
-      handleCorrectAnswer(userAnswer);
-    } else {
-      setFeedback({ isCorrect: false, msg: `오답입니다. 정답은 [ ${currentWord.eng} ]` });
-    }
-  };
-
-  // 💡 [수정] 시도 횟수(attempts) 추가 전송
   const sendLogToGoogleSheet = async (finalScore: number, finalAttempts: number) => {
     if (finalScore !== currentWordList.length || currentWordList.length === 0) return;
-
     try {
-      const detailedTaskType = `단어게임 (${book}_${unit}_${day})`;
-
       await fetch(CONFIG.WEB_APP_URL, {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify({
           type: "saveLog",
           sheetName: "ELEM_MANAGE",
-          studentId: studentId,
-          studentName: studentName,
-          taskType: detailedTaskType,
+          studentId, studentName,
+          taskType: `단어게임 (${book}_${unit}_${day})`,
           status: "완료",
           score: String(finalScore),
-          attempts: String(finalAttempts) // 🎯 총 시도 횟수 전송
+          attempts: String(finalAttempts)
         }),
       });
-      console.log(`로그 적재 성공 (총 시도: ${finalAttempts}회)`);
-    } catch (err) {
-      console.error("로그 전송 실패:", err);
-    }
+    } catch (err) { console.error(err); }
   };
 
   const handleApplyProgress = () => {
@@ -309,21 +268,10 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
     filterWords(book, unit, day);
   };
 
-  const handleRetest = () => {
-    setCurrentIndex(0);
-    setScore(0);
-    setIsFinished(false);
-    setFeedback(null);
-    setUserAnswer('');
-    setTotalAttempts(0);
-  };
-
-  const preventCheating = (e: React.SyntheticEvent) => e.preventDefault();
-
   if (isLoading) return <div style={{ textAlign: 'center', marginTop: '100px' }}><h2>🐋 단어장 불러오는 중...</h2></div>;
 
   return (
-    <div translate="no" className="notranslate" onContextMenu={preventCheating} style={{ fontFamily: 'Pretendard, sans-serif', padding: '20px', maxWidth: '500px', margin: '0 auto', boxSizing: 'border-box', userSelect: 'none' }}>
+    <div translate="no" className="notranslate" onContextMenu={(e) => e.preventDefault()} style={{ fontFamily: 'Pretendard, sans-serif', padding: '20px', maxWidth: '500px', margin: '0 auto', boxSizing: 'border-box', userSelect: 'none' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
         <button onClick={onBack} style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #ccc', backgroundColor: 'white', cursor: 'pointer' }}>← 홈으로</button>
         <span style={{ fontWeight: 'bold', color: '#007aff' }}>{appliedProgress}</span>
@@ -350,11 +298,7 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
           <h2>단어 테스트 완료! 🎉</h2>
           <p>총 {currentWordList.length}문제 중 <strong>{score}</strong>문제 정답</p>
           <p style={{ color: '#666', fontSize: '14px', marginBottom: '20px' }}>총 시도 횟수: {totalAttempts}회</p>
-          {score === currentWordList.length ? (
-            <button onClick={onBack} style={{ width: '100%', padding: '16px', backgroundColor: '#28a745', color: 'white', borderRadius: '12px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', border: 'none' }}>홈으로 가기</button>
-          ) : (
-            <button onClick={handleRetest} style={{ width: '100%', padding: '16px', backgroundColor: '#dc3545', color: 'white', borderRadius: '12px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', border: 'none' }}>재시험 보기</button>
-          )}
+          <button onClick={onBack} style={{ width: '100%', padding: '16px', backgroundColor: '#28a745', color: 'white', borderRadius: '12px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', border: 'none' }}>홈으로 가기</button>
         </div>
       ) : (
         <div style={{ padding: '30px 20px', backgroundColor: 'white', border: '1px solid #eee', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
@@ -362,7 +306,8 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
             <span>단어 {currentIndex + 1} / {currentWordList.length}</span>
             <span style={{ fontSize: '12px', backgroundColor: '#f1f3f5', padding: '4px 8px', borderRadius: '12px' }}>누적 시도: {totalAttempts}</span>
           </div>
-          <h2 onDragStart={preventCheating} style={{ textAlign: 'center', fontSize: currentWord?.eng === 'none' ? '20px' : '32px', margin: '20px 0 40px 0', color: '#111', fontWeight: '800' }}>
+          
+          <h2 onDragStart={(e) => e.preventDefault()} style={{ textAlign: 'center', fontSize: currentWord?.eng === 'none' ? '20px' : '32px', margin: '20px 0 40px 0', color: '#111', fontWeight: '800' }}>
             {currentWord?.kor || '단어 없음'}
           </h2>
           
@@ -372,36 +317,53 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
               type="text"
               value={userAnswer}
               onChange={(e) => setUserAnswer(e.target.value)}
-              disabled={feedback?.isCorrect || !currentWord || currentWord.eng === 'none' || isRecording}
-              placeholder="영어 단어 입력 (또는 녹음버튼)"
+              disabled={isTextPassed || isRecording || currentWord?.eng === 'none'}
+              placeholder={isTextPassed ? "정답! 아래 녹음 버튼을 누르세요" : "영어 단어 스펠링 입력"}
               autoComplete="off"
               autoCapitalize="none"
               spellCheck="false"
-              style={{ width: '100%', padding: '16px', fontSize: '20px', fontWeight: 'bold', borderRadius: '12px', border: '2px solid #007aff', textAlign: 'center', outline: 'none', marginBottom: '10px', backgroundColor: feedback ? '#f4f4f4' : 'white', boxSizing: 'border-box' }}
+              style={{ width: '100%', padding: '16px', fontSize: '20px', fontWeight: 'bold', borderRadius: '12px', border: isTextPassed ? '2px solid #28a745' : '2px solid #007aff', textAlign: 'center', outline: 'none', marginBottom: '10px', backgroundColor: isTextPassed ? '#e9ecef' : 'white', boxSizing: 'border-box' }}
             />
             
-            {/* 💡 [추가] 녹음 버튼 & 제출 버튼 */}
             <div style={{ display: 'flex', gap: '10px' }}>
               <button
                 type="button"
                 onClick={startRecording}
-                disabled={feedback?.isCorrect || isRecording || currentWord?.eng === 'none'}
-                style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: 'bold', color: isRecording ? 'white' : '#333', backgroundColor: isRecording ? '#ff3b30' : '#f0f0f0', border: 'none', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                disabled={!isTextPassed || isVoicePassed || isRecording || currentWord?.eng === 'none'}
+                style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: 'bold', color: (!isTextPassed || isVoicePassed) ? '#999' : isRecording ? 'white' : '#111', backgroundColor: (!isTextPassed || isVoicePassed) ? '#f0f0f0' : isRecording ? '#ff3b30' : '#ffd700', border: 'none', borderRadius: '12px', cursor: (!isTextPassed || isVoicePassed) ? 'not-allowed' : 'pointer' }}
               >
-                {isRecording ? '🎙️ 듣는 중...' : '🎙️ 음성 인식'}
+                {isRecording ? '🎙️ 듣는 중...' : '🎙️ 음성 인식 (읽기)'}
               </button>
               <button
                 type="submit"
-                disabled={feedback?.isCorrect || !currentWord || currentWord.eng === 'none' || !userAnswer.trim()}
-                style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: 'bold', color: 'white', backgroundColor: (feedback?.isCorrect || !userAnswer.trim()) ? '#ccc' : '#111', border: 'none', borderRadius: '12px', cursor: 'pointer' }}
+                disabled={isTextPassed || !userAnswer.trim() || currentWord?.eng === 'none'}
+                style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: 'bold', color: 'white', backgroundColor: (isTextPassed || !userAnswer.trim()) ? '#ccc' : '#007aff', border: 'none', borderRadius: '12px', cursor: isTextPassed ? 'not-allowed' : 'pointer' }}
               >
-                텍스트 제출
+                스펠링 확인
               </button>
             </div>
           </form>
+
+          {/* 💡 정확도 게이지 UI */}
+          {lastSimilarity !== null && (
+            <div style={{ marginTop: '20px', textAlign: 'center' }}>
+              <div style={{ fontSize: '13px', color: '#666', marginBottom: '6px', fontWeight: 'bold' }}>내 발음 정확도</div>
+              <div style={{ width: '100%', backgroundColor: '#eee', borderRadius: '12px', height: '24px', overflow: 'hidden', position: 'relative' }}>
+                <div style={{
+                  width: `${lastSimilarity}%`,
+                  backgroundColor: lastSimilarity >= 90 ? '#28a745' : lastSimilarity >= 70 ? '#ffc107' : '#dc3545',
+                  height: '100%',
+                  transition: 'width 0.5s ease-in-out'
+                }}></div>
+                <span style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', fontSize: '14px', fontWeight: 'bold', color: lastSimilarity >= 50 ? 'white' : '#333', lineHeight: '24px' }}>
+                  {lastSimilarity.toFixed(0)}%
+                </span>
+              </div>
+            </div>
+          )}
           
           {feedback && (
-            <div style={{ marginTop: '20px', padding: '15px', borderRadius: '8px', fontWeight: 'bold', textAlign: 'center', backgroundColor: feedback.isCorrect ? '#d4edda' : '#f8d7da', color: feedback.isCorrect ? '#155724' : '#721c24' }}>
+            <div style={{ marginTop: '15px', padding: '15px', borderRadius: '8px', fontWeight: 'bold', textAlign: 'center', backgroundColor: feedback.isCorrect ? '#d4edda' : '#f8d7da', color: feedback.isCorrect ? '#155724' : '#721c24' }}>
               {feedback.msg}
             </div>
           )}
