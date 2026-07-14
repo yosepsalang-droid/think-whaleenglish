@@ -15,7 +15,6 @@ interface WordProps {
   studentName?: string;
 }
 
-// 💡 문자열 유사도(일치율) 계산 함수
 const calculateSimilarity = (str1: string, str2: string) => {
   const s1 = str1.toLowerCase().replace(/[^a-z0-9]/g, '');
   const s2 = str2.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -44,7 +43,6 @@ const calculateSimilarity = (str1: string, str2: string) => {
 export default function Word({ onBack, studentId = "ST_TEST", studentName = "테스트학생" }: WordProps) {
   const [allWords, setAllWords] = useState<GoogleWord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-
   const [book, setBook] = useState('');
   const [unit, setUnit] = useState('');
   const [day, setDay] = useState('');
@@ -62,10 +60,10 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
   const [isRecording, setIsRecording] = useState(false);
   const [totalAttempts, setTotalAttempts] = useState(0); 
 
-  // 💡 [추가] 단계별 통과 상태 및 정확도 표시용 State
   const [isTextPassed, setIsTextPassed] = useState(false);
   const [isVoicePassed, setIsVoicePassed] = useState(false);
   const [lastSimilarity, setLastSimilarity] = useState<number | null>(null);
+  const [failCount, setFailCount] = useState(0); // 💡 실패 횟수 카운트 추가
 
   const currentWord = currentWordList[currentIndex];
 
@@ -149,13 +147,13 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
     setTotalAttempts(0);
   };
 
-  // 💡 [추가] 다음 문제로 넘어갈 때마다 상태 초기화
   useEffect(() => {
     setUserAnswer('');
     setFeedback(null);
     setIsTextPassed(false);
     setIsVoicePassed(false);
     setLastSimilarity(null);
+    setFailCount(0); // 💡 문제 바뀔 때 실패 횟수 초기화
     if (inputRef.current) inputRef.current.focus();
   }, [currentIndex, currentWordList]);
 
@@ -169,7 +167,6 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
     }
   };
 
-  // 💡 1단계: 텍스트 제출 처리
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentWord || currentWord.eng === 'none' || !userAnswer.trim()) return;
@@ -180,10 +177,10 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
     if (isCorrect) {
       setIsTextPassed(true);
       setFeedback({ isCorrect: true, msg: "스펠링 정답! 🎉 이제 녹음 버튼을 눌러 정확하게 읽어주세요." });
-      speakWord(currentWord.eng); // 정답 맞추면 한번 읽어줌
+      speakWord(currentWord.eng);
     } else {
       setFeedback({ isCorrect: false, msg: `오답입니다. 다시 시도하세요.` });
-      setUserAnswer(''); // 오답 시 입력창 비우기
+      setUserAnswer('');
     }
   };
 
@@ -208,14 +205,13 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
 
     recognition.onerror = () => {
       setIsRecording(false);
-      setFeedback({ isCorrect: false, msg: "음성 인식 오류가 발생했습니다. 다시 눌러주세요." });
+      setFeedback({ isCorrect: false, msg: "음성 인식 오류. 다시 눌러주세요." });
     };
 
     recognition.onend = () => setIsRecording(false);
     recognition.start();
   };
 
-  // 💡 2단계: 음성 인식 결과 검사 및 다음 문제 이동
   const checkVoiceAnswer = (transcript: string) => {
     if (!currentWord || currentWord.eng === 'none') return;
     setTotalAttempts(prev => prev + 1);
@@ -223,11 +219,13 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
     const similarity = calculateSimilarity(transcript, currentWord.eng);
     setLastSimilarity(similarity);
 
-    if (similarity >= 90) {
+    // 💡 80%로 기준 완화
+    if (similarity >= 80) {
       setIsVoicePassed(true);
       speakWord(currentWord.eng);
       const nextScore = score + 1;
       setScore(nextScore);
+      setFailCount(0); // 통과 시 초기화
       
       setFeedback({ isCorrect: true, msg: `훌륭해요! 발음 통과! 👏 (인식: ${transcript})` });
 
@@ -238,14 +236,15 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
           setIsFinished(true);
           sendLogToGoogleSheet(nextScore, totalAttempts + 1);
         }
-      }, 2000);
+      }, 1500);
     } else {
-      setFeedback({ isCorrect: false, msg: `인식: "${transcript}" - 다시 시도하세요.` });
+      setFailCount(prev => prev + 1); // 💡 실패 카운트 증가
+      setFeedback({ isCorrect: false, msg: `"${transcript}"(은)는 좀 어려워요. 다시 시도하세요!` });
     }
   };
 
   const sendLogToGoogleSheet = async (finalScore: number, finalAttempts: number) => {
-    if (finalScore !== currentWordList.length || currentWordList.length === 0) return;
+    if (currentWordList.length === 0) return;
     try {
       await fetch(CONFIG.WEB_APP_URL, {
         method: "POST",
@@ -263,51 +262,40 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
     } catch (err) { console.error(err); }
   };
 
-  const handleApplyProgress = () => {
-    if (!book || !unit || !day) return alert("교재, Lesson, Day를 모두 선택해주세요.");
-    filterWords(book, unit, day);
+  const handleSkip = () => {
+    setFeedback({ isCorrect: true, msg: "이번 문제는 넘어갑니다! ⏩" });
+    setTimeout(() => {
+      if (currentIndex + 1 < currentWordList.length) {
+        setCurrentIndex(prev => prev + 1);
+      } else {
+        setIsFinished(true);
+        sendLogToGoogleSheet(score, totalAttempts);
+      }
+    }, 1000);
   };
 
   if (isLoading) return <div style={{ textAlign: 'center', marginTop: '100px' }}><h2>🐋 단어장 불러오는 중...</h2></div>;
 
   return (
-    <div translate="no" className="notranslate" onContextMenu={(e) => e.preventDefault()} style={{ fontFamily: 'Pretendard, sans-serif', padding: '20px', maxWidth: '500px', margin: '0 auto', boxSizing: 'border-box', userSelect: 'none' }}>
+    <div translate="no" className="notranslate" style={{ fontFamily: 'Pretendard, sans-serif', padding: '20px', maxWidth: '500px', margin: '0 auto', boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
         <button onClick={onBack} style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #ccc', backgroundColor: 'white', cursor: 'pointer' }}>← 홈으로</button>
         <span style={{ fontWeight: 'bold', color: '#007aff' }}>{appliedProgress}</span>
-      </div>
-
-      <div style={{ marginBottom: '24px', padding: '16px', backgroundColor: '#f8f9fa', borderRadius: '12px', border: '1px solid #e9ecef', display: 'flex', gap: '6px' }}>
-        <select value={book} onChange={(e) => { setBook(e.target.value); setUnit(''); setDay(''); }} style={selectStyle}>
-          <option value="">교재</option>
-          {books.map(b => <option key={b} value={b}>{b}</option>)}
-        </select>
-        <select value={unit} onChange={(e) => { setUnit(e.target.value); setDay(''); }} disabled={!book} style={selectStyle}>
-          <option value="">Lesson</option>
-          {units.map(u => <option key={u} value={u}>{u}</option>)}
-        </select>
-        <select value={day} onChange={(e) => setDay(e.target.value)} disabled={!unit} style={selectStyle}>
-          <option value="">Day</option>
-          {days.map(d => <option key={d} value={d}>{d}</option>)}
-        </select>
-        <button onClick={handleApplyProgress} style={{ width: '24%', backgroundColor: '#333', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>확인</button>
       </div>
 
       {isFinished ? (
         <div style={{ textAlign: 'center', padding: '40px 20px', backgroundColor: '#f8f9fa', borderRadius: '16px' }}>
           <h2>단어 테스트 완료! 🎉</h2>
           <p>총 {currentWordList.length}문제 중 <strong>{score}</strong>문제 정답</p>
-          <p style={{ color: '#666', fontSize: '14px', marginBottom: '20px' }}>총 시도 횟수: {totalAttempts}회</p>
-          <button onClick={onBack} style={{ width: '100%', padding: '16px', backgroundColor: '#28a745', color: 'white', borderRadius: '12px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', border: 'none' }}>홈으로 가기</button>
+          <button onClick={onBack} style={{ width: '100%', padding: '16px', backgroundColor: '#28a745', color: 'white', borderRadius: '12px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', border: 'none' }}>홈으로</button>
         </div>
       ) : (
         <div style={{ padding: '30px 20px', backgroundColor: 'white', border: '1px solid #eee', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', color: '#666', marginBottom: '10px' }}>
             <span>단어 {currentIndex + 1} / {currentWordList.length}</span>
-            <span style={{ fontSize: '12px', backgroundColor: '#f1f3f5', padding: '4px 8px', borderRadius: '12px' }}>누적 시도: {totalAttempts}</span>
           </div>
           
-          <h2 onDragStart={(e) => e.preventDefault()} style={{ textAlign: 'center', fontSize: currentWord?.eng === 'none' ? '20px' : '32px', margin: '20px 0 40px 0', color: '#111', fontWeight: '800' }}>
+          <h2 style={{ textAlign: 'center', fontSize: '32px', margin: '20px 0 40px 0', color: '#111', fontWeight: '800' }}>
             {currentWord?.kor || '단어 없음'}
           </h2>
           
@@ -318,46 +306,31 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
               value={userAnswer}
               onChange={(e) => setUserAnswer(e.target.value)}
               disabled={isTextPassed || isRecording || currentWord?.eng === 'none'}
-              placeholder={isTextPassed ? "정답! 아래 녹음 버튼을 누르세요" : "영어 단어 스펠링 입력"}
-              autoComplete="off"
-              autoCapitalize="none"
-              spellCheck="false"
-              style={{ width: '100%', padding: '16px', fontSize: '20px', fontWeight: 'bold', borderRadius: '12px', border: isTextPassed ? '2px solid #28a745' : '2px solid #007aff', textAlign: 'center', outline: 'none', marginBottom: '10px', backgroundColor: isTextPassed ? '#e9ecef' : 'white', boxSizing: 'border-box' }}
+              placeholder="영어 스펠링 입력"
+              style={{ width: '100%', padding: '16px', fontSize: '20px', fontWeight: 'bold', borderRadius: '12px', border: isTextPassed ? '2px solid #28a745' : '2px solid #007aff', textAlign: 'center', marginBottom: '10px', backgroundColor: isTextPassed ? '#e9ecef' : 'white', boxSizing: 'border-box' }}
             />
             
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button
-                type="button"
-                onClick={startRecording}
-                disabled={!isTextPassed || isVoicePassed || isRecording || currentWord?.eng === 'none'}
-                style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: 'bold', color: (!isTextPassed || isVoicePassed) ? '#999' : isRecording ? 'white' : '#111', backgroundColor: (!isTextPassed || isVoicePassed) ? '#f0f0f0' : isRecording ? '#ff3b30' : '#ffd700', border: 'none', borderRadius: '12px', cursor: (!isTextPassed || isVoicePassed) ? 'not-allowed' : 'pointer' }}
-              >
-                {isRecording ? '🎙️ 듣는 중...' : '🎙️ 음성 인식 (읽기)'}
+            <button
+              type="button"
+              onClick={startRecording}
+              disabled={!isTextPassed || isVoicePassed || isRecording || currentWord?.eng === 'none'}
+              style={{ width: '100%', padding: '16px', fontSize: '16px', fontWeight: 'bold', color: (!isTextPassed || isVoicePassed) ? '#999' : '#111', backgroundColor: (!isTextPassed || isVoicePassed) ? '#f0f0f0' : '#ffd700', border: 'none', borderRadius: '12px', cursor: (!isTextPassed || isVoicePassed) ? 'not-allowed' : 'pointer', marginBottom: '10px' }}
+            >
+              {isRecording ? '🎙️ 듣는 중...' : '🎙️ 음성 인식 (읽기)'}
+            </button>
+
+            {/* 💡 3번 실패 시 건너뛰기 버튼 */}
+            {failCount >= 3 && !isVoicePassed && (
+              <button type="button" onClick={handleSkip} style={{ width: '100%', padding: '12px', backgroundColor: '#6c757d', color: 'white', borderRadius: '12px', border: 'none', marginBottom: '10px', cursor: 'pointer' }}>
+                너무 어려워요! 건너뛰기 ⏩
               </button>
-              <button
-                type="submit"
-                disabled={isTextPassed || !userAnswer.trim() || currentWord?.eng === 'none'}
-                style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: 'bold', color: 'white', backgroundColor: (isTextPassed || !userAnswer.trim()) ? '#ccc' : '#007aff', border: 'none', borderRadius: '12px', cursor: isTextPassed ? 'not-allowed' : 'pointer' }}
-              >
-                스펠링 확인
-              </button>
-            </div>
+            )}
           </form>
 
-          {/* 💡 정확도 게이지 UI */}
           {lastSimilarity !== null && (
             <div style={{ marginTop: '20px', textAlign: 'center' }}>
-              <div style={{ fontSize: '13px', color: '#666', marginBottom: '6px', fontWeight: 'bold' }}>내 발음 정확도</div>
-              <div style={{ width: '100%', backgroundColor: '#eee', borderRadius: '12px', height: '24px', overflow: 'hidden', position: 'relative' }}>
-                <div style={{
-                  width: `${lastSimilarity}%`,
-                  backgroundColor: lastSimilarity >= 90 ? '#28a745' : lastSimilarity >= 70 ? '#ffc107' : '#dc3545',
-                  height: '100%',
-                  transition: 'width 0.5s ease-in-out'
-                }}></div>
-                <span style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', fontSize: '14px', fontWeight: 'bold', color: lastSimilarity >= 50 ? 'white' : '#333', lineHeight: '24px' }}>
-                  {lastSimilarity.toFixed(0)}%
-                </span>
+              <div style={{ width: '100%', backgroundColor: '#eee', borderRadius: '12px', height: '20px', overflow: 'hidden' }}>
+                <div style={{ width: `${lastSimilarity}%`, backgroundColor: lastSimilarity >= 80 ? '#28a745' : '#dc3545', height: '100%', transition: 'width 0.5s' }}></div>
               </div>
             </div>
           )}
@@ -372,5 +345,3 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
     </div>
   );
 }
-
-const selectStyle = { width: '25%', minWidth: '0', padding: '10px 4px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none', fontSize: '14px', boxSizing: 'border-box' as const, backgroundColor: 'white', textAlign: 'center' as const };

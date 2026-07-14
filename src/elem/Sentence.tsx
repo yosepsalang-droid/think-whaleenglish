@@ -62,10 +62,12 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
   const [isRecording, setIsRecording] = useState(false);
   const [totalAttempts, setTotalAttempts] = useState(0);
 
-  // 💡 [추가] 단계별 상태 및 정확도
   const [isTextPassed, setIsTextPassed] = useState(false);
   const [isVoicePassed, setIsVoicePassed] = useState(false);
   const [lastSimilarity, setLastSimilarity] = useState<number | null>(null);
+  
+  // 💡 [추가] 음성 인식 실패 횟수 상태 추가
+  const [voiceFailCount, setVoiceFailCount] = useState(0);
 
   const currentSentence = currentSentenceList[currentIndex];
 
@@ -132,7 +134,6 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
     setTotalAttempts(0);
   };
 
-  // 💡 [추가] 다음 문제로 넘어갈 때마다 상태 초기화
   useEffect(() => {
     if (currentSentence && currentSentence.eng !== 'none') {
       setAvailableWords([...currentSentence.chunks]);
@@ -141,6 +142,7 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
       setIsTextPassed(false);
       setIsVoicePassed(false);
       setLastSimilarity(null);
+      setVoiceFailCount(0); // 💡 [추가] 다음 문제로 넘어갈 때 실패 횟수 초기화
     }
   }, [currentSentenceList, currentIndex]);
 
@@ -153,7 +155,6 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
     }
   };
 
-  // 💡 1단계: 블록 제출 검사
   const handleSubmit = () => {
     if (!currentSentence || currentSentence.eng === 'none') return;
     setTotalAttempts(prev => prev + 1);
@@ -167,7 +168,6 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
       speakWord(currentSentence.eng);
     } else {
       setFeedback({ isCorrect: false, msg: `오답입니다. 배열을 다시 확인하세요.` });
-      // 오답 시 블록 원래대로 되돌리기
       setAvailableWords([...currentSentence.chunks]);
       setSelectedWords([]);
     }
@@ -186,7 +186,7 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
     recognition.start();
   };
 
-  // 💡 2단계: 음성 인식 검사 및 이동
+  // 💡 2단계: 음성 인식 검사 로직 수정
   const checkVoiceAnswer = (transcript: string) => {
     if (!currentSentence || currentSentence.eng === 'none') return;
     setTotalAttempts(prev => prev + 1);
@@ -194,7 +194,8 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
     const similarity = calculateSimilarity(transcript, currentSentence.eng);
     setLastSimilarity(similarity);
 
-    if (similarity >= 90) {
+    // 💡 [수정] 통과 기준을 90에서 80으로 하향
+    if (similarity >= 80) {
       setIsVoicePassed(true);
       speakWord(currentSentence.eng);
       const nextScore = score + 1;
@@ -211,12 +212,34 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
         }
       }, 2000);
     } else {
+      // 💡 [추가] 실패 시 실패 횟수(voiceFailCount) 증가
+      setVoiceFailCount(prev => prev + 1);
       setFeedback({ isCorrect: false, msg: `인식: "${transcript}" - 다시 말해보세요.` });
     }
   };
 
+  // 💡 [추가] 넘어가기 버튼 클릭 시 동작하는 함수
+  const handleSkip = () => {
+    if (!currentSentence || currentSentence.eng === 'none') return;
+    
+    setIsVoicePassed(true);
+    // 점수는 안 올리고 넘어갑니다.
+    setFeedback({ isCorrect: false, msg: `정답: "${currentSentence.eng}" (다음 문제로 넘어갑니다.)` });
+    speakWord(currentSentence.eng);
+
+    setTimeout(() => {
+      if (currentIndex + 1 < currentSentenceList.length) {
+        setCurrentIndex(prev => prev + 1);
+      } else {
+        setIsFinished(true);
+        sendLogToGoogleSheet(score, totalAttempts + 1);
+      }
+    }, 2500);
+  };
+
+  // 💡 [수정] 스킵을 하면 100점이 안 될 수도 있으므로, 무조건 기록이 남도록 조건문 변경
   const sendLogToGoogleSheet = async (finalScore: number, finalAttempts: number) => {
-    if (finalScore !== currentSentenceList.length || currentSentenceList.length === 0) return;
+    if (currentSentenceList.length === 0) return; // 기존의 '만점일 때만 전송' 조건 삭제
     try {
       await fetch(CONFIG.WEB_APP_URL, {
         method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -288,21 +311,33 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
             ))}
           </div>
 
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button 
-              onClick={startRecording} 
-              disabled={!isTextPassed || isVoicePassed || isRecording || currentSentence?.eng === 'none'} 
-              style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: 'bold', color: (!isTextPassed || isVoicePassed) ? '#999' : isRecording ? 'white' : '#111', backgroundColor: (!isTextPassed || isVoicePassed) ? '#f0f0f0' : isRecording ? '#ff3b30' : '#ffd700', border: 'none', borderRadius: '12px', cursor: (!isTextPassed || isVoicePassed) ? 'not-allowed' : 'pointer' }}
-            >
-              {isRecording ? '🎙️ 듣는 중...' : '🎙️ 마이크로 말하기'}
-            </button>
-            <button 
-              onClick={handleSubmit} 
-              disabled={isTextPassed || currentSentence?.eng === 'none' || selectedWords.length === 0} 
-              style={{ flex: 1, padding: '16px', backgroundColor: (isTextPassed || selectedWords.length === 0) ? '#ccc' : '#007aff', color: 'white', border: 'none', borderRadius: '12px', fontSize: '16px', fontWeight: 'bold', cursor: isTextPassed ? 'not-allowed' : 'pointer' }}
-            >
-              블록 확인
-            </button>
+          <div style={{ display: 'flex', gap: '10px', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button 
+                onClick={startRecording} 
+                disabled={!isTextPassed || isVoicePassed || isRecording || currentSentence?.eng === 'none'} 
+                style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: 'bold', color: (!isTextPassed || isVoicePassed) ? '#999' : isRecording ? 'white' : '#111', backgroundColor: (!isTextPassed || isVoicePassed) ? '#f0f0f0' : isRecording ? '#ff3b30' : '#ffd700', border: 'none', borderRadius: '12px', cursor: (!isTextPassed || isVoicePassed) ? 'not-allowed' : 'pointer' }}
+              >
+                {isRecording ? '🎙️ 듣는 중...' : '🎙️ 마이크로 말하기'}
+              </button>
+              <button 
+                onClick={handleSubmit} 
+                disabled={isTextPassed || currentSentence?.eng === 'none' || selectedWords.length === 0} 
+                style={{ flex: 1, padding: '16px', backgroundColor: (isTextPassed || selectedWords.length === 0) ? '#ccc' : '#007aff', color: 'white', border: 'none', borderRadius: '12px', fontSize: '16px', fontWeight: 'bold', cursor: isTextPassed ? 'not-allowed' : 'pointer' }}
+              >
+                블록 확인
+              </button>
+            </div>
+
+            {/* 💡 [추가] 3번 이상 실패 시 나타나는 넘어가기 버튼 */}
+            {voiceFailCount >= 3 && !isVoicePassed && (
+              <button 
+                onClick={handleSkip} 
+                style={{ width: '100%', padding: '12px', backgroundColor: '#6c757d', color: 'white', border: 'none', borderRadius: '12px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginTop: '4px' }}
+              >
+                ⏭️ 너무 어려워요 (넘어가기)
+              </button>
+            )}
           </div>
 
           {/* 💡 정확도 게이지 UI */}
@@ -312,7 +347,8 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
               <div style={{ width: '100%', backgroundColor: '#eee', borderRadius: '12px', height: '24px', overflow: 'hidden', position: 'relative' }}>
                 <div style={{
                   width: `${lastSimilarity}%`,
-                  backgroundColor: lastSimilarity >= 90 ? '#28a745' : lastSimilarity >= 70 ? '#ffc107' : '#dc3545',
+                  /* 💡 [수정] 게이지바 초록색 달성 기준도 80으로 변경 */
+                  backgroundColor: lastSimilarity >= 80 ? '#28a745' : lastSimilarity >= 50 ? '#ffc107' : '#dc3545',
                   height: '100%',
                   transition: 'width 0.5s ease-in-out'
                 }}></div>
