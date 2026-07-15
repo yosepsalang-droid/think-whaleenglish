@@ -1,3 +1,4 @@
+import { CONFIG } from '../config';
 import React, { useState, useEffect, useMemo } from 'react';
 
 interface VocaProps { 
@@ -18,7 +19,7 @@ interface DailyRecord {
   attempt: number;
 }
 
-const GOOGLE_SHEET_VOCA_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe/pub?gid=8529494&single=true&output=csv";
+const response = await fetch(`${CONFIG.SHEETS.MID_WORD}&_nocache=${Date.now()}`);
 
 export default function Voca({ onBack, currentBook, studentId, studentName }: VocaProps) {
   const [allWords, setAllWords] = useState<WordItem[]>([]);

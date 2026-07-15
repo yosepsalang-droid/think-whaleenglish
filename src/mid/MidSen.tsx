@@ -1,10 +1,11 @@
+import { CONFIG } from '../config';
 import React, { useState, useEffect, useMemo } from 'react';
 
 interface MidSenProps { onBack: () => void; }
 interface WordToken { id: number; word: string; }
 interface Question { id: number; kor: string; eng: string; words: WordToken[]; }
 
-const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe/pub?gid=2069604392&single=true&output=csv";
+fetch(`${CONFIG.SHEETS.MID_SENTENCE}&_nocache=${Date.now()}`)
 
 export default function MidSen({ onBack }: MidSenProps) {
   const [allQuestions, setAllQuestions] = useState<Question[]>([]);

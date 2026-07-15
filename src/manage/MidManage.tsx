@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { CONFIG } from '../config'; // 👈 [추가됨] 통합 설정 파일 불러오기
+
 // 💡 1. Voca 컴포넌트를 불러옵니다.
 import Voca from '../mid/Voca'; 
 
@@ -17,8 +19,8 @@ export default function MidManage() {
   const fetchMiddleStudents = async () => {
     try {
       setIsLoading(true);
-      const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe/pub?gid=1059185510&single=true&output=csv';
-      const response = await fetch(SHEET_CSV_URL);
+      // 👈 [수정됨] 하드코딩된 긴 주소를 지우고 CONFIG에서 불러옵니다.
+      const response = await fetch(CONFIG.SHEETS.STUDENT_LIST);
       const text = await response.text();
       const rows = text.split('\n').slice(1).filter(row => row.trim() !== '');
       const midStudents = rows.map(row => {
@@ -26,17 +28,20 @@ export default function MidManage() {
         return { id, name, currentBook, progress, grade };
       }).filter(s => s.grade && s.grade.includes('중'));
       setStudents(midStudents);
-    } catch (e) { console.error("데이터 로드 실패", e); }
-    finally { setIsLoading(false); }
+    } catch (e) { 
+      console.error("데이터 로드 실패", e); 
+    } finally { 
+      setIsLoading(false); 
+    }
   };
 
   useEffect(() => { fetchMiddleStudents(); }, []);
 
   const handleApplyToSheet = async (studentId: string, book: string, progress: string) => {
     setSavingId(studentId);
-    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyOAbzxggopAl9QhrG2VHSmo0yCEcdIi89xhgvT5nOWkk9sZbiTtB-XjQd4GVhV4MhE/exec';
     
-    await fetch(APPS_SCRIPT_URL, {
+    // 👈 [수정됨] 앱스 스크립트 주소도 CONFIG에서 불러옵니다.
+    await fetch(CONFIG.WEB_APP_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ studentId, book, progress })

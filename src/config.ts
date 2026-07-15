@@ -35,7 +35,7 @@ export const CONFIG = {
      * 구글 AI 스튜디오에서 발급받으실 API 키를 아래 공란에 적어주시면 됩니다.
      */
     GEMINI: {
-      API_KEY: "여기에_발급받으신_제미나이_키를_넣으세요", 
+      API_KEY: import.meta.env.VITE_GEMINI_API_KEY, // 👈 이렇게 수정! 
       MODEL: "gemini-1.5-flash",
     }
   };

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { CONFIG } from '../config'; // 👈 [추가됨] 통합 설정 파일 불러오기
 
 // 개별 학생 정보 규격
 interface Student {
@@ -36,14 +37,10 @@ export default function ElemManage() {
     try {
       setIsLoading(true);
       
-      // 구글 시트에서 각각 발급받은 고유 CSV 웹 게시 주소
-      const MEMBER_LIST_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe/pub?gid=1059185510&single=true&output=csv'; // 1번째 탭 (회원 명단)
-      const DAILY_LOG_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe/pub?gid=1281735273&single=true&output=csv';   // 신설한 "초등부관리" 탭 (로그)
-
-      // 두 데이터를 비동기로 동시 요청
+      // 👈 [수정됨] 하드코딩된 주소를 지우고 CONFIG에서 불러옵니다.
       const [memberResponse, logResponse] = await Promise.all([
-        fetch(`${MEMBER_LIST_CSV_URL}&_nocache=${Date.now()}`),
-        fetch(`${DAILY_LOG_CSV_URL}&_nocache=${Date.now()}`)
+        fetch(`${CONFIG.SHEETS.STUDENT_LIST}&_nocache=${Date.now()}`),
+        fetch(`${CONFIG.SHEETS.ELEM_MANAGE}&_nocache=${Date.now()}`)
       ]);
 
       const memberText = await memberResponse.text();
@@ -169,10 +166,8 @@ export default function ElemManage() {
     setIsSaving(true);
 
     try {
-      // ⚠️ 원장님의 올바른 진짜 Apps Script 웹앱 주소 기입 완료
-      const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyOAbzxggopAl9QhrG2VHSmo0yCEcdIi89xhgvT5nOWkk9sZbiTtB-XjQd4GVhV4MhE/exec';
-
-      const response = await fetch(APPS_SCRIPT_URL, {
+      // 👈 [수정됨] 앱스 스크립트 웹앱 주소도 CONFIG에서 불러옵니다.
+      const response = await fetch(CONFIG.WEB_APP_URL, {
         method: 'POST',
         headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify({
