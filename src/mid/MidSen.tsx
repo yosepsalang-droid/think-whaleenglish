@@ -5,8 +5,6 @@ interface MidSenProps { onBack: () => void; }
 interface WordToken { id: number; word: string; }
 interface Question { id: number; kor: string; eng: string; words: WordToken[]; }
 
-fetch(`${CONFIG.SHEETS.MID_SENTENCE}&_nocache=${Date.now()}`)
-
 export default function MidSen({ onBack }: MidSenProps) {
   const [allQuestions, setAllQuestions] = useState<Question[]>([]);
   const [stage, setStage] = useState<number | null>(null);
@@ -21,7 +19,8 @@ export default function MidSen({ onBack }: MidSenProps) {
   const [matchRate, setMatchRate] = useState<number | null>(null);
 
   useEffect(() => {
-    fetch(`${CSV_URL}&_nocache=${Date.now()}`)
+    // 👈 [수정됨] CONFIG.SHEETS.MID_SENTENCE 로 완벽하게 연결!
+    fetch(`${CONFIG.SHEETS.MID_SENTENCE}&_nocache=${Date.now()}`)
       .then(res => res.text())
       .then(text => {
         const rows = text.split(/\r?\n/).slice(1);

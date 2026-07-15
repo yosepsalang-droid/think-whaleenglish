@@ -19,8 +19,6 @@ interface DailyRecord {
   attempt: number;
 }
 
-const response = await fetch(`${CONFIG.SHEETS.MID_WORD}&_nocache=${Date.now()}`);
-
 export default function Voca({ onBack, currentBook, studentId, studentName }: VocaProps) {
   const [allWords, setAllWords] = useState<WordItem[]>([]);
   const [gameState, setGameState] = useState<'intro' | 'playing' | 'result'>('intro');
@@ -132,7 +130,8 @@ export default function Voca({ onBack, currentBook, studentId, studentName }: Vo
   useEffect(() => {
     const fetchWords = async () => {
       try {
-        const response = await fetch(`${GOOGLE_SHEET_VOCA_CSV_URL}&_nocache=${Date.now()}`);
+        // 👈 [수정됨] CONFIG.SHEETS.MID_WORD 로 완벽하게 연결!
+        const response = await fetch(`${CONFIG.SHEETS.MID_WORD}&_nocache=${Date.now()}`);
         const text = await response.text();
         const rows = text.split(/\r?\n/).slice(1);
         
