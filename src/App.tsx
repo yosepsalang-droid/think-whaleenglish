@@ -174,6 +174,7 @@ export default function App() {
                 <span style={{ fontSize: '12px', color: '#007aff', fontWeight: '700', textAlign: 'right' }}>입장하기 →</span>
               </div>
 
+              {/* 3. 불규칙 동사 테스트 버튼 */}
               <div onClick={() => setCurrentMenu('verbTest')} style={{ background: 'white', padding: '16px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '120px', border: '1px solid #e0f2fe' }}>
                 <div>
                   <span style={{ fontSize: '16px', fontWeight: '700' }}>🔥 동사 3단 변화</span>
@@ -181,9 +182,6 @@ export default function App() {
                 </div>
                 <span style={{ fontSize: '12px', color: '#007aff', fontWeight: '700', textAlign: 'right' }}>입장하기 →</span>
               </div>
-              {/* 👆 여기까지 추가 */}
-
-            </div>
             </div>
           </div>
         </div>
