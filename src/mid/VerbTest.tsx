@@ -325,9 +325,10 @@ export default function VerbTest({ onBack, studentId = "ST_TEST", studentName = 
     if (step === 'TEST' && currentWord) speakCurrentVerbs();
   }, [currentIndex, currentWord, step]);
 
+  // ✅ 수정 후 (이 코드로 복사해서 덮어쓰세요!)
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setInputs(prev => ({ ...prev, [name]: value.toLowerCase().replace(/[^a-z]/g, '') }));
+    setInputs(prev => ({ ...prev, [name]: value.toLowerCase() })); 
   };
 
   // 💡 TS2345 에러 해결: nextRef의 타입을 HTMLInputElement | null 허용으로 유연하게 매칭
@@ -465,11 +466,41 @@ export default function VerbTest({ onBack, studentId = "ST_TEST", studentName = 
         </div>
       )}
 
-      {step === 'RESULT' && (
+{step === 'RESULT' && (
         <div style={{ textAlign: 'center', padding: '40px 20px', backgroundColor: '#f8f9fa', borderRadius: '16px' }}>
-          <h2>테스트 완료! 🎉</h2>
-          <p>총 {currentWordList.length}개 동사 중 <strong>{score}</strong>개 정답</p>
-          <button onClick={() => setStep('SELECT')} style={{ width: '100%', padding: '16px', backgroundColor: '#28a745', color: 'white', borderRadius: '12px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', border: 'none', marginTop: '20px' }}>다른 범위 학습하기</button>
+          <div style={{ fontSize: '56px', marginBottom: '16px' }}>🎉</div>
+          <h2 style={{ fontSize: '28px', fontWeight: '800', margin: '0 0 10px 0', color: '#111' }}>
+            테스트 완료!
+          </h2>
+          
+          {/* 💡 [추가] 학습 정보 요약 영역 */}
+          <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '24px', textAlign: 'left' }}>
+            <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#64748b' }}>
+              📅 학습 날짜: <strong>{new Date().toLocaleDateString()}</strong>
+            </p>
+            <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#64748b' }}>
+              📖 학습 범위: <strong>Day {startDay} ~ Day {endDay}</strong>
+            </p>
+            <p style={{ margin: '0', fontSize: '14px', color: '#64748b' }}>
+              📈 테스트 결과: <strong>총 {currentWordList.length}개 중 {score}개 정답</strong>
+            </p>
+          </div>
+
+          <button 
+            onClick={() => {
+              setStep('SELECT');
+              setStartDay('');
+              setEndDay('');
+              setScore(0);
+            }} 
+            style={{ 
+              width: '100%', padding: '16px', backgroundColor: '#28a745', color: 'white', 
+              borderRadius: '12px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', 
+              border: 'none', marginTop: '20px'
+            }}
+          >
+            확인하고 다른 범위 학습하기
+          </button>
         </div>
       )}
     </div>
