@@ -12,6 +12,7 @@ import WordMaster from './elem/WordMaster'; // 👈 [이 한 줄을 추가!] 새
 // 📘 중등부 학습 컴포넌트
 import Voca from './mid/Voca';
 import MidSen from './mid/MidSen'; // 1. MidSen 추가
+import VerbTest from './mid/VerbTest'; // 👈 [추가] 불규칙 동사 테스트 불러오기
 
 // 👑 원장님 관제탑
 import Lms from './manage/Lms'; 
@@ -130,6 +131,11 @@ export default function App() {
         return <MidSen onBack={() => setCurrentMenu('midHome')} />;
       }
 
+      // 👇 [이 세 줄을 추가!] 불규칙 동사 화면으로 이동하는 로직
+      if (currentMenu === 'verbTest') {
+        return <VerbTest onBack={() => setCurrentMenu('midHome')} studentId={loggedInStudent.id} studentName={loggedInStudent.name} />;
+      }
+
       // 대시보드 화면
       return (
         <div style={{ backgroundColor: '#f9f9f9', minHeight: '100vh', padding: '20px', fontFamily: 'Pretendard', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -167,6 +173,17 @@ export default function App() {
                 </div>
                 <span style={{ fontSize: '12px', color: '#007aff', fontWeight: '700', textAlign: 'right' }}>입장하기 →</span>
               </div>
+
+              <div onClick={() => setCurrentMenu('verbTest')} style={{ background: 'white', padding: '16px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '120px', border: '1px solid #e0f2fe' }}>
+                <div>
+                  <span style={{ fontSize: '16px', fontWeight: '700' }}>🔥 동사 3단 변화</span>
+                  <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#8e8e93', lineHeight: '1.4' }}>불규칙 동사 완벽 마스터하기</p>
+                </div>
+                <span style={{ fontSize: '12px', color: '#007aff', fontWeight: '700', textAlign: 'right' }}>입장하기 →</span>
+              </div>
+              {/* 👆 여기까지 추가 */}
+
+            </div>
             </div>
           </div>
         </div>
