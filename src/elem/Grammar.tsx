@@ -252,7 +252,7 @@ export default function Grammar({
             />
           </div>
 
-          {/* 💡 [수정완료] 내 랭킹과 점수를 보여주는 예전 박스를 다시 부활시켰습니다! */}
+          {/* 💡 내 랭킹과 점수를 보여주는 예전 박스를 다시 부활시켰습니다! */}
           {studentName && (
             <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginBottom: '24px', backgroundColor: 'white', padding: '15px 25px', borderRadius: '12px', border: '1px solid #cbd5e1', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -267,11 +267,8 @@ export default function Grammar({
             </div>
           )}
           
-          {/* 💡 [수정완료] 랭킹 컴포넌트에 필요한(존재하는) 속성 2개만 딱 맞춰서 넘깁니다! */}
-          <Ranking 
-            rankings={rankings}
-            loading={loadingRank}
-          />
+          {/* 💡 컴포넌트 스스로 다 알아서 하므로 아무것도 안 넘겨줘도 됩니다! */}
+          <Ranking />
 
           <button onClick={startGame} style={{...styles.startBtn, marginTop: '20px'}}>스피드 문법 게임 시작하기</button>
         </div>
