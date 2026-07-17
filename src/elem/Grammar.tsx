@@ -254,7 +254,6 @@ export default function Grammar({
           
           {/* 💡 [핵심] 길고 복잡했던 코드가 단 한 줄의 컴포넌트로 완벽하게 교체되었습니다! */}
           <Ranking 
-            studentName={studentName}
             totalScore={totalScore}
             myRank={myRank}
             rankings={rankings}
