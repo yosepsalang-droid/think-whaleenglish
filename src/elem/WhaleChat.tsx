@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { CONFIG } from '../config';
 
+// 💡 [수정] App.tsx에서 던져주는 currentBook 속성을 받을 수 있도록 추가했습니다!
 interface WhaleChatProps {
   onBack: () => void;
   studentId?: string;
   studentName?: string;
+  currentBook?: string;
 }
 
 interface Message {
@@ -15,12 +17,13 @@ interface Message {
 // 💡 true일 때는 시뮬레이션 모드, false로 바꾸면 실제 제미나이 API를 호출합니다.
 const IS_TEST_MODE = true; 
 
-export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName = "테스트학생" }: WhaleChatProps) {
+export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName = "테스트학생", currentBook = "" }: WhaleChatProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [allSentences, setAllSentences] = useState<any[]>([]);
 
   // 1️⃣ 진도 맞춤형 대화를 위한 드롭다운 상태
-  const [book, setBook] = useState('');
+  // 💡 [핵심] 학생의 현재 교재(currentBook)를 기본값으로 자동 셋팅합니다!
+  const [book, setBook] = useState(currentBook);
   const [unit, setUnit] = useState('');
   const [day, setDay] = useState('');
   const [isChatStarted, setIsChatStarted] = useState(false);
@@ -69,8 +72,35 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
     fetchSheetData();
   }, []);
 
-  // 드롭다운 바인딩용 필터
-  const books = useMemo(() => Array.from(new Set(allSentences.map(s => s.book))).filter(Boolean).sort(), [allSentences]);
+  // 💡 부모 컴포넌트에서 currentBook이 혹시라도 변경되면 다시 세팅해줍니다.
+  useEffect(() => {
+    if (currentBook) {
+      setBook(currentBook);
+    }
+  }, [currentBook]);
+
+  // 💡 [수정] 교재 정렬 순서 적용: 240 > 520 > 860 > 1240 > 1680 (다른 게임들과 통일)
+  const books = useMemo(() => {
+    const uniqueBooks = Array.from(new Set(allSentences.map(s => s.book?.trim()))).filter(Boolean);
+    const order = ['240', '520', '860', '1240', '1680'];
+    
+    return uniqueBooks.sort((a, b) => {
+      const numA = a.match(/\d+/)?.[0] || '';
+      const numB = b.match(/\d+/)?.[0] || '';
+      
+      const indexA = order.indexOf(numA);
+      const indexB = order.indexOf(numB);
+      
+      const posA = indexA === -1 ? 9999 : indexA;
+      const posB = indexB === -1 ? 9999 : indexB;
+      
+      if (posA !== posB) {
+        return posA - posB;
+      }
+      return a.localeCompare(b);
+    });
+  }, [allSentences]);
+
   const units = useMemo(() => Array.from(new Set(allSentences.filter(s => s.book === book).map(s => s.lesson))).filter(Boolean), [allSentences, book]);
   const days = useMemo(() => Array.from(new Set(allSentences.filter(s => s.book === book && s.lesson === unit).map(s => s.day))).filter(Boolean), [allSentences, book, unit]);
 
