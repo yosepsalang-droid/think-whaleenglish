@@ -1,27 +1,63 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { CONFIG } from '../config';
 
-// 💡 [수정] 단어 테스트 및 진도 관리 로그 적재를 위해 id(학번) 필드를 추가했습니다.
 interface Student {
-  id: string;        // 학번 (예: ST_001)
-  name: string;      // 이름
-  grade: string;     // 학년/구분 (예: 초등부, 중등부)
-  currentBook: string; // 현재 학습 중인 교재
-  progress: string;  // 현재 추천 진도 (예: Lesson 1 Day 2)
+  id: string;
+  name: string;
+  grade: string;
+  currentBook: string;
+  progress: string;
 }
 
 interface HomeProps {
   student: Student;
   onNavigate: (menu: string) => void;
   onLogout: () => void;
+  // 💡 [추가] 부모(App.tsx)에게 변경된 정보를 전달하는 함수
+  onUpdateStudent: (updatedStudent: Student) => void; 
 }
 
-export default function Home({ student, onNavigate, onLogout }: HomeProps) {
+export default function Home({ student, onNavigate, onLogout, onUpdateStudent }: HomeProps) {
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  // 💡 고래영어 초등부 전체 교재 리스트
+  const bookList = ['240_1', '240_2', '240_3', '520_1', '520_2', '520_3', '860_1', '860_2', '860_3', '1240_1', '1240_2', '1240_3', '1680_1', '1680_2', '1680_3'];
+
+  // 💡 드롭다운에서 교재를 선택하면 시트에 즉시 저장하고, 화면 정보도 바꿉니다.
+  const handleBookChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newBook = e.target.value;
+    if (!newBook || newBook === student.currentBook) return;
+
+    setIsUpdating(true);
+    try {
+      const payload = {
+        type: "updateProgress",
+        studentId: student.id,
+        currentBook: newBook,
+        progress: student.progress, // 상세 진도는 기존 내용 유지
+        sheetName: 'STUDENT_LIST'
+      };
+
+      await fetch(CONFIG.WEB_APP_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+
+      // App.tsx의 내 정보(상태)를 즉시 업데이트
+      onUpdateStudent({ ...student, currentBook: newBook });
+    } catch (err) {
+      alert('교재 변경 중 오류가 발생했습니다.');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const menus = [
     { id: 'word', title: '📝 단어 Test', desc: '오늘의 필수 어휘 마스터하기', color: '#4ea8de' },
     { id: 'sentence', title: '🧩 문장 배열 게임', desc: '어순 감각을 키우는 덩어리 학습', color: '#56cfe1' },
     { id: 'chat', title: '🤖 AI 고래 대화', desc: '오늘 배운 문장으로 AI와 톡하기', color: '#72efdd' },
     { id: 'grammar', title: '⚡ 스피드 문법', desc: '도전! 실시간 문법 랭킹전', color: '#64dfdf' },
-    // 👇 [이 한 줄을 추가!] 로비 화면에 5번째 단어 타자 게임 버튼이 생깁니다!
     { id: 'wordMaster', title: '⌨️ Word Master', desc: '스피드 타자로 단어 완벽 마스터!', color: '#48cae4' },
   ];
 
@@ -32,7 +68,6 @@ export default function Home({ student, onNavigate, onLogout }: HomeProps) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '12px', border: '1px solid #eee' }}>
         <div>
           <span style={{ fontSize: '14px', color: '#007aff', fontWeight: 'bold' }}>{student.grade} 🐋</span>
-          {/* 학번이 함께 노출되거나 시스템 내부에서 식별할 수 있도록 구조화됨 */}
           <h3 style={{ margin: '5px 0 0 0', color: '#333' }}>{student.name} 학생 ({student.id})</h3>
         </div>
         <button onClick={onLogout} style={{ padding: '6px 12px', backgroundColor: '#e63946', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>로그아웃</button>
@@ -41,7 +76,27 @@ export default function Home({ student, onNavigate, onLogout }: HomeProps) {
       {/* 현재 진도 카드 */}
       <div style={{ background: 'linear-gradient(135deg, #007aff, #0056b3)', color: 'white', padding: '20px', borderRadius: '15px', marginBottom: '25px' }}>
         <p style={{ margin: '0 0 5px 0', opacity: '0.9', fontSize: '13px' }}>TODAY'S MISSION 📖</p>
-        <h2 style={{ margin: '0 0 10px 0', fontSize: '22px' }}>교재: {student.currentBook}</h2>
+        
+        {/* 💡 [핵심] 텍스트 대신 드롭다운 선택창으로 변신했습니다! */}
+        <h2 style={{ margin: '0 0 10px 0', fontSize: '22px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          학습 교재: 
+          <select 
+            value={student.currentBook} 
+            onChange={handleBookChange}
+            disabled={isUpdating}
+            style={{ 
+              padding: '6px 12px', borderRadius: '8px', border: 'none', fontWeight: 'bold', 
+              color: '#007aff', fontSize: '18px', cursor: isUpdating ? 'not-allowed' : 'pointer', 
+              outline: 'none', backgroundColor: 'white', boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+            }}
+          >
+            {bookList.map(book => (
+              <option key={book} value={book}>{book}권</option>
+            ))}
+          </select>
+          {isUpdating && <span style={{fontSize: '12px', opacity: 0.8}}>저장 중...</span>}
+        </h2>
+
         <div style={{ backgroundColor: 'rgba(255,255,255,0.2)', padding: '8px 12px', borderRadius: '8px', fontSize: '14px' }}>
           🎯 추천 진도: <strong>{student.progress}</strong>
         </div>
@@ -55,12 +110,8 @@ export default function Home({ student, onNavigate, onLogout }: HomeProps) {
             key={menu.id} 
             onClick={() => onNavigate(menu.id)} 
             style={{ 
-              border: '1px solid #e0e0e0', 
-              borderRadius: '12px', 
-              padding: '15px', 
-              cursor: 'pointer', 
-              backgroundColor: 'white', 
-              boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+              border: '1px solid #e0e0e0', borderRadius: '12px', padding: '15px', 
+              cursor: 'pointer', backgroundColor: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
               transition: 'transform 0.1s ease'
             }}
           >

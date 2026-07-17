@@ -10,7 +10,7 @@ import Grammar from './elem/Grammar';
 import WordMaster from './elem/WordMaster';
 
 // 📘 중등부 학습 컴포넌트
-import MidHome from './mid/MidHome'; // 👈 분리된 중등부 메인 대시보드
+import MidHome from './mid/MidHome';
 import Voca from './mid/Voca';
 import MidSen from './mid/MidSen';
 import VerbTest from './mid/VerbTest';
@@ -135,7 +135,6 @@ export default function App() {
         return <VerbTest onBack={() => setCurrentMenu('midHome')} studentId={loggedInStudent.id} studentName={loggedInStudent.name} />;
       }
 
-      // 💡 엄청나게 길었던 코드가 컴포넌트 하나로 정리되었습니다!
       return (
         <MidHome 
           student={loggedInStudent}
@@ -149,12 +148,23 @@ export default function App() {
     if (loggedInStudent && studentMode === 'elementary') {
       return (
         <div>
-          {currentMenu === 'home' && <Home student={loggedInStudent} onNavigate={setCurrentMenu} onLogout={() => { setIsLoggedIn(false); setId(''); setStudentMode(null); }} />}
+          {/* 💡 [핵심] 진도가 변경되면 App.tsx의 내 정보(loggedInStudent)도 업데이트 시켜줍니다. */}
+          {currentMenu === 'home' && (
+            <Home 
+              student={loggedInStudent} 
+              onNavigate={setCurrentMenu} 
+              onLogout={() => { setIsLoggedIn(false); setId(''); setStudentMode(null); }} 
+              onUpdateStudent={(updatedStudent) => setLoggedInStudent(updatedStudent)}
+            />
+          )}
+          
+          {/* 💡 [핵심] 단어, 문장, AI 대화 컴포넌트에 현재 선택된 교재(currentBook)를 전달해줍니다! */}
           {currentMenu === 'word' && (
             <Word
               onBack={() => setCurrentMenu('home')}
               studentId={loggedInStudent.id}
               studentName={loggedInStudent.name}
+              currentBook={loggedInStudent.currentBook}
             />
           )}
           {currentMenu === 'sentence' && (
@@ -162,9 +172,16 @@ export default function App() {
               onBack={() => setCurrentMenu('home')}
               studentId={loggedInStudent.id}
               studentName={loggedInStudent.name}
+              currentBook={loggedInStudent.currentBook}
             />
           )}
-          {currentMenu === 'chat' && <WhaleChat onBack={() => setCurrentMenu('home')} />}
+          {currentMenu === 'chat' && (
+            <WhaleChat 
+              onBack={() => setCurrentMenu('home')} 
+              currentBook={loggedInStudent.currentBook}
+            />
+          )}
+          
           {currentMenu === 'grammar' && (
             <Grammar
               student={loggedInStudent}
