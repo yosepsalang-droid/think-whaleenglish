@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { CONFIG } from '../config';
-import Ranking from './Ranking'; // 👈 [추가됨] 100줄짜리 코드를 대체할 마법의 컴포넌트!
+import Ranking from './Ranking'; // 👈 [추가됨] 랭킹을 그려줄 마법의 컴포넌트!
 
 // 💡 랭킹 데이터 타입 정의
 interface RankEntry {
@@ -267,8 +267,19 @@ export default function Grammar({
             </div>
           )}
           
-          {/* 💡 컴포넌트 스스로 다 알아서 하므로 아무것도 안 넘겨줘도 됩니다! */}
-          <Ranking />
+          {/* 💡 [핵심 수정 완료] Ranking 컴포넌트가 요구하는 3가지 필수 데이터(제목, 데이터, 로딩상태)를 정확하게 넘겨줍니다! */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '30px' }}>
+            <Ranking 
+              title="🏆 지난달 명예의 전당 (TOP 3)"
+              data={rankings.lastMonth.slice(0, 3)}
+              isLoading={loadingRank}
+            />
+            <Ranking 
+              title="🔥 이번달 실시간 랭킹 (TOP 5)"
+              data={rankings.thisMonth.slice(0, 5)}
+              isLoading={loadingRank}
+            />
+          </div>
 
           <button onClick={startGame} style={{...styles.startBtn, marginTop: '20px'}}>스피드 문법 게임 시작하기</button>
         </div>
