@@ -251,11 +251,24 @@ export default function Grammar({
               readOnly={!!student?.name}
             />
           </div>
+
+          {/* 💡 [수정완료] 내 랭킹과 점수를 보여주는 예전 박스를 다시 부활시켰습니다! */}
+          {studentName && (
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginBottom: '24px', backgroundColor: 'white', padding: '15px 25px', borderRadius: '12px', border: '1px solid #cbd5e1', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 'bold', marginBottom: '4px' }}>🏆 내 랭킹</span>
+                <strong style={{ fontSize: '18px', color: '#d97706' }}>{myRank !== null ? `${myRank}위` : '-'}</strong>
+              </div>
+              <div style={{ width: '1px', backgroundColor: '#e2e8f0' }}></div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 'bold', marginBottom: '4px' }}>🔥 총 합산 점수</span>
+                <strong style={{ fontSize: '18px', color: '#2563eb' }}>{totalScore.toLocaleString()}점</strong>
+              </div>
+            </div>
+          )}
           
-          {/* 💡 [핵심] 길고 복잡했던 코드가 단 한 줄의 컴포넌트로 완벽하게 교체되었습니다! */}
+          {/* 💡 [수정완료] 랭킹 컴포넌트에 필요한(존재하는) 속성 2개만 딱 맞춰서 넘깁니다! */}
           <Ranking 
-            totalScore={totalScore}
-            myRank={myRank}
             rankings={rankings}
             loading={loadingRank}
           />
