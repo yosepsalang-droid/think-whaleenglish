@@ -42,7 +42,7 @@ export default function MidHome({ student, onNavigate, onLogout }: MidHomeProps)
 
         <h4 style={{ textAlign: 'center', fontSize: '18px', fontWeight: '700', color: '#333', marginBottom: '16px' }}>오늘의 학습 메뉴</h4>
 
-        {/* 메뉴 버튼 영역 */}
+        {/* 메뉴 버튼 영역 (2x2 그리드) */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
           {/* 1. 단어 Test */}
           <div onClick={() => onNavigate('voca')} style={{ background: 'white', padding: '16px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '120px', border: '1px solid #e0f2fe' }}>
@@ -67,6 +67,15 @@ export default function MidHome({ student, onNavigate, onLogout }: MidHomeProps)
             <div>
               <span style={{ fontSize: '16px', fontWeight: '700' }}>🔥 동사 3단 변화</span>
               <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#8e8e93', lineHeight: '1.4' }}>불규칙 동사 완벽 마스터하기</p>
+            </div>
+            <span style={{ fontSize: '12px', color: '#007aff', fontWeight: '700', textAlign: 'right' }}>입장하기 →</span>
+          </div>
+
+          {/* 💡 4. [신규 추가] AI 맞춤 문법 */}
+          <div onClick={() => onNavigate('grammarTest')} style={{ background: 'white', padding: '16px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,122,255,0.1)', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '120px', border: '2px solid #007aff' }}>
+            <div>
+              <span style={{ fontSize: '16px', fontWeight: '800', color: '#007aff' }}>🧠 AI 맞춤 문법</span>
+              <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#8e8e93', lineHeight: '1.4' }}>틀린 유형까지 완벽하게 마스터</p>
             </div>
             <span style={{ fontSize: '12px', color: '#007aff', fontWeight: '700', textAlign: 'right' }}>입장하기 →</span>
           </div>
