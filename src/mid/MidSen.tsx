@@ -8,6 +8,9 @@ interface Question { id: number; kor: string; eng: string; words: WordToken[]; }
 export default function MidSen({ onBack }: MidSenProps) {
   const [allQuestions, setAllQuestions] = useState<Question[]>([]);
   const [stage, setStage] = useState<number | null>(null);
+  
+  // 💡 [신규] 예습 모드 전용 인덱스와 테스트 모드 인덱스를 분리했습니다.
+  const [previewIdx, setPreviewIdx] = useState(0); 
   const [currentIdx, setCurrentIdx] = useState(0);
   
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -15,11 +18,14 @@ export default function MidSen({ onBack }: MidSenProps) {
 
   // 💡 흐름 제어: 'preview'(문장 예습) -> 'arrange'(단어 배열) -> 'speak'(억양 말하기)
   const [step, setStep] = useState<'preview' | 'arrange' | 'speak'>('preview');
+  
+  // 💡 [신규] 예습 완료 후 테스트 진입 여부를 묻는 창 상태
+  const [showTestPrompt, setShowTestPrompt] = useState(false);
+
   const [isRecording, setIsRecording] = useState(false);
   const [matchRate, setMatchRate] = useState<number | null>(null);
 
   useEffect(() => {
-    // 👈 [수정됨] CONFIG.SHEETS.MID_SENTENCE 로 완벽하게 연결!
     fetch(`${CONFIG.SHEETS.MID_SENTENCE}&_nocache=${Date.now()}`)
       .then(res => res.text())
       .then(text => {
@@ -38,16 +44,18 @@ export default function MidSen({ onBack }: MidSenProps) {
     return Array.from({ length: Math.ceil(allQuestions.length / 20) }, (_, i) => i + 1);
   }, [allQuestions]);
 
-  // 💡 현재 스테이지의 20개 문장 묶음
   const currentStageQs = useMemo(() => {
     if (stage === null) return [];
     return allQuestions.slice((stage - 1) * 20, stage * 20);
   }, [allQuestions, stage]);
 
-  // 💡 현재 풀어야 하는 단일 문장
   const currentQ = useMemo(() => {
     return currentStageQs[currentIdx] || null;
   }, [currentStageQs, currentIdx]);
+
+  const previewQ = useMemo(() => {
+    return currentStageQs[previewIdx] || null;
+  }, [currentStageQs, previewIdx]);
 
   // 🔊 원어민 TTS 발음 함수
   const speakText = (text: string, rate = 0.9) => {
@@ -59,6 +67,13 @@ export default function MidSen({ onBack }: MidSenProps) {
       window.speechSynthesis.speak(utterance);
     }
   };
+
+  // 💡 [요청 2번] 문장이 화면에 뜨면 자동으로 소리가 나도록 Effect 설정
+  useEffect(() => {
+    if (step === 'preview' && previewQ && !showTestPrompt) {
+      speakText(previewQ.eng, 0.85);
+    }
+  }, [previewIdx, step, previewQ, showTestPrompt]);
 
   const handleSelectWord = (token: WordToken) => {
     speakText(token.word);
@@ -76,6 +91,7 @@ export default function MidSen({ onBack }: MidSenProps) {
     if (userSentence.trim().toLowerCase() === currentQ.eng.trim().toLowerCase()) {
       setStep('speak'); 
       speakText(currentQ.eng.trim(), 0.85);
+      setMatchRate(null);
     } else {
       setIsWrongShake(true);
       setTimeout(() => setIsWrongShake(false), 600);
@@ -90,15 +106,38 @@ export default function MidSen({ onBack }: MidSenProps) {
       setMatchRate(null);
     } else {
       alert("🏆 스테이지 클리어! 완벽합니다.");
-      setStage(null);
-      setCurrentIdx(0);
-      setSelectedIds([]);
-      setStep('preview');
+      resetToHome();
     }
   };
 
-  // 🎙️ 음성 인식 및 억양 일치율 계산기
-  const startSpeakingChallenge = () => {
+  // 💡 예습 모드 앞으로/뒤로 가기 로직
+  const handleNextPreview = () => {
+    if (previewIdx + 1 < currentStageQs.length) {
+      setPreviewIdx(prev => prev + 1);
+      setMatchRate(null);
+    } else {
+      setShowTestPrompt(true); // 20문장 끝나면 테스트 창 띄우기
+    }
+  };
+
+  const handlePrevPreview = () => {
+    if (previewIdx > 0) {
+      setPreviewIdx(prev => prev - 1);
+      setMatchRate(null);
+    }
+  };
+
+  const resetToHome = () => {
+    setStage(null);
+    setCurrentIdx(0);
+    setPreviewIdx(0);
+    setSelectedIds([]);
+    setStep('preview');
+    setShowTestPrompt(false);
+  };
+
+  // 🎙️ 음성 인식 및 억양 일치율 계산기 (예습/테스트 공용으로 업그레이드)
+  const startSpeakingChallenge = (targetText: string) => {
     const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRec) {
       alert("현재 브라우저가 마이크를 지원하지 않습니다. (크롬 권장)\n자동 95점 처리 후 넘어갑니다.");
@@ -115,7 +154,7 @@ export default function MidSen({ onBack }: MidSenProps) {
       const transcript = event.results[0][0].transcript.toLowerCase();
       setIsRecording(false);
       
-      const target = currentQ?.eng.toLowerCase().replace(/[^a-z ]/g, '') || '';
+      const target = targetText.toLowerCase().replace(/[^a-z ]/g, '') || '';
       const spoken = transcript.replace(/[^a-z ]/g, '');
       let hits = 0;
       for (let i = 0; i < Math.min(target.length, spoken.length); i++) {
@@ -154,7 +193,7 @@ export default function MidSen({ onBack }: MidSenProps) {
             </h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px' }}>
               {stages.map(s => (
-                <button key={s} onClick={() => { setStage(s); setCurrentIdx(0); setSelectedIds([]); setStep('preview'); }} style={{
+                <button key={s} onClick={() => { setStage(s); resetToHome(); setStage(s); }} style={{
                   background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '20px',
                   color: '#f8fafc', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s',
                   boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
@@ -169,48 +208,111 @@ export default function MidSen({ onBack }: MidSenProps) {
           /* --- [화면 B: 메인 게임 구역] --- */
           <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '20px', padding: '24px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
             
-            {/* 💡 0단계: 문장 20개 먼저 학습하기 (Preview 모드) */}
+            {/* 💡 0단계: 문장 1개씩 보여주는 리뉴얼된 예습(Preview) 모드 */}
             {step === 'preview' && (
               <div style={{ animation: 'fadeIn 0.3s' }}>
-                <h3 style={{ color: '#38bdf8', marginBottom: '6px', textAlign: 'center', fontWeight: 800 }}>STAGE {stage} 구문 예습</h3>
-                <p style={{ color: '#94a3b8', fontSize: '14px', marginBottom: '20px', textAlign: 'center' }}>
-                  테스트 시작 전, 오늘 정복할 20개의 문장을 가볍게 읽어보세요!
-                </p>
                 
-                {/* 스크롤 가능한 세련된 문장 보드 */}
-                <div style={{ 
-                  maxHeight: '50vh', overflowY: 'auto', background: '#0f172a', 
-                  borderRadius: '12px', padding: '16px', border: '1px solid #334155',
-                  marginBottom: '24px', textAlign: 'left'
-                }}>
-                  {currentStageQs.map((q, idx) => (
-                    <div key={q.id} style={{ 
-                      padding: '12px 0', 
-                      borderBottom: idx === currentStageQs.length - 1 ? 'none' : '1px solid #1e293b' 
-                    }}>
-                      <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 'bold' }}>SENTENCE {idx + 1}</div>
-                      <div style={{ fontSize: '15px', color: '#e2e8f0', marginTop: '2px', fontWeight: 500 }}>{q.kor}</div>
-                      <div style={{ fontSize: '14px', color: '#38bdf8', marginTop: '4px', fontStyle: 'italic', letterSpacing: '0.3px' }}>{q.eng}</div>
+                {/* 💡 예습 끝! 테스트 진행 여부 묻는 모달창 */}
+                {showTestPrompt ? (
+                  <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                    <div style={{ fontSize: '50px', marginBottom: '10px' }}>🎯</div>
+                    <h2 style={{ color: '#38bdf8', marginBottom: '15px' }}>20문장 학습 완료!</h2>
+                    <p style={{ color: '#94a3b8', fontSize: '16px', marginBottom: '30px' }}>
+                      이제 진짜 실력을 발휘할 시간입니다.<br/>테스트를 시작하시겠습니까?
+                    </p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <button onClick={() => { setShowTestPrompt(false); setStep('arrange'); setCurrentIdx(0); }} style={{
+                        background: '#38bdf8', color: '#0f172a', border: 'none', padding: '16px', borderRadius: '12px', fontWeight: 800, fontSize: '16px', cursor: 'pointer'
+                      }}>네, 테스트 시작하겠습니다 🚀</button>
+                      
+                      <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                        <button onClick={() => { setShowTestPrompt(false); setPreviewIdx(0); }} style={{
+                          flex: 1, background: '#334155', color: '#f8fafc', border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 600, cursor: 'pointer'
+                        }}>아니요, 첫 문장 다시 볼래요</button>
+                        <button onClick={resetToHome} style={{
+                          flex: 1, background: 'transparent', border: '1px solid #475569', color: '#94a3b8', padding: '14px', borderRadius: '12px', fontWeight: 600, cursor: 'pointer'
+                        }}>홈으로 돌아가기</button>
+                      </div>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ) : (
+                  /* 💡 1문장씩 보여주는 예습 화면 */
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontSize: '14px', fontWeight: 600, marginBottom: '20px' }}>
+                      <span>STAGE {stage} [학습모드]</span>
+                      <span style={{ color: '#34d399' }}>{previewIdx + 1} / {currentStageQs.length}</span>
+                    </div>
 
-                <button onClick={() => setStep('arrange')} style={{
-                  width: '100%', background: '#38bdf8', color: '#0f172a', border: 'none', 
-                  padding: '16px', borderRadius: '12px', fontWeight: 800, fontSize: '16px', cursor: 'pointer',
-                  boxShadow: '0 4px 14px rgba(56,189,248,0.4)', transition: 'transform 0.1s'
-                }}>
-                  준비 완료, 테스트 시작하기! 🚀
-                </button>
+                    <h2 style={{ fontSize: '20px', lineHeight: '1.4', marginBottom: '16px', color: '#f1f5f9', wordBreak: 'keep-all' }}>
+                      {previewQ?.kor}
+                    </h2>
+                    
+                    <div style={{ 
+                      background: '#0f172a', padding: '20px', borderRadius: '12px', border: '1px solid #334155', 
+                      marginBottom: '20px', fontSize: '24px', fontWeight: 700, color: '#38bdf8', lineHeight: '1.5'
+                    }}>
+                      {/* 💡 [요청 4번] 단어 클릭 시 개별 발음 듣기 구현 */}
+                      {previewQ?.eng.split(' ').map((word, wIdx) => (
+                        <span key={wIdx} onClick={() => speakText(word.replace(/[^a-zA-Z]/g, ''), 0.85)} style={{
+                          cursor: 'pointer', borderBottom: '2px dashed #475569', paddingBottom: '2px', marginRight: '8px', display: 'inline-block'
+                        }} title="클릭해서 발음 듣기">
+                          {word}
+                        </span>
+                      ))}
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginBottom: '24px' }}>
+                      {/* 💡 [요청 3번] 전체 문장 다시 듣기 */}
+                      <button onClick={() => speakText(previewQ?.eng || '', 0.85)} style={{
+                        background: '#334155', border: '1px solid #475569', color: 'white', padding: '12px 20px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', flex: 1
+                      }}>🔊 다시 듣기</button>
+
+                      {/* 💡 [요청 5번] 녹음 및 억양 매칭 (건너뛰기 가능) */}
+                      <button onClick={() => startSpeakingChallenge(previewQ?.eng || '')} disabled={isRecording} style={{
+                        background: isRecording ? '#ef4444' : '#8b5cf6', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '12px', fontWeight: 800, cursor: 'pointer', flex: 1.5
+                      }}>
+                        {isRecording ? '🔴 녹음 중...' : '🎙️ 따라 말하기'}
+                      </button>
+                    </div>
+
+                    {/* 녹음 결과창 */}
+                    {matchRate !== null && (
+                      <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '16px', marginBottom: '24px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '13px', color: '#94a3b8' }}>AI 발음 분석</div>
+                        <div style={{ fontSize: '28px', fontWeight: 900, color: matchRate > 80 ? '#34d399' : '#fbbf24', margin: '4px 0' }}>{matchRate}%</div>
+                      </div>
+                    )}
+
+                    {/* 💡 [요청 6번] 이전 / 다음(건너뛰기) 버튼 */}
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                      <button onClick={handlePrevPreview} disabled={previewIdx === 0} style={{
+                        flex: 1, background: previewIdx === 0 ? 'transparent' : '#334155', color: previewIdx === 0 ? '#475569' : '#f8fafc', 
+                        border: '1px solid #475569', padding: '14px', borderRadius: '12px', fontWeight: 'bold', cursor: previewIdx === 0 ? 'default' : 'pointer'
+                      }}>◀ 이전</button>
+                      
+                      <button onClick={handleNextPreview} style={{
+                        flex: 2, background: '#38bdf8', color: '#0f172a', border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 800, cursor: 'pointer'
+                      }}>
+                        {matchRate !== null ? '다음 문장 ➔' : '건너뛰기 ➔'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* 1단계: 단어 배열 모드 */}
+            {/* 1단계: 단어 배열 모드 (기존 유지 + 힌트 버튼 추가) */}
             {step === 'arrange' && (
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontSize: '14px', fontWeight: 600, marginBottom: '16px' }}>
-                  <span>STAGE {stage} [TEST]</span>
-                  <span style={{ color: '#38bdf8' }}>QUESTION {currentIdx + 1} / {currentStageQs.length}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <div style={{ color: '#64748b', fontSize: '14px', fontWeight: 600 }}>
+                    <span>STAGE {stage} [TEST]</span>
+                    <span style={{ color: '#38bdf8', marginLeft: '10px' }}>Q {currentIdx + 1} / {currentStageQs.length}</span>
+                  </div>
+                  {/* 💡 [요청] 문장 소리 들려주는 힌트 버튼 추가 */}
+                  <button onClick={() => speakText(currentQ?.eng || '', 0.85)} style={{
+                    background: 'transparent', border: '1px solid #38bdf8', color: '#38bdf8', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer'
+                  }}>💡 힌트 듣기</button>
                 </div>
 
                 <h2 style={{ fontSize: '20px', lineHeight: '1.4', marginBottom: '24px', color: '#f1f5f9', minHeight: '56px', wordBreak: 'keep-all' }}>
@@ -223,15 +325,14 @@ export default function MidSen({ onBack }: MidSenProps) {
                   transition: 'background 0.2s, border 0.2s'
                 }}>
                   {selectedIds.length === 0 ? (
-                    <span style={{ color: '#64748b', margin: 'auto', fontSize: '14px' }}>단어를 클릭해 문장을 완성하세요 (다시 누르면 취소)</span>
+                    <span style={{ color: '#64748b', margin: 'auto', fontSize: '14px' }}>단어를 클릭해 문장을 완성하세요</span>
                   ) : (
                     selectedIds.map((id) => {
                       const token = currentQ?.words.find(w => w.id === id);
                       return (
                         <button key={id} onClick={() => handleRemoveWord(id)} style={{
                           background: '#38bdf8', color: '#0f172a', border: 'none', borderRadius: '8px', padding: '8px 14px',
-                          fontWeight: 700, fontSize: '15px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px',
-                          boxShadow: '0 2px 4px rgba(56,189,248,0.3)'
+                          fontWeight: 700, fontSize: '15px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
                         }}>
                           {token?.word} <span style={{ opacity: 0.6, fontSize: '12px' }}>✕</span>
                         </button>
@@ -254,8 +355,7 @@ export default function MidSen({ onBack }: MidSenProps) {
                     flex: 1, background: '#334155', color: '#f8fafc', border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer'
                   }}>전체 취소</button>
                   <button onClick={handleCheckAnswer} style={{
-                    flex: 2, background: '#38bdf8', color: '#0f172a', border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 800, cursor: 'pointer',
-                    boxShadow: '0 4px 14px rgba(56,189,248,0.4)'
+                    flex: 2, background: '#38bdf8', color: '#0f172a', border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 800, cursor: 'pointer'
                   }}>정답 제출 🚀</button>
                 </div>
               </div>
@@ -276,15 +376,13 @@ export default function MidSen({ onBack }: MidSenProps) {
                     background: '#334155', border: '1px solid #475569', color: 'white', padding: '12px 20px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer'
                   }}>🔊 원어민 듣기</button>
 
-                  <button onClick={startSpeakingChallenge} disabled={isRecording} style={{
-                    background: isRecording ? '#ef4444' : '#8b5cf6', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '12px', fontWeight: 800, cursor: 'pointer',
-                    boxShadow: '0 4px 16px rgba(139,92,246,0.4)'
+                  <button onClick={() => startSpeakingChallenge(currentQ?.eng || '')} disabled={isRecording} style={{
+                    background: isRecording ? '#ef4444' : '#8b5cf6', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '12px', fontWeight: 800, cursor: 'pointer'
                   }}>
                     {isRecording ? '🔴 음성 감지 중...' : '🎙️ 마이크 켜고 말하기'}
                   </button>
                 </div>
 
-                {/* 결과 출력창 */}
                 {matchRate !== null && (
                   <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '16px', padding: '20px', marginBottom: '24px' }}>
                     <div style={{ fontSize: '13px', color: '#94a3b8' }}>AI 억양 & 발음 분석 결과</div>
