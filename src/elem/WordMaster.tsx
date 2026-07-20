@@ -112,12 +112,18 @@ export default function WordMaster({
 
         rows.forEach(row => {
           const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-          if (cols.length < 4) return;
+          
+          // 💡 [수정 완료] taskType을 읽어오기 위해 6번째 열(F열)까지 확인합니다.
+          if (cols.length < 6) return;
 
           const dateStr = cols[0]?.replace(/^"|"$/g, '').trim(); 
           const name = cols[1]?.replace(/^"|"$/g, '').trim();   
           const scoreVal = parseInt(cols[3]?.replace(/^"|"$/g, '').trim() || '0', 10);
+          
+          // 💡 [수정 완료] 여기서 taskType 변수를 정상적으로 선언합니다.
+          const taskType = cols[5]?.replace(/^"|"$/g, '').trim(); 
 
+          // ✨ '단어게임'과 '문법게임' 점수만 완벽하게 합산합니다.
           if (!name || isNaN(scoreVal) || scoreVal <= 0) return;
           if (taskType !== '단어게임' && taskType !== '문법게임') return;
 
