@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { CONFIG } from '../config';
-import Ranking from './Ranking'; // 👈 [추가됨] 랭킹을 그려줄 마법의 컴포넌트!
+import { CONFIG, withCacheBust } from '../config'; 
+import Ranking from './Ranking'; 
 
-// 💡 랭킹 데이터 타입 정의
 interface RankEntry {
   studentName: string;
   score: number;
@@ -21,25 +20,27 @@ interface GrammarProps {
 export default function Grammar({
   onBack,
   student,
-  totalScore = 0,
-  myRank = null,
-  rankings = { thisMonth: [], lastMonth: [] },
-  loadingRank = false,
+  totalScore: externalTotalScore = 0,
+  myRank: externalMyRank = null,
   onGameComplete,
 }: GrammarProps) {
-  // 💡 상태(LOBBY, GAME, TRANSITION, RESULT)
   const [gameState, setGameState] = useState('LOBBY');
   const [studentName, setStudentName] = useState(student?.name || '');
   
   const [stage, setStage] = useState(1);
   const [qCount, setQCount] = useState(1);
-  
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
   const [timeLeft, setTimeLeft] = useState(10);
   
   const [allData, setAllData] = useState<any[]>([]);
   const [currentQ, setCurrentQ] = useState<any>(null);
+
+  // 💡 [핵심 신규 추가] 문법 게임 전용 자체 랭킹 계산 State
+  const [myRank, setMyRank] = useState<number | null>(externalMyRank);
+  const [myTotalScore, setMyTotalScore] = useState<number>(externalTotalScore);
+  const [localRankings, setLocalRankings] = useState<{ thisMonth: RankEntry[]; lastMonth: RankEntry[] }>({ thisMonth: [], lastMonth: [] });
+  const [isRankLoading, setIsRankLoading] = useState<boolean>(true);
 
   // 1️⃣ 교재 문제 데이터 불러오기
   useEffect(() => {
@@ -60,6 +61,99 @@ export default function Grammar({
       });
   }, []);
 
+  // 💡 [핵심 신규 추가] 구글 시트에서 문법 게임 점수만 쏙 뽑아와서 실시간 랭킹 만들기
+  const fetchAndCalculateRank = (options?: { delayMs?: number }) => {
+    const { delayMs = 0 } = options ?? {};
+    const logSheetUrl = CONFIG.SHEETS.GRAMMAR_LOG;
+
+    if (!logSheetUrl || !studentName.trim()) return;
+
+    setIsRankLoading(true);
+
+    const doFetch = () => {
+      fetch(withCacheBust(logSheetUrl))
+      .then(res => res.text())
+      .then(text => {
+        const rows = text.split(/\r?\n/).slice(1);
+        
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1;
+        const lastMonth = currentMonth === 1 ? 12 : currentMonth - 1;
+        const lastMonthYear = currentMonth === 1 ? currentYear - 1 : currentYear;
+
+        const thisMonthScores: { [name: string]: number } = {};
+        const lastMonthScores: { [name: string]: number } = {};
+
+        rows.forEach(row => {
+          const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+          if (cols.length < 6) return;
+
+          const dateStr = cols[0]?.replace(/^"|"$/g, '').trim(); 
+          const name = cols[1]?.replace(/^"|"$/g, '').trim();   
+          const scoreVal = parseInt(cols[3]?.replace(/^"|"$/g, '').trim() || '0', 10);
+          const taskType = cols[5]?.replace(/^"|"$/g, '').trim();
+
+          // ✨ '문법게임'과 '단어게임' 두 가지 점수를 모두 합산합니다!
+          if (!name || isNaN(scoreVal) || scoreVal <= 0) return;
+          if (taskType !== '문법게임' && taskType !== '단어게임') return;
+
+          let rowYear = 0;
+          let rowMonth = 0;
+          const match = dateStr.match(/(\d{4})[./-]\s*(\d{1,2})/);
+          if (match) {
+            rowYear = parseInt(match[1], 10);
+            rowMonth = parseInt(match[2], 10);
+          }
+
+          if (rowYear === currentYear && rowMonth === currentMonth) {
+            thisMonthScores[name] = (thisMonthScores[name] || 0) + scoreVal;
+          } else if (rowYear === lastMonthYear && rowMonth === lastMonth) {
+            lastMonthScores[name] = (lastMonthScores[name] || 0) + scoreVal;
+          }
+        });
+
+        const sortScores = (scoresObj: { [name: string]: number }) => {
+          return Object.entries(scoresObj)
+            .map(([sName, total]) => ({ studentName: sName, score: total }))
+            .sort((a, b) => b.score - a.score);
+        };
+
+        const thisMonthRankings = sortScores(thisMonthScores);
+        const lastMonthRankings = sortScores(lastMonthScores);
+
+        setLocalRankings({
+          thisMonth: thisMonthRankings,
+          lastMonth: lastMonthRankings
+        });
+
+        // 내 랭킹과 점수 세팅
+        const myIdx = thisMonthRankings.findIndex(item => item.studentName === studentName.trim());
+        if (myIdx !== -1) {
+          setMyRank(myIdx + 1);
+          setMyTotalScore(thisMonthRankings[myIdx].score);
+        } else {
+          setMyRank(null);
+          setMyTotalScore(0);
+        }
+
+        setIsRankLoading(false);
+      })
+      .catch(err => {
+        console.error("랭킹 계산 실패:", err);
+        setIsRankLoading(false);
+      });
+    };
+
+    if (delayMs > 0) setTimeout(doFetch, delayMs);
+    else doFetch();
+  };
+
+  // 학생 이름이 정해지면 랭킹 불러오기 시작
+  useEffect(() => {
+    fetchAndCalculateRank();
+  }, [studentName]);
+
   const getBooksForStage = (currentStage: number) => {
     switch (currentStage) {
       case 1: return ['240_1', '240_2', '240_3'];
@@ -76,7 +170,6 @@ export default function Grammar({
     }
   };
 
-  // 2️⃣ 동적 문제 생성 로직
   const generateProblem = (pool: any[], currentStage: number) => {
     const targetBooks = getBooksForStage(currentStage);
     const stagePool = pool.filter(item => targetBooks.includes(item.book));
@@ -111,13 +204,12 @@ export default function Grammar({
     return { sentence, answer: targetWord.toLowerCase(), options, kor: target.kor };
   };
 
-  // 3️⃣ 게임 시작
   const startGame = () => {
     if (!studentName.trim()) { alert("이름을 입력해주세요!"); return; }
     
     const initialQuestion = generateProblem(allData, 1);
     if (!initialQuestion) { 
-      alert("시트에 1단계(240_1~3) 문제 데이터가 부족합니다."); 
+      alert("시트에 1단계 문제 데이터가 부족합니다."); 
       return; 
     }
     
@@ -130,7 +222,6 @@ export default function Grammar({
     setGameState('GAME');
   };
 
-  // 4️⃣ 타이머
   useEffect(() => {
     if (gameState !== 'GAME') return;
     const timer = setInterval(() => {
@@ -151,7 +242,6 @@ export default function Grammar({
     });
   };
 
-  // 5️⃣ 정답 처리 로직
   const handleAnswer = (selectedOption: string) => {
     let newScore = score;
     if (selectedOption === currentQ.answer) {
@@ -170,7 +260,6 @@ export default function Grammar({
     moveToNextStage(newScore);
   };
 
-  // 6️⃣ 다음 단계 이동 및 알림 화면 적용
   const moveToNextStage = (currentScore: number) => {
     if (qCount < 10) {
       const nextQuestion = generateProblem(allData, stage);
@@ -182,7 +271,7 @@ export default function Grammar({
       const nextQuestion = generateProblem(allData, nextStage);
       
       if (!nextQuestion) {
-        alert(`시트에 ${nextStage}단계 교재 데이터가 부족하여 여기까지만 진행됩니다!`);
+        alert(`시트에 데이터가 부족하여 여기까지만 진행됩니다!`);
         endGame(currentScore);
         return;
       }
@@ -197,9 +286,9 @@ export default function Grammar({
     }
   };
 
-  // 7️⃣ 종료 및 점수 저장
   const endGame = (finalScore: number) => {
     setGameState('RESULT');
+    setMyTotalScore(prev => prev + finalScore);
     
     const payload = {
       type: "saveLog",
@@ -219,20 +308,23 @@ export default function Grammar({
       });
     };
 
-    // 💡 [수정됨] 점수 저장 후 부모(App.tsx)의 onGameComplete만 호출하면 끝!
+    const refreshAfterSave = () => {
+      onGameComplete?.(finalScore);
+      fetchAndCalculateRank({ delayMs: 1500 }); // 점수 반영 후 랭킹 다시 불러오기
+    };
+
     sendLog()
-      .then(() => onGameComplete?.(finalScore))
+      .then(() => refreshAfterSave())
       .catch(err => {
         console.error("1차 저장 실패, 1초 뒤 재시도합니다:", err);
         setTimeout(() => {
           sendLog()
-            .then(() => onGameComplete?.(finalScore))
+            .then(() => refreshAfterSave())
             .catch(e => console.error("최종 저장 실패:", e));
         }, 1000);
       });
   };
 
-  // ================= 🎨 화면 렌더링 =================
   if (gameState === 'LOBBY') {
     return (
       <div style={styles.container}>
@@ -252,7 +344,6 @@ export default function Grammar({
             />
           </div>
 
-          {/* 💡 내 랭킹과 점수를 보여주는 예전 박스를 다시 부활시켰습니다! */}
           {studentName && (
             <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginBottom: '24px', backgroundColor: 'white', padding: '15px 25px', borderRadius: '12px', border: '1px solid #cbd5e1', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -262,22 +353,21 @@ export default function Grammar({
               <div style={{ width: '1px', backgroundColor: '#e2e8f0' }}></div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 'bold', marginBottom: '4px' }}>🔥 총 합산 점수</span>
-                <strong style={{ fontSize: '18px', color: '#2563eb' }}>{totalScore.toLocaleString()}점</strong>
+                <strong style={{ fontSize: '18px', color: '#2563eb' }}>{myTotalScore.toLocaleString()}점</strong>
               </div>
             </div>
           )}
           
-          {/* 💡 [핵심 수정 완료] Ranking 컴포넌트가 요구하는 3가지 필수 데이터(제목, 데이터, 로딩상태)를 정확하게 넘겨줍니다! */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '30px' }}>
             <Ranking 
               title="🏆 지난달 명예의 전당 (TOP 3)"
-              data={rankings.lastMonth.slice(0, 3)}
-              isLoading={loadingRank}
+              data={localRankings.lastMonth.slice(0, 3)}
+              isLoading={isRankLoading}
             />
             <Ranking 
               title="🔥 이번달 실시간 랭킹 (TOP 5)"
-              data={rankings.thisMonth.slice(0, 5)}
-              isLoading={loadingRank}
+              data={localRankings.thisMonth.slice(0, 5)}
+              isLoading={isRankLoading}
             />
           </div>
 
@@ -361,17 +451,15 @@ export default function Grammar({
             setStage(1);
             setQCount(1);
             setScore(0);
-            onGameComplete?.(); // 로비로 돌아갈 때 랭킹 최신화
           }} 
           style={styles.startBtn}
-        >          처음으로 돌아가기
+        >         처음으로 돌아가기
         </button>
       </div>
     </div>
   );
 }
 
-// 💡 랭킹 스타일이 전부 제거되어 스타일 코드가 아주 쾌적해졌습니다!
 const styles: { [key: string]: React.CSSProperties } = {
   container: { minHeight: '100vh', backgroundColor: '#f1f5f9', color: '#0f172a', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', fontFamily: 'Pretendard, sans-serif' },
   card: { backgroundColor: '#ffffff', color: '#0f172a', padding: '30px', borderRadius: '20px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)', width: '100%', maxWidth: '600px', textAlign: 'center' },

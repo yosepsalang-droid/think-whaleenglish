@@ -119,6 +119,7 @@ export default function WordMaster({
           const scoreVal = parseInt(cols[3]?.replace(/^"|"$/g, '').trim() || '0', 10);
 
           if (!name || isNaN(scoreVal) || scoreVal <= 0) return;
+          if (taskType !== '단어게임' && taskType !== '문법게임') return;
 
           let rowYear = 0;
           let rowMonth = 0;
