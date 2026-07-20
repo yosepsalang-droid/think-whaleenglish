@@ -30,13 +30,11 @@ export default function ReportManage() {
   
   const reportRef = useRef<HTMLDivElement>(null);
 
-  // 💡 [신규] 이번 주 월요일 ~ 금요일 날짜를 자동으로 계산하는 함수
   const getWeeklyRange = () => {
     const now = new Date();
-    const day = now.getDay(); // 0(일) ~ 6(토)
-    
+    const day = now.getDay();
     const monday = new Date(now);
-    // 일요일(0)이면 6일을 빼고, 그 외에는 (현재 요일 - 1)만큼 빼면 월요일이 됩니다.
+    
     if (day === 0) {
       monday.setDate(now.getDate() - 6);
     } else {
@@ -44,7 +42,7 @@ export default function ReportManage() {
     }
     
     const friday = new Date(monday);
-    friday.setDate(monday.getDate() + 4); // 월요일에서 4일을 더하면 금요일
+    friday.setDate(monday.getDate() + 4);
     
     const format = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
     return `${format(monday)} ~ ${format(friday)}`;
@@ -141,11 +139,9 @@ export default function ReportManage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '2px solid #222', paddingBottom: '10px', marginBottom: '20px' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '15px' }}>
             <h1 style={{ margin: 0, fontSize: '24px', fontWeight: '900' }}>Weekly Report</h1>
-            {/* 💡 [신규] 월~금 날짜 출력 부분 */}
             <span style={{ fontSize: '15px', color: '#64748b', fontWeight: 'bold' }}>{getWeeklyRange()}</span>
           </div>
           
-          {/* 💡 [신규] data-html2canvas-ignore="true" 를 넣어서 캡처 이미지에서는 버튼이 사라지게 함 */}
           <button 
             data-html2canvas-ignore="true"
             onClick={handleDownloadImage}
@@ -176,10 +172,10 @@ export default function ReportManage() {
           <h2 style={{ fontSize: '14px', color: '#555', borderBottom: '1px solid #eee', paddingBottom: '5px' }}>Evaluation (Weekly)</h2>
           <div style={{ width: '100%', height: '250px', marginTop: '20px' }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart layout="vertical" data={chartData} margin={{ top: 5, right: 30, left: 120, bottom: 5 }}>
+              <BarChart layout="vertical" data={chartData} margin={{ top: 5, right: 30, left: 140, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis type="number" domain={[0, 100]} />
-                <YAxis dataKey="subject" type="category" width={140} fontSize={13} fontWeight="bold" />
+                <YAxis dataKey="subject" type="category" width={160} fontSize={14} fontWeight="bold" />
                 <Tooltip />
                 <Bar dataKey="score" barSize={25} />
               </BarChart>
@@ -192,23 +188,27 @@ export default function ReportManage() {
           <h2 style={{ fontSize: '14px', color: '#555', borderBottom: '1px solid #eee', paddingBottom: '5px' }}>Overall Balance</h2>
           <div style={{ display: 'flex', marginTop: '20px', border: '1px solid #ddd', borderRadius: '8px', overflow: 'hidden' }}>
             
+            {/* 💡 [수정됨] 좌측: 텍스트 2줄 배치 & 숫자 박스 깔끔하게 변경 */}
             <div style={{ flex: 1, borderRight: '1px solid #ddd', padding: '30px', display: 'flex', flexDirection: 'column', gap: '30px', backgroundColor: '#f8fafc' }}>
               {chartData.map((data, idx) => (
-                <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#334155' }}>{data.subject}</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <input type="text" value={data.score} readOnly style={{ width: '60px', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '4px', textAlign: 'center', fontWeight: 'bold', backgroundColor: 'white' }} />
-                    <span style={{ color: '#64748b', fontSize: '13px' }}>/ 100</span>
+                <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <span style={{ fontSize: '15px', fontWeight: '900', color: '#334155' }}>{data.subject}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', paddingLeft: '4px' }}>
+                    {/* 잘리던 input 대신, 깔끔하게 정렬되는 div 박스로 교체 */}
+                    <div style={{ width: '80px', height: '36px', display: 'flex', justifyContent: 'center', alignItems: 'center', border: '1px solid #cbd5e1', borderRadius: '6px', backgroundColor: 'white', fontWeight: '900', fontSize: '16px', color: '#0f172a' }}>
+                      {data.score}
+                    </div>
+                    <span style={{ color: '#64748b', fontSize: '15px', fontWeight: 'bold' }}>/ 100</span>
                   </div>
                 </div>
               ))}
             </div>
             
-            <div style={{ flex: 1.5, height: '400px', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff' }}>
+            <div style={{ flex: 1.5, height: '450px', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff', paddingTop: '20px' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart cx="50%" cy="50%" outerRadius="70%" data={chartData}>
                   <PolarGrid />
-                  <PolarAngleAxis dataKey="subject" fontSize={13} fontWeight="bold" />
+                  <PolarAngleAxis dataKey="subject" fontSize={14} fontWeight="bold" />
                   <PolarRadiusAxis angle={30} domain={[0, 100]} />
                   <Radar name={selectedStudent?.name || "Student"} dataKey="score" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.5} />
                   <Tooltip />
@@ -225,7 +225,7 @@ export default function ReportManage() {
             <textarea 
               value={comment}
               onChange={(e) => setComment(e.target.value)}
-              style={{ width: '100%', height: '100px', padding: '15px', border: '1px solid #cbd5e1', borderRadius: '8px', boxSizing: 'border-box', resize: 'vertical', fontSize: '14px', lineHeight: '1.6', outline: 'none' }}
+              style={{ width: '100%', height: '100px', padding: '15px', border: '1px solid #cbd5e1', borderRadius: '8px', boxSizing: 'border-box', resize: 'vertical', fontSize: '15px', lineHeight: '1.6', outline: 'none' }}
             />
           </div>
         </div>
