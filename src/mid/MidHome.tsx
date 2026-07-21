@@ -15,23 +15,22 @@ interface MidHomeProps {
   onLogout: () => void;
 }
 
-// 💡 마법의 함수: CSV 텍스트를 React가 이해하기 쉬운 데이터 배열로 예쁘게 변환해 줍니다.
+// 💡 CSV 텍스트 변환 함수 (타입 에러 수정 완료)
 const parseCSV = (csvText: string) => {
   const lines = csvText.split(/\r?\n/);
   if (lines.length < 2) return [];
 
   const headers = lines[0].split(',').map(h => h.trim());
-  const result = [];
+  const result: any[] = []; // 💡 result에도 명시적으로 타입을 지정했습니다.
 
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i];
     if (!line.trim()) continue;
 
-    const row = [];
+    const row: string[] = []; // 💡 핵심 수정: 문자열만 들어가는 배열이라고 명찰(string[])을 달아주었습니다!
     let inQuotes = false;
     let currentValue = "";
     
-    // 문장 안에 들어있는 쉼표(,)와 데이터를 구분하는 쉼표를 똑똑하게 구별합니다.
     for (let char of line) {
       if (char === '"') {
         inQuotes = !inQuotes;
@@ -47,7 +46,6 @@ const parseCSV = (csvText: string) => {
     const obj: any = {};
     headers.forEach((header, index) => {
       let val = row[index] ? row[index].trim() : "";
-      // 양끝에 남은 큰따옴표를 깔끔하게 제거합니다.
       if (val.startsWith('"') && val.endsWith('"')) {
         val = val.substring(1, val.length - 1);
       }
@@ -65,7 +63,6 @@ export default function MidHome({ student, onNavigate, onLogout }: MidHomeProps)
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // 💡 원장님이 주신 구글 시트 CSV 주소로 데이터를 불러옵니다.
   useEffect(() => {
     const fetchGrammarData = async () => {
       setIsLoading(true);
