@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import MidGrammar from './MidGrammar'; 
 
 interface Student {
@@ -15,106 +15,17 @@ interface MidHomeProps {
   onLogout: () => void;
 }
 
-// 💡 CSV 텍스트 변환 함수 (타입 에러 수정 완료)
-const parseCSV = (csvText: string) => {
-  const lines = csvText.split(/\r?\n/);
-  if (lines.length < 2) return [];
-
-  const headers = lines[0].split(',').map(h => h.trim());
-  const result: any[] = []; // 💡 result에도 명시적으로 타입을 지정했습니다.
-
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i];
-    if (!line.trim()) continue;
-
-    const row: string[] = []; // 💡 핵심 수정: 문자열만 들어가는 배열이라고 명찰(string[])을 달아주었습니다!
-    let inQuotes = false;
-    let currentValue = "";
-    
-    for (let char of line) {
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === ',' && !inQuotes) {
-        row.push(currentValue);
-        currentValue = "";
-      } else {
-        currentValue += char;
-      }
-    }
-    row.push(currentValue);
-
-    const obj: any = {};
-    headers.forEach((header, index) => {
-      let val = row[index] ? row[index].trim() : "";
-      if (val.startsWith('"') && val.endsWith('"')) {
-        val = val.substring(1, val.length - 1);
-      }
-      obj[header] = val;
-    });
-    result.push(obj);
-  }
-  return result;
-};
-
 export default function MidHome({ student, onNavigate, onLogout }: MidHomeProps) {
   const [currentView, setCurrentView] = useState<'HOME' | 'GRAMMAR'>('HOME');
 
-  const [grammarQuestions, setGrammarQuestions] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchGrammarData = async () => {
-      setIsLoading(true);
-      try {
-        const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe/pub?gid=36839762&single=true&output=csv';
-        const response = await fetch(CSV_URL);
-        
-        if (!response.ok) {
-          throw new Error('데이터를 불러오는데 실패했습니다.');
-        }
-        
-        const csvText = await response.text();
-        const parsedData = parseCSV(csvText);
-        
-        setGrammarQuestions(parsedData);
-      } catch (err) {
-        console.error('문법 데이터 로딩 에러:', err);
-        setLoadError('문법 데이터를 불러오는 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchGrammarData();
-  }, []);
-
+  // 💡 AI 문법 화면으로 넘어갔을 때 보여줄 컴포넌트
   if (currentView === 'GRAMMAR') {
-    if (isLoading) {
-      return (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', fontFamily: 'Pretendard, sans-serif' }}>
-          <p style={{ fontSize: '18px', fontWeight: '700', color: '#007aff' }}>🧠 300문장 맞춤 학습 데이터를 불러오는 중입니다...</p>
-        </div>
-      );
-    }
-
-    if (loadError) {
-      return (
-        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh', fontFamily: 'Pretendard, sans-serif', padding: '20px' }}>
-          <p style={{ fontSize: '16px', color: '#ff3b30', marginBottom: '16px', fontWeight: '700' }}>{loadError}</p>
-          <button 
-            onClick={() => setCurrentView('HOME')}
-            style={{ backgroundColor: '#007aff', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer' }}
-          >
-            홈으로 돌아가기
-          </button>
-        </div>
-      );
-    }
-
-    return <MidGrammar onBack={() => setView('home')} />;
+    // 해결 완료: setView가 아닌 setCurrentView('HOME')으로 정확히 수정했습니다.
+    // 학생 기록을 위해 student 데이터도 함께 넘겨줍니다!
+    return <MidGrammar student={student} onBack={() => setCurrentView('HOME')} />;
   }
 
+  // 📺 메인 홈 화면 렌더링
   return (
     <div style={{ backgroundColor: '#f9f9f9', minHeight: '100vh', padding: '20px', fontFamily: 'Pretendard, sans-serif', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <div style={{ width: '100%', maxWidth: '420px' }}>
