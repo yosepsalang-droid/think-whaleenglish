@@ -1,4 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
+// 💡 방금 만든 문법 테스트 파일을 불러옵니다.
+import MidGrammar from './MidGrammar'; 
 
 // 부모(App.tsx)로부터 전달받을 학생 정보 규격
 interface Student {
@@ -16,6 +18,16 @@ interface MidHomeProps {
 }
 
 export default function MidHome({ student, onNavigate, onLogout }: MidHomeProps) {
+  // 💡 화면 전환을 위한 상태(State) 추가
+  // 'HOME'이면 대시보드를, 'GRAMMAR'이면 문법 테스트 화면을 보여줍니다.
+  const [currentView, setCurrentView] = useState<'HOME' | 'GRAMMAR'>('HOME');
+
+  // 💡 'GRAMMAR' 상태일 경우, 기존 화면을 덮고 문법 테스트 화면을 렌더링합니다.
+  if (currentView === 'GRAMMAR') {
+    return <MidGrammar onBack={() => setCurrentView('HOME')} />;
+  }
+
+  // 'HOME' 상태일 경우 보여지는 기존 대시보드 화면
   return (
     <div style={{ backgroundColor: '#f9f9f9', minHeight: '100vh', padding: '20px', fontFamily: 'Pretendard, sans-serif', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <div style={{ width: '100%', maxWidth: '420px' }}>
@@ -71,8 +83,8 @@ export default function MidHome({ student, onNavigate, onLogout }: MidHomeProps)
             <span style={{ fontSize: '12px', color: '#007aff', fontWeight: '700', textAlign: 'right' }}>입장하기 →</span>
           </div>
 
-          {/* 💡 4. [신규 추가] AI 맞춤 문법 */}
-          <div onClick={() => onNavigate('grammarTest')} style={{ background: 'white', padding: '16px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,122,255,0.1)', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '120px', border: '2px solid #007aff' }}>
+          {/* 💡 4. [신규 추가] AI 맞춤 문법 (클릭 이벤트가 변경되었습니다) */}
+          <div onClick={() => setCurrentView('GRAMMAR')} style={{ background: 'white', padding: '16px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,122,255,0.1)', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '120px', border: '2px solid #007aff' }}>
             <div>
               <span style={{ fontSize: '16px', fontWeight: '800', color: '#007aff' }}>🧠 AI 맞춤 문법</span>
               <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#8e8e93', lineHeight: '1.4' }}>틀린 유형까지 완벽하게 마스터</p>
