@@ -11,11 +11,13 @@ interface Question {
   step2_a?: string;
 }
 
+// 💡 수정 완료: onBack 속성이 추가되었습니다.
 interface MidGrammarProps {
   questions: Question[];
+  onBack: () => void; 
 }
 
-const MidGrammar: React.FC<MidGrammarProps> = ({ questions }) => {
+const MidGrammar: React.FC<MidGrammarProps> = ({ questions, onBack }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   
   // 현재 몇 단계인지 관리 (1: 1차 빈칸, 2: 2차 빈칸, 3: 통영작)
@@ -124,6 +126,17 @@ const MidGrammar: React.FC<MidGrammarProps> = ({ questions }) => {
 
   return (
     <div className="max-w-2xl mx-auto p-6 bg-white rounded-xl shadow-md flex flex-col items-center">
+      
+      {/* 💡 뒤로 가기 버튼 추가 완료 */}
+      <div className="w-full flex justify-start mb-4">
+        <button 
+          onClick={onBack}
+          className="text-gray-500 hover:text-gray-700 font-bold"
+        >
+          ← 뒤로 가기
+        </button>
+      </div>
+
       {/* 진행 상황 표시 */}
       <div className="w-full flex justify-between text-gray-400 mb-6 font-bold">
         <span>Question {currentIndex + 1} / {questions.length}</span>
