@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 
-// 데이터베이스에서 가져오는 문항 타입 정의
 interface Question {
   kor: string;
   eng: string;
@@ -11,99 +10,118 @@ interface Question {
   step2_a?: string;
 }
 
-// 💡 수정 완료: onBack 속성이 추가되었습니다.
 interface MidGrammarProps {
   questions: Question[];
-  onBack: () => void; 
+  onBack: () => void;
 }
 
 const MidGrammar: React.FC<MidGrammarProps> = ({ questions, onBack }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
-  
-  // 현재 몇 단계인지 관리 (1: 1차 빈칸, 2: 2차 빈칸, 3: 통영작)
   const [currentStep, setCurrentStep] = useState<number>(1);
-  
-  // 1, 2단계 빈칸 입력값들 (빈칸이 2개일 수 있으므로 배열로 관리)
   const [blankInputs, setBlankInputs] = useState<string[]>([]);
-  // 3단계 통영작 입력값
   const [fullInput, setFullInput] = useState("");
   
+  // 피드백 상태 (메시지와 성공/실패 여부)
   const [feedback, setFeedback] = useState("");
+  const [feedbackStatus, setFeedbackStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
   const question = questions[currentIndex];
 
-  // 👉 핵심 1: 문제 변경 시 초기화 및 '자동 감지' 로직
   useEffect(() => {
     setFeedback("");
+    setFeedbackStatus('idle');
     setBlankInputs([]);
     setFullInput("");
     
-    // 만약 시트에 step1_q 데이터가 없다면? -> 기존 문제이므로 바로 3단계(통영작)로 진입!
     if (!question?.step1_q) {
       setCurrentStep(3);
     } else {
-      setCurrentStep(1); // 신규 문제면 1단계부터 시작
+      setCurrentStep(1);
     }
   }, [currentIndex, question]);
 
-  if (!question) return <div className="text-center p-10 font-bold">모든 학습을 완료했습니다! 🎉</div>;
+  if (!question) {
+    return (
+      <div style={{ backgroundColor: '#f9f9f9', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', fontFamily: 'Pretendard, sans-serif' }}>
+        <div style={{ textAlign: 'center', background: 'white', padding: '40px', borderRadius: '24px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
+          <div style={{ fontSize: '60px', marginBottom: '16px' }}>🎉</div>
+          <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#333', marginBottom: '8px' }}>모든 학습 완료!</h2>
+          <p style={{ color: '#8e8e93', marginBottom: '24px' }}>오늘의 문법 마스터가 되셨습니다.</p>
+          <button onClick={onBack} style={{ backgroundColor: '#007aff', color: 'white', border: 'none', padding: '14px 28px', borderRadius: '16px', fontWeight: '700', fontSize: '16px', cursor: 'pointer' }}>
+            홈으로 돌아가기
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-  // 👉 핵심 2: 채점 및 다음 단계 이동 로직
   const handleSubmit = () => {
     if (currentStep === 1) {
-      // [1단계 채점]
       const isCorrect = blankInputs[0]?.trim().toLowerCase() === question.step1_a?.trim().toLowerCase();
       if (isCorrect) {
-        setFeedback("정답입니다! 👏 다음 단계로 넘어갑니다.");
-        setBlankInputs([]); // 다음 단계를 위해 입력창 비우기
-        setCurrentStep(2);
+        setFeedback("정답입니다! 👏 다음 단계로 갑니다.");
+        setFeedbackStatus('success');
+        setTimeout(() => {
+          setBlankInputs([]);
+          setCurrentStep(2);
+          setFeedback("");
+          setFeedbackStatus('idle');
+        }, 1000);
       } else {
-        setFeedback("틀렸습니다. 다시 한번 생각해보세요.");
+        setFeedback("앗, 다시 한번 생각해보세요! 🤔");
+        setFeedbackStatus('error');
       }
 
     } else if (currentStep === 2) {
-      // [2단계 채점] - 시트의 정답이 쉼표(,)로 구분되어 있으므로 쪼개서 각각 비교
       const answers = question.step2_a?.split(',').map(a => a.trim().toLowerCase()) || [];
-      
-      // 입력한 값들과 정답 배열이 모두 일치하는지 확인
       const isAllCorrect = blankInputs.every((input, i) => input?.trim().toLowerCase() === answers[i]);
       
-      // 빈칸을 모두 채웠고 정답이 맞는지 확인
       if (isAllCorrect && blankInputs.length === answers.length) {
-        setFeedback("완벽합니다! 🌟 이제 문장 전체를 직접 영작해보세요.");
-        setCurrentStep(3);
+        setFeedback("완벽해요! 🌟 이제 문장 전체를 영작해볼까요?");
+        setFeedbackStatus('success');
+        setTimeout(() => {
+          setCurrentStep(3);
+          setFeedback("");
+          setFeedbackStatus('idle');
+        }, 1200);
       } else {
-        setFeedback("빈칸 중 틀린 곳이 있습니다. 다시 확인해보세요.");
+        setFeedback("빈칸 중 틀린 곳이 있어요. 다시 확인해보세요! 🧐");
+        setFeedbackStatus('error');
       }
 
     } else if (currentStep === 3) {
-      // [3단계 채점] 통영작 (대소문자, 구두점, 공백 무시하고 알파벳만 비교)
       const cleanEng = question.eng.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
       const cleanInput = fullInput.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
       
       if (cleanEng === cleanInput) {
         setFeedback("최종 정답! 완벽하게 체화하셨습니다. 🚀");
+        setFeedbackStatus('success');
         setTimeout(() => {
-          // 1초 뒤 다음 문제로 이동
           setCurrentIndex(prev => prev + 1);
-        }, 1000);
+        }, 1500);
       } else {
-        setFeedback("거의 다 왔어요! 다시 시도해보세요.");
+        setFeedback("거의 다 왔어요! 스펠링을 다시 확인해보세요. ✍️");
+        setFeedbackStatus('error');
       }
     }
   };
 
-  // 👉 핵심 3: '_____'를 감지하여 동적으로 Input 태그를 만들어주는 마법의 함수
+  // 단계별 아이콘 및 타이틀 설정
+  const stepInfo = {
+    1: { title: "핵심 형태 찾기", icon: "🎯" },
+    2: { title: "문장 구조 완성", icon: "🧩" },
+    3: { title: "전체 문장 영작", icon: "🚀" }
+  };
+
   const renderQuestionWithBlanks = (qString?: string) => {
     if (!qString) return null;
     const parts = qString.split('_____');
     
     return (
-      <div className="text-xl font-medium mb-4 flex flex-wrap items-center justify-center gap-1">
+      <div style={{ fontSize: '20px', fontWeight: '600', color: '#333', lineHeight: '2', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', gap: '8px' }}>
         {parts.map((part, index) => (
           <React.Fragment key={index}>
-            <span>{part}</span>
-            {/* 마지막 조각 전까지만 input 창을 생성 */}
+            <span style={{ letterSpacing: '0.5px' }}>{part}</span>
             {index < parts.length - 1 && (
               <input
                 type="text"
@@ -112,9 +130,23 @@ const MidGrammar: React.FC<MidGrammarProps> = ({ questions, onBack }) => {
                   const newInputs = [...blankInputs];
                   newInputs[index] = e.target.value;
                   setBlankInputs(newInputs);
+                  setFeedbackStatus('idle'); // 타자를 치면 에러메시지 초기화
                 }}
-                className="border-b-2 border-blue-500 w-24 text-center focus:outline-none bg-transparent"
-                autoFocus={index === 0} // 첫 번째 빈칸에 자동 포커스
+                style={{
+                  width: '100px',
+                  border: 'none',
+                  borderBottom: `3px solid ${feedbackStatus === 'error' ? '#ff3b30' : '#007aff'}`,
+                  backgroundColor: feedbackStatus === 'error' ? '#ffeceb' : '#f0f8ff',
+                  color: '#007aff',
+                  fontWeight: '800',
+                  fontSize: '20px',
+                  textAlign: 'center',
+                  outline: 'none',
+                  padding: '4px 8px',
+                  borderRadius: '6px 6px 0 0',
+                  transition: 'all 0.2s ease-in-out'
+                }}
+                autoFocus={index === 0}
                 onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
               />
             )}
@@ -125,60 +157,103 @@ const MidGrammar: React.FC<MidGrammarProps> = ({ questions, onBack }) => {
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-6 bg-white rounded-xl shadow-md flex flex-col items-center">
-      
-      {/* 💡 뒤로 가기 버튼 추가 완료 */}
-      <div className="w-full flex justify-start mb-4">
-        <button 
-          onClick={onBack}
-          className="text-gray-500 hover:text-gray-700 font-bold"
-        >
-          ← 뒤로 가기
-        </button>
-      </div>
-
-      {/* 진행 상황 표시 */}
-      <div className="w-full flex justify-between text-gray-400 mb-6 font-bold">
-        <span>Question {currentIndex + 1} / {questions.length}</span>
-        <span className="text-blue-500">Step {currentStep} / 3</span>
-      </div>
-
-      {/* 한글 뜻 (모든 단계에서 공통 표시) */}
-      <h2 className="text-2xl font-bold text-gray-800 mb-8 text-center">
-        "{question.kor}"
-      </h2>
-
-      {/* 단계별 문제 영역 */}
-      <div className="w-full flex flex-col items-center justify-center min-h-[100px] mb-6">
-        {currentStep === 1 && renderQuestionWithBlanks(question.step1_q)}
-        {currentStep === 2 && renderQuestionWithBlanks(question.step2_q)}
-        {currentStep === 3 && (
-          <div className="w-full">
-            <input
-              type="text"
-              value={fullInput}
-              onChange={(e) => setFullInput(e.target.value)}
-              className="w-full border-2 border-gray-300 rounded-lg p-3 text-lg focus:border-blue-500 outline-none"
-              placeholder="위 한글 뜻을 보고 전체 영어 문장을 완성하세요."
-              autoFocus
-              onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-            />
+    <div style={{ backgroundColor: '#f9f9f9', minHeight: '100vh', padding: '20px', fontFamily: 'Pretendard, sans-serif', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <div style={{ width: '100%', maxWidth: '420px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+        
+        {/* 상단 네비게이션 */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#8e8e93', fontSize: '16px', fontWeight: '700', cursor: 'pointer', padding: '8px 0' }}>
+            ← 뒤로
+          </button>
+          <div style={{ backgroundColor: '#e0f2fe', color: '#007aff', padding: '6px 14px', borderRadius: '20px', fontSize: '14px', fontWeight: '800' }}>
+            Q {currentIndex + 1} / {questions.length}
           </div>
-        )}
-      </div>
+        </div>
 
-      {/* 채점 피드백 메세지 */}
-      <div className="h-6 mb-4 font-bold text-orange-500">
-        {feedback}
-      </div>
+        {/* 메인 학습 카드 */}
+        <div style={{ background: 'white', borderRadius: '24px', padding: '32px 24px', boxShadow: '0 8px 24px rgba(0,0,0,0.04)', display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
+          
+          {/* 단계 표시 뱃지 */}
+          <div style={{ backgroundColor: currentStep === 3 ? '#f0ebff' : '#f0f8ff', color: currentStep === 3 ? '#5e5ce6' : '#007aff', padding: '8px 16px', borderRadius: '12px', fontSize: '14px', fontWeight: '800', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span>{stepInfo[currentStep as 1|2|3].icon}</span>
+            <span>Step {currentStep}. {stepInfo[currentStep as 1|2|3].title}</span>
+          </div>
 
-      {/* 확인 버튼 */}
-      <button 
-        onClick={handleSubmit}
-        className="px-8 py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition"
-      >
-        확인
-      </button>
+          {/* 한글 문장 */}
+          <h2 style={{ fontSize: '22px', fontWeight: '800', color: '#1c1c1e', textAlign: 'center', wordBreak: 'keep-all', lineHeight: '1.4', marginBottom: '32px' }}>
+            "{question.kor}"
+          </h2>
+
+          {/* 입력 영역 */}
+          <div style={{ width: '100%', minHeight: '80px', display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '24px' }}>
+            {currentStep === 1 && renderQuestionWithBlanks(question.step1_q)}
+            {currentStep === 2 && renderQuestionWithBlanks(question.step2_q)}
+            {currentStep === 3 && (
+              <input
+                type="text"
+                value={fullInput}
+                onChange={(e) => {
+                  setFullInput(e.target.value);
+                  setFeedbackStatus('idle');
+                }}
+                placeholder="전체 영어 문장을 완성하세요."
+                style={{
+                  width: '100%',
+                  padding: '18px 20px',
+                  fontSize: '18px',
+                  fontWeight: '600',
+                  color: '#333',
+                  backgroundColor: '#f9f9f9',
+                  border: `2px solid ${feedbackStatus === 'error' ? '#ff3b30' : '#e5e5ea'}`,
+                  borderRadius: '16px',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                  transition: 'border-color 0.2s',
+                  textAlign: 'center'
+                }}
+                autoFocus
+                onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+              />
+            )}
+          </div>
+
+          {/* 피드백 메시지 영역 */}
+          <div style={{ height: '24px', marginBottom: '24px', width: '100%', textAlign: 'center' }}>
+            {feedback && (
+              <span style={{ 
+                color: feedbackStatus === 'success' ? '#34c759' : '#ff3b30', 
+                fontWeight: '700', 
+                fontSize: '15px',
+                animation: 'fadeIn 0.3s ease-in-out'
+              }}>
+                {feedback}
+              </span>
+            )}
+          </div>
+
+          {/* 정답 확인 버튼 */}
+          <button 
+            onClick={handleSubmit}
+            style={{ 
+              width: '100%', 
+              backgroundColor: feedbackStatus === 'success' ? '#34c759' : '#007aff', 
+              color: 'white', 
+              border: 'none', 
+              padding: '18px', 
+              borderRadius: '16px', 
+              fontSize: '18px', 
+              fontWeight: '800', 
+              cursor: 'pointer',
+              boxShadow: feedbackStatus === 'success' ? '0 4px 12px rgba(52,199,89,0.3)' : '0 4px 12px rgba(0,122,255,0.3)',
+              transition: 'all 0.2s',
+              marginTop: 'auto' // 버튼을 카드 하단으로 밀어냄
+            }}
+          >
+            {feedbackStatus === 'success' ? '통과!' : '정답 확인하기'}
+          </button>
+        </div>
+
+      </div>
     </div>
   );
 };
