@@ -15,30 +15,72 @@ interface MidHomeProps {
   onLogout: () => void;
 }
 
+// 💡 마법의 함수: CSV 텍스트를 React가 이해하기 쉬운 데이터 배열로 예쁘게 변환해 줍니다.
+const parseCSV = (csvText: string) => {
+  const lines = csvText.split(/\r?\n/);
+  if (lines.length < 2) return [];
+
+  const headers = lines[0].split(',').map(h => h.trim());
+  const result = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim()) continue;
+
+    const row = [];
+    let inQuotes = false;
+    let currentValue = "";
+    
+    // 문장 안에 들어있는 쉼표(,)와 데이터를 구분하는 쉼표를 똑똑하게 구별합니다.
+    for (let char of line) {
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        row.push(currentValue);
+        currentValue = "";
+      } else {
+        currentValue += char;
+      }
+    }
+    row.push(currentValue);
+
+    const obj: any = {};
+    headers.forEach((header, index) => {
+      let val = row[index] ? row[index].trim() : "";
+      // 양끝에 남은 큰따옴표를 깔끔하게 제거합니다.
+      if (val.startsWith('"') && val.endsWith('"')) {
+        val = val.substring(1, val.length - 1);
+      }
+      obj[header] = val;
+    });
+    result.push(obj);
+  }
+  return result;
+};
+
 export default function MidHome({ student, onNavigate, onLogout }: MidHomeProps) {
   const [currentView, setCurrentView] = useState<'HOME' | 'GRAMMAR'>('HOME');
 
-  // 💡 300개의 정제된 문법 데이터를 담을 상태
   const [grammarQuestions, setGrammarQuestions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // 💡 아이들이 'AI 맞춤 문법'에 들어갈 때 또는 화면이 켜질 때 구글 시트에서 300문장 데이터를 불러옵니다.
-  // (만약 다른 컴포넌트에서 이미 데이터를 불러와서 props로 넘겨주는 구조라면 그에 맞게 수정하실 수 있습니다.)
+  // 💡 원장님이 주신 구글 시트 CSV 주소로 데이터를 불러옵니다.
   useEffect(() => {
     const fetchGrammarData = async () => {
       setIsLoading(true);
       try {
-        // 🚨 아래의 연동 주소(API URL 또는 구글 시트 연동 주소)를 원장님의 실제 엔드포인트로 맞춰주세요!
-        // 예시: const response = await fetch('https://script.google.com/macros/s/your-api-url/exec');
-        const response = await fetch('/api/mid-grammar'); // 혹은 원장님 프로젝트의 시트 연동 경로
+        const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe/pub?gid=36839762&single=true&output=csv';
+        const response = await fetch(CSV_URL);
         
         if (!response.ok) {
           throw new Error('데이터를 불러오는데 실패했습니다.');
         }
         
-        const data = await response.json();
-        setGrammarQuestions(data);
+        const csvText = await response.text();
+        const parsedData = parseCSV(csvText);
+        
+        setGrammarQuestions(parsedData);
       } catch (err) {
         console.error('문법 데이터 로딩 에러:', err);
         setLoadError('문법 데이터를 불러오는 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.');
@@ -50,7 +92,6 @@ export default function MidHome({ student, onNavigate, onLogout }: MidHomeProps)
     fetchGrammarData();
   }, []);
 
-  // 'GRAMMAR' 상태일 경우 문법 테스트 컴포넌트 실행
   if (currentView === 'GRAMMAR') {
     if (isLoading) {
       return (
