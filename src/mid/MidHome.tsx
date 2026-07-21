@@ -112,7 +112,7 @@ export default function MidHome({ student, onNavigate, onLogout }: MidHomeProps)
       );
     }
 
-    return <MidGrammar questions={grammarQuestions} onBack={() => setCurrentView('HOME')} />;
+    return <MidGrammar onBack={() => setView('home')} />;
   }
 
   return (
