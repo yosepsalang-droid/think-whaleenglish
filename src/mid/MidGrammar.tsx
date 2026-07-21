@@ -1,224 +1,235 @@
 import React, { useState, useEffect } from 'react';
 
+// 제미나이가 생성해 줄 문제의 완벽한 규격
 interface Question {
-  level?: string; 
-  type?: string;  
   kor: string;
   eng: string;
   explanation: string;
-  step1_q?: string;
-  step1_a?: string;
-  step2_q?: string;
-  step2_a?: string;
+  step1_q: string;
+  step1_a: string;
+  step2_q: string;
+  step2_a: string;
 }
 
 interface MidGrammarProps {
-  questions: Question[];
+  student?: any;
   onBack: () => void;
 }
 
-const MidGrammar: React.FC<MidGrammarProps> = ({ questions, onBack }) => {
-  // 🎯 핵심 상태: 현재 레벨과 화면에 띄울 문제들(Queue)
-  const [currentLevel, setCurrentLevel] = useState<'초급' | '중급' | '고급'>('초급');
-  const [queue, setQueue] = useState<Question[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+export default function MidGrammar({ student, onBack }: MidGrammarProps) {
+  // 🎯 화면 상태 관리
+  const [appPhase, setAppPhase] = useState<'SETUP' | 'LOADING' | 'QUIZ' | 'RESULT'>('SETUP');
   
-  // 중복 출제 방지 및 현재 문제 오답 여부 기록
-  const [usedSet, setUsedSet] = useState<Set<string>>(new Set());
-  const [hasFailedCurrent, setHasFailedCurrent] = useState(false);
+  // 🎯 설정 상태
+  const [topic, setTopic] = useState("");
+  const [qCount, setQCount] = useState<number>(5);
+  const [level, setLevel] = useState<'초급' | '중급' | '고급' | '심화'>('초급');
 
-  // 학습 UI 상태
+  // 🎯 학습 상태
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [blankInputs, setBlankInputs] = useState<string[]>([]);
   const [fullInput, setFullInput] = useState("");
+  
+  // 🎯 피드백 및 데이터화 상태
   const [feedback, setFeedback] = useState("");
   const [feedbackStatus, setFeedbackStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [isErrorState, setIsErrorState] = useState(false);
+  const [wrongCounts, setWrongCounts] = useState<number[]>([]);
 
-  const getQKey = (q: Question) => `${q.kor}-${q.eng}`;
-
-  // 💡 1. 레벨이 바뀔 때 최초 10문제(현재분사 5 + 과거분사 5) 세팅
-  useEffect(() => {
-    if (questions.length === 0 || currentLevel === '고급') return;
-
-    // 현재 레벨에 맞는 문제만 필터링 (시트에 빈칸이면 '초급'으로 간주)
-    const levelQuestions = questions.filter(q => (q.level || '초급') === currentLevel);
-
-    // 현재분사 5개, 과거분사 5개 추출
-    let presentParticiple = levelQuestions.filter(q => q.type === '현재분사').slice(0, 5);
-    let pastParticiple = levelQuestions.filter(q => q.type === '과거분사').slice(0, 5);
-
-    // 만약 시트에 'type'이 적혀있지 않다면, 임시로 앞부분 10개를 가져옵니다.
-    if (presentParticiple.length === 0 && pastParticiple.length === 0) {
-      presentParticiple = levelQuestions.slice(0, 5);
-      pastParticiple = levelQuestions.slice(5, 10);
+  // --------------------------------------------------------
+  // 💡 1. 제미나이(Gemini) API 문제 생성 요청
+  // --------------------------------------------------------
+  const handleGenerate = async () => {
+    if (!topic.trim()) {
+      alert("풀고 싶은 문법 개념을 입력해 주세요! (예: 현재분사, 5형식)");
+      return;
     }
 
-    const initialQueue = [...presentParticiple, ...pastParticiple];
-    
-    setQueue(initialQueue);
-    setCurrentIndex(0);
+    setAppPhase('LOADING');
 
-    const newUsed = new Set<string>();
-    initialQueue.forEach(q => newUsed.add(getQKey(q)));
-    setUsedSet(newUsed);
-
-  }, [currentLevel, questions]);
-
-  // 💡 2. 문제가 바뀔 때마다 입력창 및 상태 초기화
-  useEffect(() => {
-    setFeedback("");
-    setFeedbackStatus('idle');
-    setBlankInputs([]);
-    setFullInput("");
-    setHasFailedCurrent(false); 
-    
-    const q = queue[currentIndex];
-    if (q) {
-      if (!q.step1_q) setCurrentStep(3);
-      else setCurrentStep(1);
-    }
-  }, [currentIndex, queue]);
-
-  // 💡 3. '고급' 도달 시 준비중 멘트 출력
-  if (currentLevel === '고급') {
-    return (
-      <div style={{ backgroundColor: '#f9f9f9', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', fontFamily: 'Pretendard, sans-serif' }}>
-        <div style={{ textAlign: 'center', background: 'white', padding: '40px', borderRadius: '24px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
-          <div style={{ fontSize: '60px', marginBottom: '16px' }}>🚧</div>
-          <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#333', marginBottom: '8px' }}>고급 문장은 아직 준비 중입니다!</h2>
-          <p style={{ color: '#8e8e93', marginBottom: '24px' }}>초급과 중급을 완벽하게 마스터하셨습니다. 훌륭해요! 👏</p>
-          <button onClick={onBack} style={{ backgroundColor: '#007aff', color: 'white', border: 'none', padding: '14px 28px', borderRadius: '16px', fontWeight: '700', fontSize: '16px', cursor: 'pointer' }}>
-            홈으로 돌아가기
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (queue.length === 0) return null;
-
-  const question = queue[currentIndex];
-
-  // 💡 4. 오답 시 2문제 추가 로직
-  const handleIncorrect = () => {
-    setFeedbackStatus('error');
-    if (!hasFailedCurrent) {
-      setHasFailedCurrent(true); 
-      
-      // 현재 풀고 있는 문제와 같은 레벨, 같은 타입의 문제 중 안 푼 문제 2개 찾기
-      const similarQs = questions.filter(q => 
-        (q.level || '초급') === currentLevel && 
-        q.type === question.type && 
-        !usedSet.has(getQKey(q))
-      ).slice(0, 2);
-
-      if (similarQs.length > 0) {
-        setQueue(prev => [...prev, ...similarQs]); // 큐에 2개 추가!
-        const newUsed = new Set(usedSet);
-        similarQs.forEach(q => newUsed.add(getQKey(q)));
-        setUsedSet(newUsed);
-        setFeedback(`앗, 오답! 🚨 ${question.type || '유사'} 문제 ${similarQs.length}개가 추가되었습니다.`);
-      } else {
-        setFeedback("앗, 다시 한번 생각해보세요! 🤔");
+    try {
+      // 1. .env 금고에서 제미나이 키를 꺼내옵니다. (Vite 환경)
+      const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!API_KEY) {
+        alert("API 키를 찾을 수 없습니다. .env 파일을 확인해 주세요.");
+        setAppPhase('SETUP');
+        return;
       }
-    } else {
-      setFeedback("앗, 다시 한번 생각해보세요! 🤔");
+
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+
+      // 2. 제미나이에게 내릴 강력한 지시문 (프롬프트)
+      const systemPrompt = `너는 중학교 영어 선생님이야.
+      사용자가 요청하는 주제, 난이도, 문제 개수에 맞춰서 영어 문법 문제를 만들어줘.
+      반드시 아래의 JSON 배열 형식으로만 대답해야 해. 마크다운 기호(\`\`\`json 등)나 다른 설명은 절대 추가하지 말고 오직 순수한 JSON 배열만 출력해.
+      
+      [
+        {
+          "kor": "나는 TV를 보면서 피자를 먹었다.",
+          "eng": "I ate pizza watching TV.",
+          "explanation": "동시동작을 나타내는 분사구문입니다. watch에 ing를 붙여 현재분사로 만듭니다.",
+          "step1_q": "I ate pizza _____ TV.",
+          "step1_a": "watching",
+          "step2_q": "I ate _____ _____ TV.",
+          "step2_a": "pizza, watching"
+        }
+      ]
+      
+      지금 만들어야 할 문제 조건: 
+      - 주제: ${topic}
+      - 난이도: ${level} (중학생 수준의 단어 사용)
+      - 개수: ${qCount}개
+      
+      시작!`;
+
+      // 3. 제미나이 서버로 요청 전송
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: systemPrompt }] }],
+          generationConfig: { responseMimeType: "application/json" } // JSON 강제
+        })
+      });
+
+      const data = await response.json();
+      
+      // 4. 제미나이 응답 처리
+      const generatedText = data.candidates[0].content.parts[0].text;
+      const parsedQuestions = JSON.parse(generatedText);
+      
+      setQuestions(parsedQuestions);
+      setWrongCounts(Array(qCount).fill(0)); // 오답 기록 배열 초기화
+      setCurrentIndex(0);
+      setCurrentStep(1);
+      setAppPhase('QUIZ');
+
+    } catch (error) {
+      console.error("AI 문제 생성 실패:", error);
+      alert("문제 생성 실패! 입력하신 내용이 너무 복잡하거나 인터넷 연결에 문제가 있을 수 있습니다.");
+      setAppPhase('SETUP');
     }
   };
 
+  // --------------------------------------------------------
+  // 💡 2. 데이터베이스 전송 (학습 종료 시)
+  // --------------------------------------------------------
+  const finishStudy = () => {
+    const totalWrongs = wrongCounts.reduce((a, b) => a + b, 0);
+    const score = Math.max(0, 100 - (totalWrongs * 5));
+
+    const studyRecord = {
+      studentId: student?.id || 'unknown',
+      studentName: student?.name || '익명 학생',
+      topicAnalyzed: topic,
+      level: level,
+      totalQuestions: qCount,
+      totalWrongs: totalWrongs,
+      score: score,
+      detailLogs: wrongCounts,
+      date: new Date().toISOString()
+    };
+
+    console.log("📊 [관리자 DB로 전송될 데이터 요약]:", studyRecord);
+    setAppPhase('RESULT');
+  };
+
+  // --------------------------------------------------------
+  // 💡 3. 학습 및 채점 로직
+  // --------------------------------------------------------
+  useEffect(() => {
+    setFeedback("");
+    setFeedbackStatus('idle');
+    setIsErrorState(false);
+    setBlankInputs([]);
+    setFullInput("");
+  }, [currentIndex, currentStep]);
+
+  const handleIncorrect = () => {
+    setFeedbackStatus('error');
+    setIsErrorState(true);
+    
+    // 오답 횟수 증가
+    const newWrongCounts = [...wrongCounts];
+    newWrongCounts[currentIndex] += 1;
+    setWrongCounts(newWrongCounts);
+
+    setFeedback("앗, 오답입니다! 다시 한번 생각해 보세요. 🤔");
+  };
+
   const handleSubmit = () => {
+    const question = questions[currentIndex];
+
+    // 잠긴 상태에서 누르면 잠금 해제 (다시 풀기)
+    if (isErrorState) {
+      setIsErrorState(false);
+      setFeedbackStatus('idle');
+      setFeedback("");
+      return;
+    }
+
     if (currentStep === 1) {
       const isCorrect = blankInputs[0]?.trim().toLowerCase() === question.step1_a?.trim().toLowerCase();
       if (isCorrect) {
-        setFeedback("정답입니다! 👏 다음 단계로 갑니다.");
+        setFeedback("좋아요! 다음 단계로 넘어갑니다.");
         setFeedbackStatus('success');
-        setTimeout(() => {
-          setBlankInputs([]);
-          setCurrentStep(2);
-        }, 1000);
-      } else {
-        handleIncorrect();
-      }
+        setTimeout(() => setCurrentStep(2), 1000);
+      } else handleIncorrect();
 
     } else if (currentStep === 2) {
       const answers = question.step2_a?.split(',').map(a => a.trim().toLowerCase()) || [];
       const isAllCorrect = blankInputs.every((input, i) => input?.trim().toLowerCase() === answers[i]);
-      
       if (isAllCorrect && blankInputs.length === answers.length) {
-        setFeedback("완벽해요! 🌟 이제 문장 전체를 영작해볼까요?");
+        setFeedback("완벽해요! 이제 문장 전체를 써보세요.");
         setFeedbackStatus('success');
-        setTimeout(() => {
-          setCurrentStep(3);
-        }, 1200);
-      } else {
-        handleIncorrect();
-      }
+        setTimeout(() => setCurrentStep(3), 1200);
+      } else handleIncorrect();
 
     } else if (currentStep === 3) {
       const cleanEng = question.eng.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
       const cleanInput = fullInput.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
-      
       if (cleanEng === cleanInput) {
-        setFeedback("최종 정답! 완벽하게 체화하셨습니다. 🚀");
+        setFeedback("정답입니다! 🚀");
         setFeedbackStatus('success');
         setTimeout(() => {
-          // 💡 5. 큐에 있는 모든 문제를 다 맞혔을 때 레벨업!
-          if (currentIndex + 1 >= queue.length) {
-            if (currentLevel === '초급') {
-              setCurrentLevel('중급');
-            } else if (currentLevel === '중급') {
-              setCurrentLevel('고급');
-            }
+          if (currentIndex + 1 >= questions.length) {
+            finishStudy(); // 마지막 문제면 완료 처리
           } else {
             setCurrentIndex(prev => prev + 1);
+            setCurrentStep(1);
           }
         }, 1500);
-      } else {
-        handleIncorrect();
-      }
+      } else handleIncorrect();
     }
   };
 
-  const stepInfo = {
-    1: { title: "핵심 형태 찾기", icon: "🎯" },
-    2: { title: "문장 구조 완성", icon: "🧩" },
-    3: { title: "전체 문장 영작", icon: "🚀" }
-  };
+  // --------------------------------------------------------
+  // 📺 화면 렌더링
+  // --------------------------------------------------------
 
+  // 1. 빈칸 렌더링 함수
   const renderQuestionWithBlanks = (qString?: string) => {
     if (!qString) return null;
     const parts = qString.split('_____');
-    
     return (
       <div style={{ fontSize: '20px', fontWeight: '600', color: '#333', lineHeight: '2', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', gap: '8px' }}>
         {parts.map((part, index) => (
           <React.Fragment key={index}>
-            <span style={{ letterSpacing: '0.5px' }}>{part}</span>
+            <span>{part}</span>
             {index < parts.length - 1 && (
               <input
                 type="text"
                 value={blankInputs[index] || ""}
+                disabled={isErrorState || feedbackStatus === 'success'}
                 onChange={(e) => {
                   const newInputs = [...blankInputs];
                   newInputs[index] = e.target.value;
                   setBlankInputs(newInputs);
-                  setFeedbackStatus('idle'); 
                 }}
-                style={{
-                  width: '100px',
-                  border: 'none',
-                  borderBottom: `3px solid ${feedbackStatus === 'error' ? '#ff3b30' : '#007aff'}`,
-                  backgroundColor: feedbackStatus === 'error' ? '#ffeceb' : '#f0f8ff',
-                  color: '#007aff',
-                  fontWeight: '800',
-                  fontSize: '20px',
-                  textAlign: 'center',
-                  outline: 'none',
-                  padding: '4px 8px',
-                  borderRadius: '6px 6px 0 0',
-                  transition: 'all 0.2s ease-in-out'
-                }}
-                autoFocus={index === 0}
+                style={{ width: '100px', border: 'none', borderBottom: `3px solid ${isErrorState ? '#ff3b30' : '#007aff'}`, backgroundColor: isErrorState ? '#ffeceb' : '#f0f8ff', color: '#007aff', fontWeight: '800', fontSize: '20px', textAlign: 'center', outline: 'none', padding: '4px 8px', borderRadius: '6px 6px 0 0', opacity: isErrorState ? 0.7 : 1 }}
+                autoFocus={index === 0 && !isErrorState}
                 onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
               />
             )}
@@ -228,105 +239,137 @@ const MidGrammar: React.FC<MidGrammarProps> = ({ questions, onBack }) => {
     );
   };
 
+  // 화면 분기 처리
+  if (appPhase === 'SETUP') {
+    return (
+      <div style={{ backgroundColor: '#f9f9f9', minHeight: '100vh', padding: '20px', fontFamily: 'Pretendard, sans-serif', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <div style={{ width: '100%', maxWidth: '420px', background: 'white', borderRadius: '24px', padding: '32px 24px', boxShadow: '0 8px 24px rgba(0,0,0,0.04)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+            <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#8e8e93', fontSize: '16px', fontWeight: '700', cursor: 'pointer' }}>← 뒤로</button>
+            <h2 style={{ fontSize: '20px', fontWeight: '800', margin: 0, color: '#1c1c1e' }}>🧠 AI 맞춤 문법</h2>
+            <div style={{ width: '40px' }}></div>
+          </div>
+          
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ fontSize: '14px', fontWeight: '700', color: '#8e8e93', display: 'block', marginBottom: '8px' }}>1. 풀고 싶은 문법 (제미나이 생성)</label>
+            <input type="text" value={topic} onChange={e => setTopic(e.target.value)} placeholder="예) 현재분사, 관계대명사 주격" style={{ width: '100%', padding: '16px', fontSize: '16px', borderRadius: '12px', border: '2px solid #e5e5ea', boxSizing: 'border-box', outline: 'none' }} />
+          </div>
+
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ fontSize: '14px', fontWeight: '700', color: '#8e8e93', display: 'block', marginBottom: '8px' }}>2. 문제 갯수</label>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {[3, 5, 10].map(num => (
+                <button key={num} onClick={() => setQCount(num)} style={{ flex: 1, padding: '12px', borderRadius: '12px', fontWeight: '700', border: `2px solid ${qCount === num ? '#007aff' : '#e5e5ea'}`, backgroundColor: qCount === num ? '#f0f8ff' : 'white', color: qCount === num ? '#007aff' : '#333', cursor: 'pointer' }}>{num}문제</button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '32px' }}>
+            <label style={{ fontSize: '14px', fontWeight: '700', color: '#8e8e93', display: 'block', marginBottom: '8px' }}>3. 난이도</label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              {['초급', '중급', '고급', '심화'].map(lvl => (
+                <button key={lvl} onClick={() => setLevel(lvl as any)} style={{ padding: '12px', borderRadius: '12px', fontWeight: '700', border: `2px solid ${level === lvl ? '#007aff' : '#e5e5ea'}`, backgroundColor: level === lvl ? '#f0f8ff' : 'white', color: level === lvl ? '#007aff' : '#333', cursor: 'pointer' }}>{lvl}</button>
+              ))}
+            </div>
+          </div>
+
+          <button onClick={handleGenerate} style={{ width: '100%', backgroundColor: '#007aff', color: 'white', border: 'none', padding: '18px', borderRadius: '16px', fontSize: '18px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,122,255,0.3)' }}>
+            🚀 AI 맞춤 문제 생성하기
+          </button>
+        </div>
+      </div>
+    );
+  }
+  
+  if (appPhase === 'LOADING') {
+    return (
+      <div style={{ backgroundColor: '#f9f9f9', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', fontFamily: 'Pretendard, sans-serif', textAlign: 'center' }}>
+        <div>
+          <div style={{ fontSize: '60px', marginBottom: '16px', animation: 'spin 2s linear infinite' }}>🤖</div>
+          <h3 style={{ fontSize: '20px', fontWeight: '800', color: '#333' }}>제미나이가 맞춤 문제를<br/>실시간으로 만들고 있습니다...</h3>
+          <p style={{ color: '#007aff', fontWeight: '700', marginTop: '12px' }}>목표: {topic} ({level})</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (appPhase === 'RESULT') {
+    const totalWrongs = wrongCounts.reduce((a, b) => a + b, 0);
+    return (
+      <div style={{ backgroundColor: '#f9f9f9', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', fontFamily: 'Pretendard, sans-serif', textAlign: 'center' }}>
+        <div style={{ background: 'white', padding: '40px', borderRadius: '24px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)', maxWidth: '360px' }}>
+          <div style={{ fontSize: '60px', marginBottom: '16px' }}>{totalWrongs === 0 ? '🏆' : '📊'}</div>
+          <h2 style={{ fontSize: '24px', fontWeight: '800', marginBottom: '8px', color: '#333' }}>학습 기록 완료!</h2>
+          <p style={{ color: '#8e8e93', marginBottom: '24px', lineHeight: '1.5' }}>
+            수고했어요!<br/>총 <b>{totalWrongs}번</b>의 오답을 수정하며<br/><b>[{topic}]</b> 완벽하게 마스터했습니다.
+          </p>
+          <button onClick={onBack} style={{ backgroundColor: '#007aff', color: 'white', border: 'none', padding: '14px 28px', borderRadius: '16px', fontWeight: '700', fontSize: '16px', width: '100%', cursor: 'pointer' }}>홈으로 돌아가기</button>
+        </div>
+      </div>
+    );
+  }
+
+  // QUIZ 화면 렌더링
+  const question = questions[currentIndex];
+  if (!question) return null;
+
+  const stepInfo = {
+    1: { title: "핵심 형태 찾기", icon: "🎯" },
+    2: { title: "문장 구조 완성", icon: "🧩" },
+    3: { title: "전체 문장 영작", icon: "🚀" }
+  };
+
   return (
     <div style={{ backgroundColor: '#f9f9f9', minHeight: '100vh', padding: '20px', fontFamily: 'Pretendard, sans-serif', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <div style={{ width: '100%', maxWidth: '420px', display: 'flex', flexDirection: 'column', flex: 1 }}>
-        
-        {/* 상단 네비게이션 & 레벨/진행도 뱃지 */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#8e8e93', fontSize: '16px', fontWeight: '700', cursor: 'pointer', padding: '8px 0' }}>
-            ← 뒤로
-          </button>
-          
-          <div style={{ backgroundColor: '#f0f8ff', color: '#007aff', padding: '6px 14px', borderRadius: '20px', fontSize: '14px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ backgroundColor: '#007aff', color: 'white', padding: '2px 8px', borderRadius: '10px', fontSize: '12px' }}>
-              {currentLevel}
-            </span>
-            <span>Q {currentIndex + 1} / {queue.length}</span>
-          </div>
+          <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#8e8e93', fontSize: '16px', fontWeight: '700', cursor: 'pointer', padding: '8px 0' }}>← 중단하기</button>
+          <div style={{ backgroundColor: '#f0f8ff', color: '#007aff', padding: '6px 14px', borderRadius: '20px', fontSize: '14px', fontWeight: '800' }}>Q {currentIndex + 1} / {questions.length}</div>
         </div>
 
-        {/* 메인 학습 카드 */}
         <div style={{ background: 'white', borderRadius: '24px', padding: '32px 24px', boxShadow: '0 8px 24px rgba(0,0,0,0.04)', display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
-          
-          <div style={{ backgroundColor: currentStep === 3 ? '#f0ebff' : '#f0f8ff', color: currentStep === 3 ? '#5e5ce6' : '#007aff', padding: '8px 16px', borderRadius: '12px', fontSize: '14px', fontWeight: '800', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div style={{ backgroundColor: currentStep === 3 ? '#f0ebff' : '#f0f8ff', color: currentStep === 3 ? '#5e5ce6' : '#007aff', padding: '8px 16px', borderRadius: '12px', fontSize: '14px', fontWeight: '800', marginBottom: '20px', display: 'flex', gap: '6px' }}>
             <span>{stepInfo[currentStep as 1|2|3].icon}</span>
             <span>Step {currentStep}. {stepInfo[currentStep as 1|2|3].title}</span>
           </div>
+          
+          <h2 style={{ fontSize: '22px', fontWeight: '800', color: '#1c1c1e', textAlign: 'center', wordBreak: 'keep-all', lineHeight: '1.4', marginBottom: '32px' }}>"{question.kor}"</h2>
 
-          <h2 style={{ fontSize: '22px', fontWeight: '800', color: '#1c1c1e', textAlign: 'center', wordBreak: 'keep-all', lineHeight: '1.4', marginBottom: '32px' }}>
-            "{question.kor}"
-          </h2>
-
-          <div style={{ width: '100%', minHeight: '80px', display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '24px' }}>
+          <div style={{ width: '100%', minHeight: '80px', display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '16px' }}>
             {currentStep === 1 && renderQuestionWithBlanks(question.step1_q)}
             {currentStep === 2 && renderQuestionWithBlanks(question.step2_q)}
             {currentStep === 3 && (
               <input
-                type="text"
-                value={fullInput}
-                onChange={(e) => {
-                  setFullInput(e.target.value);
-                  setFeedbackStatus('idle');
-                }}
+                type="text" value={fullInput} disabled={isErrorState || feedbackStatus === 'success'}
+                onChange={(e) => setFullInput(e.target.value)}
                 placeholder="전체 영어 문장을 완성하세요."
-                style={{
-                  width: '100%',
-                  padding: '18px 20px',
-                  fontSize: '18px',
-                  fontWeight: '600',
-                  color: '#333',
-                  backgroundColor: '#f9f9f9',
-                  border: `2px solid ${feedbackStatus === 'error' ? '#ff3b30' : '#e5e5ea'}`,
-                  borderRadius: '16px',
-                  outline: 'none',
-                  boxSizing: 'border-box',
-                  transition: 'border-color 0.2s',
-                  textAlign: 'center'
-                }}
-                autoFocus
-                onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                style={{ width: '100%', padding: '18px 20px', fontSize: '18px', fontWeight: '600', color: '#333', backgroundColor: isErrorState ? '#ffeceb' : '#f9f9f9', border: `2px solid ${isErrorState ? '#ff3b30' : '#e5e5ea'}`, borderRadius: '16px', outline: 'none', textAlign: 'center', opacity: isErrorState ? 0.8 : 1 }}
+                autoFocus={!isErrorState} onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
               />
             )}
           </div>
 
-          <div style={{ height: '24px', marginBottom: '24px', width: '100%', textAlign: 'center' }}>
+          <div style={{ height: '24px', marginBottom: isErrorState ? '12px' : '24px', width: '100%', textAlign: 'center' }}>
             {feedback && (
-              <span style={{ 
-                color: feedbackStatus === 'success' ? '#34c759' : '#ff3b30', 
-                fontWeight: '700', 
-                fontSize: '15px',
-                animation: 'fadeIn 0.3s ease-in-out'
-              }}>
-                {feedback}
-              </span>
+              <span style={{ color: feedbackStatus === 'success' ? '#34c759' : '#ff3b30', fontWeight: '700', fontSize: '15px' }}>{feedback}</span>
             )}
           </div>
 
-          <button 
-            onClick={handleSubmit}
-            style={{ 
-              width: '100%', 
-              backgroundColor: feedbackStatus === 'success' ? '#34c759' : '#007aff', 
-              color: 'white', 
-              border: 'none', 
-              padding: '18px', 
-              borderRadius: '16px', 
-              fontSize: '18px', 
-              fontWeight: '800', 
-              cursor: 'pointer',
-              boxShadow: feedbackStatus === 'success' ? '0 4px 12px rgba(52,199,89,0.3)' : '0 4px 12px rgba(0,122,255,0.3)',
-              transition: 'all 0.2s',
-              marginTop: 'auto'
-            }}
-          >
-            {feedbackStatus === 'success' ? '통과!' : '정답 확인하기'}
+          {isErrorState && (
+            <div style={{ backgroundColor: '#fff0f0', padding: '16px', borderRadius: '16px', width: '100%', boxSizing: 'border-box', marginBottom: '24px', border: '1px solid #ffcdd2', animation: 'fadeIn 0.3s ease-in-out' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                <span style={{ fontSize: '18px' }}>💡</span>
+                <span style={{ color: '#d32f2f', fontWeight: '800', fontSize: '15px' }}>AI 오답 노트</span>
+              </div>
+              <p style={{ margin: 0, fontSize: '15px', color: '#444', lineHeight: '1.5', wordBreak: 'keep-all' }}>{question.explanation}</p>
+            </div>
+          )}
+
+          <button onClick={handleSubmit} style={{ width: '100%', backgroundColor: feedbackStatus === 'success' ? '#34c759' : (isErrorState ? '#ff3b30' : '#007aff'), color: 'white', border: 'none', padding: '18px', borderRadius: '16px', fontSize: '18px', fontWeight: '800', cursor: 'pointer', boxShadow: feedbackStatus === 'success' ? '0 4px 12px rgba(52,199,89,0.3)' : (isErrorState ? '0 4px 12px rgba(255,59,48,0.3)' : '0 4px 12px rgba(0,122,255,0.3)'), marginTop: 'auto' }}>
+            {feedbackStatus === 'success' ? '통과!' : (isErrorState ? '↻ 다시 풀기' : '정답 확인하기')}
           </button>
         </div>
-
       </div>
     </div>
   );
-};
-
-export default MidGrammar;
+}
