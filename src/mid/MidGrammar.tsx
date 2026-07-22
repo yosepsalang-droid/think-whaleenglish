@@ -39,7 +39,7 @@ export default function MidGrammar({ student, onBack }: MidGrammarProps) {
   const [wrongCounts, setWrongCounts] = useState<number[]>([]);
 
   // --------------------------------------------------------
-  // 💡 1. 제미나이(Gemini) API 문제 생성 요청 (수정 완료 ✅)
+  // 💡 1. 제미나이(Gemini) API 문제 생성 요청 (gemini-pro 적용 완료 ✅)
   // --------------------------------------------------------
   const handleGenerate = async () => {
     if (!topic.trim()) {
@@ -60,8 +60,8 @@ export default function MidGrammar({ student, onBack }: MidGrammarProps) {
         return;
       }
 
-      // 2. 모델명을 latest로 명시하여 안정성 확보
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+      // 2. 모델명을 가장 안정적인 gemini-pro로 변경
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${API_KEY}`;
 
       const systemPrompt = `너는 중학교 영어 선생님이야.
       사용자가 요청하는 주제, 난이도, 문제 개수에 맞춰서 영어 문법 문제를 만들어줘.
