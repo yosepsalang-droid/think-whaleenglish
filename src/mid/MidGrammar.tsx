@@ -61,7 +61,7 @@ export default function MidGrammar({ student, onBack }: MidGrammarProps) {
       }
 
       // 2. 모델명을 가장 안정적인 gemini-pro로 변경
-      const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+      const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro:generateContent?key=" + API_KEY;
 
       const systemPrompt = `너는 중학교 영어 선생님이야.
       사용자가 요청하는 주제, 난이도, 문제 개수에 맞춰서 영어 문법 문제를 만들어줘.
