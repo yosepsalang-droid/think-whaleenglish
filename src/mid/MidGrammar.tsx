@@ -65,6 +65,8 @@ export default function MidGrammar({ student, onBack }: MidGrammarProps) {
 
       const systemPrompt = `너는 중학교 영어 선생님이야.
       사용자가 요청하는 주제, 난이도, 문제 개수에 맞춰서 영어 문법 문제를 만들어줘.
+      🚨 중요: 매번 똑같은 문제가 나오지 않도록, 항상 완전히 새로운 문장과 다양한 영어 단어/상황을 사용해서 출제해야 해!
+      
       반드시 아래의 JSON 배열 형식으로만 대답해야 해. 마크다운 기호(\`\`\`json 등)나 다른 설명은 절대 추가하지 말고 오직 순수한 JSON 배열만 출력해.
       
       [
@@ -91,7 +93,9 @@ export default function MidGrammar({ student, onBack }: MidGrammarProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: systemPrompt }] }],
-          generationConfig: { responseMimeType: "application/json" } // JSON 강제
+          generationConfig: { 
+            temperature: 0.9 // 🔥 이 숫자가 높을수록 매번 다르고 창의적인 문제가 나옵니다! (기본값 보통 0.2~0.4)
+          }
         })
       });
 
