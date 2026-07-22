@@ -39,7 +39,7 @@ export default function MidGrammar({ student, onBack }: MidGrammarProps) {
   const [wrongCounts, setWrongCounts] = useState<number[]>([]);
 
   // --------------------------------------------------------
-  // 💡 1. 제미나이(Gemini) API 문제 생성 요청
+  // 💡 1. 제미나이(Gemini) API 문제 생성 요청 (수정 완료 ✅)
   // --------------------------------------------------------
   const handleGenerate = async () => {
     if (!topic.trim()) {
@@ -50,17 +50,19 @@ export default function MidGrammar({ student, onBack }: MidGrammarProps) {
     setAppPhase('LOADING');
 
     try {
-      // 1. .env 금고에서 제미나이 키를 꺼내옵니다. (Vite 환경)
-      const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+      // 1. 공백 제거(.trim())를 추가하여 API 키 오류 원천 차단
+      const rawApiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      const API_KEY = rawApiKey ? rawApiKey.trim() : "";
+      
       if (!API_KEY) {
-        alert("API 키를 찾을 수 없습니다. .env 파일을 확인해 주세요.");
+        alert("API 키를 찾을 수 없습니다. Vercel 환경 변수를 확인해 주세요.");
         setAppPhase('SETUP');
         return;
       }
 
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+      // 2. 모델명을 latest로 명시하여 안정성 확보
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${API_KEY}`;
 
-      // 2. 제미나이에게 내릴 강력한 지시문 (프롬프트)
       const systemPrompt = `너는 중학교 영어 선생님이야.
       사용자가 요청하는 주제, 난이도, 문제 개수에 맞춰서 영어 문법 문제를 만들어줘.
       반드시 아래의 JSON 배열 형식으로만 대답해야 해. 마크다운 기호(\`\`\`json 등)나 다른 설명은 절대 추가하지 말고 오직 순수한 JSON 배열만 출력해.
@@ -84,7 +86,6 @@ export default function MidGrammar({ student, onBack }: MidGrammarProps) {
       
       시작!`;
 
-      // 3. 제미나이 서버로 요청 전송
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -94,21 +95,34 @@ export default function MidGrammar({ student, onBack }: MidGrammarProps) {
         })
       });
 
+      // 🚨 3. 404 등 에러 발생 시 여기서 멈추고 진짜 이유를 잡아냅니다.
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("구글 API 에러 원본:", errorData);
+        throw new Error(`Google API 오류 (${response.status}): ${errorData.error?.message || '주소나 키가 잘못되었습니다.'}`);
+      }
+
       const data = await response.json();
+      
+      // 데이터가 텅 비어서 오는 경우 방어
+      if (!data.candidates || data.candidates.length === 0) {
+        throw new Error("제미나이가 응답을 생성하지 못했습니다.");
+      }
       
       // 4. 제미나이 응답 처리
       const generatedText = data.candidates[0].content.parts[0].text;
       const parsedQuestions = JSON.parse(generatedText);
       
       setQuestions(parsedQuestions);
-      setWrongCounts(Array(qCount).fill(0)); // 오답 기록 배열 초기화
+      setWrongCounts(Array(qCount).fill(0));
       setCurrentIndex(0);
       setCurrentStep(1);
       setAppPhase('QUIZ');
 
-    } catch (error) {
-      console.error("AI 문제 생성 실패:", error);
-      alert("문제 생성 실패! 입력하신 내용이 너무 복잡하거나 인터넷 연결에 문제가 있을 수 있습니다.");
+    } catch (error: any) {
+      console.error("AI 문제 생성 실패 상세 로그:", error);
+      // 알림창에 진짜 에러 원인을 띄워줍니다.
+      alert(`문제 생성 실패!\n이유: ${error.message}`);
       setAppPhase('SETUP');
     }
   };
