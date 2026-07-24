@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { supabase } from '../lib/supabase'; // 💡 수파베이스 연동 라이브러리 추가
 
 // 💡 Day 1부터 Day 40까지 총 200개의 불규칙 동사 데이터가 완벽히 내장되어 있습니다.
 const VERB_DATA = [
@@ -325,13 +326,46 @@ export default function VerbTest({ onBack, studentId = "ST_TEST", studentName = 
     if (step === 'TEST' && currentWord) speakCurrentVerbs();
   }, [currentIndex, currentWord, step]);
 
-  // ✅ 수정 후 (이 코드로 복사해서 덮어쓰세요!)
+  // 💡 RESULT 화면 진입 시 수파베이스로 자동 전송하는 로직 추가
+  useEffect(() => {
+    if (step === 'RESULT' && studentId) {
+      const sendVerbLogToSupabase = async () => {
+        const todayStr = new Date().toISOString().split('T')[0];
+        const bookTitle = `불규칙동사 (Day ${startDay}~${endDay})`;
+
+        try {
+          const { error } = await supabase
+            .from('learning_logs')
+            .insert([{
+              student_id: studentId,
+              student_name: studentName,
+              task_type: '불규칙동사',
+              book_info: bookTitle,
+              score: score,
+              status: '완료',
+              attempt: 1,
+              log_date: todayStr
+            }]);
+
+          if (error) {
+            console.error("불규칙동사 수파베이스 저장 에러:", error);
+          } else {
+            console.log(`✅ [불규칙동사 수파베이스 전송 완료] 학생: ${studentName}, 점수: ${score}/${currentWordList.length}`);
+          }
+        } catch (err) {
+          console.error("불규칙동사 수파베이스 전송 실패:", err);
+        }
+      };
+
+      sendVerbLogToSupabase();
+    }
+  }, [step]);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setInputs(prev => ({ ...prev, [name]: value.toLowerCase() })); 
   };
 
-  // 💡 TS2345 에러 해결: nextRef의 타입을 HTMLInputElement | null 허용으로 유연하게 매칭
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, nextRef: React.RefObject<HTMLInputElement | null> | null) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -390,7 +424,6 @@ export default function VerbTest({ onBack, studentId = "ST_TEST", studentName = 
         <div style={{ padding: '30px 20px', backgroundColor: '#f8f9fa', borderRadius: '16px', textAlign: 'center' }}>
           <h2 style={{ marginBottom: '24px' }}>학습할 범위를 선택하세요</h2>
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', alignItems: 'center', marginBottom: '30px' }}>
-            {/* 💡 TS2345 에러 해결: e.target.value 문자열을 조건부 삼항 연산자와 Number()를 통해 number | "" 타입으로 매칭 */}
             <select value={startDay} onChange={(e) => setStartDay(e.target.value === '' ? '' : Number(e.target.value))} style={selectStyle}>
               <option value="">시작 Day</option>
               {days.map(d => <option key={`start-${d}`} value={d}>Day {d}</option>)}
@@ -466,14 +499,13 @@ export default function VerbTest({ onBack, studentId = "ST_TEST", studentName = 
         </div>
       )}
 
-{step === 'RESULT' && (
+      {step === 'RESULT' && (
         <div style={{ textAlign: 'center', padding: '40px 20px', backgroundColor: '#f8f9fa', borderRadius: '16px' }}>
           <div style={{ fontSize: '56px', marginBottom: '16px' }}>🎉</div>
           <h2 style={{ fontSize: '28px', fontWeight: '800', margin: '0 0 10px 0', color: '#111' }}>
             테스트 완료!
           </h2>
           
-          {/* 💡 [추가] 학습 정보 요약 영역 */}
           <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '24px', textAlign: 'left' }}>
             <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#64748b' }}>
               📅 학습 날짜: <strong>{new Date().toLocaleDateString()}</strong>
