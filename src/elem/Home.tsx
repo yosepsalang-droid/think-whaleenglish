@@ -21,7 +21,18 @@ interface HomeProps {
 export default function Home({ student, onNavigate, onLogout, onUpdateStudent, onBackToSelect }: HomeProps) {
   const [isUpdating, setIsUpdating] = useState(false);
 
-  const bookList = ['240_1', '240_2', '240_3', '520_1', '520_2', '520_3', '860_1', '860_2', '860_3', '1240_1', '1240_2', '1240_3', '1680_1', '1680_2', '1680_3'];
+  const bookList = [
+    // 240 레벨 (1~6권)
+    '240_1', '240_2', '240_3', '240_4', '240_5', '240_6',
+    // 520 레벨 (1~6권)
+    '520_1', '520_2', '520_3', '520_4', '520_5', '520_6',
+    // 860 레벨 (1~6권)
+    '860_1', '860_2', '860_3', '860_4', '860_5', '860_6',
+    // 1240 레벨 (1~6권)
+    '1240_1', '1240_2', '1240_3', '1240_4', '1240_5', '1240_6',
+    // 1680 레벨 (1~6권)
+    '1680_1', '1680_2', '1680_3', '1680_4', '1680_5', '1680_6'
+  ];
 
   // 💡 구글 시트 대신 '수파베이스'로 교재 정보를 업데이트하는 새로운 함수!
   const handleBookChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
