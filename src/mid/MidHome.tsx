@@ -13,15 +13,13 @@ interface MidHomeProps {
   student: Student;
   onNavigate: (menu: string) => void;
   onLogout: () => void;
+  onBackToSelect?: () => void; // ⭐️ 이 부분이 꼭 있어야 합니다!
 }
 
-export default function MidHome({ student, onNavigate, onLogout }: MidHomeProps) {
+export default function MidHome({ student, onNavigate, onLogout, onBackToSelect }: MidHomeProps) {
   const [currentView, setCurrentView] = useState<'HOME' | 'GRAMMAR'>('HOME');
 
-  // 💡 AI 문법 화면으로 넘어갔을 때 보여줄 컴포넌트
   if (currentView === 'GRAMMAR') {
-    // 해결 완료: setView가 아닌 setCurrentView('HOME')으로 정확히 수정했습니다.
-    // 학생 기록을 위해 student 데이터도 함께 넘겨줍니다!
     return <MidGrammar student={student} onBack={() => setCurrentView('HOME')} />;
   }
 
@@ -36,9 +34,20 @@ export default function MidHome({ student, onNavigate, onLogout }: MidHomeProps)
             <span style={{ color: '#007aff', fontWeight: '700', fontSize: '14px' }}>{student.grade} 🐋</span>
             <h2 style={{ margin: '4px 0 0', fontSize: '22px', fontWeight: '800' }}>{student.name} 학생</h2>
           </div>
-          <button onClick={onLogout} style={{ backgroundColor: '#ff3b30', color: 'white', border: 'none', padding: '8px 14px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '14px' }}>
-            로그아웃
-          </button>
+          
+          {/* ⭐️ 이 부분에 뒤로가기 버튼과 로그아웃 버튼이 나란히 들어갑니다 ⭐️ */}
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {onBackToSelect && (
+              <button onClick={onBackToSelect} style={{ backgroundColor: '#8e8e93', color: 'white', border: 'none', padding: '8px 14px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}>
+                🔙 과정 선택
+              </button>
+            )}
+            <button onClick={onLogout} style={{ backgroundColor: '#ff3b30', color: 'white', border: 'none', padding: '8px 14px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}>
+              로그아웃
+            </button>
+          </div>
+          {/* ========================================================= */}
+          
         </div>
 
         {/* 미션 현황 카드 */}

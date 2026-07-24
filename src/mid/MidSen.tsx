@@ -1,29 +1,36 @@
 import { CONFIG } from '../config';
 import React, { useState, useEffect, useMemo } from 'react';
+import { supabase } from '../lib/supabase'; // ⭐️ 수파베이스 열쇠 추가!
 
-interface MidSenProps { onBack: () => void; }
+// 💡 부모 컴포넌트에서 학생 정보(아이디, 이름)를 받을 수 있도록 Props 추가
+interface MidSenProps { 
+  onBack: () => void; 
+  studentId?: string;
+  studentName?: string;
+}
 interface WordToken { id: number; word: string; }
 interface Question { id: number; kor: string; eng: string; words: WordToken[]; }
 
-export default function MidSen({ onBack }: MidSenProps) {
+export default function MidSen({ onBack, studentId = "ST_TEST", studentName = "테스트학생" }: MidSenProps) {
   const [allQuestions, setAllQuestions] = useState<Question[]>([]);
   const [stage, setStage] = useState<number | null>(null);
   
-  // 💡 [신규] 예습 모드 전용 인덱스와 테스트 모드 인덱스를 분리했습니다.
   const [previewIdx, setPreviewIdx] = useState(0); 
   const [currentIdx, setCurrentIdx] = useState(0);
   
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [isWrongShake, setIsWrongShake] = useState(false);
 
-  // 💡 흐름 제어: 'preview'(문장 예습) -> 'arrange'(단어 배열) -> 'speak'(억양 말하기)
   const [step, setStep] = useState<'preview' | 'arrange' | 'speak'>('preview');
   
-  // 💡 [신규] 예습 완료 후 테스트 진입 여부를 묻는 창 상태
   const [showTestPrompt, setShowTestPrompt] = useState(false);
 
   const [isRecording, setIsRecording] = useState(false);
   const [matchRate, setMatchRate] = useState<number | null>(null);
+
+  // ⭐️ [핵심 추가] 문장 오답 기록과 재도전 횟수를 기억하는 공간!
+  const [wrongSentences, setWrongSentences] = useState<string[]>([]);
+  const [attemptCount, setAttemptCount] = useState(1);
 
   useEffect(() => {
     fetch(`${CONFIG.SHEETS.MID_SENTENCE}&_nocache=${Date.now()}`)
@@ -57,18 +64,37 @@ export default function MidSen({ onBack }: MidSenProps) {
     return currentStageQs[previewIdx] || null;
   }, [currentStageQs, previewIdx]);
 
-  // 🔊 원어민 TTS 발음 함수
-  const speakText = (text: string, rate = 0.9) => {
+  // ⭐️ [핵심 변경] 고품질 원어민 발음 패치 (문장 기호 허용 및 부드러운 목소리 찾기)
+  const speakText = (text: string, rate = 0.85) => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
+      const cleanText = text.replace(/[^a-zA-Z\s-.,?!']/g, ''); // 문장 기호 허용
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      
       utterance.lang = 'en-US';
       utterance.rate = rate;
+      utterance.pitch = 1.0;
+
+      const voices = window.speechSynthesis.getVoices();
+      const englishVoices = voices.filter(v => v.lang.startsWith('en'));
+      const preferredVoices = ['Google US English', 'Samantha', 'Alex', 'Microsoft Zira'];
+      
+      let selectedVoice = null;
+      for (const pref of preferredVoices) {
+        selectedVoice = englishVoices.find(v => v.name.includes(pref));
+        if (selectedVoice) break;
+      }
+
+      if (selectedVoice) {
+        utterance.voice = selectedVoice;
+      } else if (englishVoices.length > 0) {
+        utterance.voice = englishVoices[0];
+      }
+
       window.speechSynthesis.speak(utterance);
     }
   };
 
-  // 💡 [요청 2번] 문장이 화면에 뜨면 자동으로 소리가 나도록 Effect 설정
   useEffect(() => {
     if (step === 'preview' && previewQ && !showTestPrompt) {
       speakText(previewQ.eng, 0.85);
@@ -94,7 +120,43 @@ export default function MidSen({ onBack }: MidSenProps) {
       setMatchRate(null);
     } else {
       setIsWrongShake(true);
+      // ⭐️ 오답일 경우: 틀린 문장 리스트에 추가하고 재시도 횟수를 올립니다.
+      setWrongSentences(prev => prev.includes(currentQ.eng) ? prev : [...prev, currentQ.eng]);
+      setAttemptCount(prev => prev + 1);
+
       setTimeout(() => setIsWrongShake(false), 600);
+    }
+  };
+
+  // ⭐️ [핵심 추가] 수파베이스에 기록 전송 (task_type을 '중등문장'으로 분류)
+  const sendLogToSupabase = async () => {
+    try {
+      const now = new Date();
+      const kstOffset = 9 * 60 * 60 * 1000;
+      const kstDate = new Date(now.getTime() + kstOffset);
+      const todayStr = kstDate.toISOString().split('T')[0];
+
+      const { error } = await supabase
+        .from('learning_logs')
+        .insert([{
+          student_id: studentId,
+          student_name: studentName,
+          task_type: '중등문장', // 리포트 분리를 위해 명확하게 구분!
+          book_info: `Stage ${stage}`, // 중등 문장은 교재 대신 스테이지 번호 기록
+          score: currentStageQs.length, // 모든 문제를 통과했으므로 만점 기록
+          status: '완료',
+          attempt: attemptCount,
+          log_date: todayStr,
+          wrong_answers: wrongSentences.length > 0 ? wrongSentences.join(' / ') : '없음(한번에 통과)'
+        }]);
+
+      if (error) {
+        console.error("수파베이스 저장 에러:", error);
+      } else {
+        console.log(`✅ 수파베이스에 중등 문장 (Stage ${stage}) 기록 완벽하게 적재 성공!`);
+      }
+    } catch (err) {
+      console.error("수파베이스 로그 전송 실패:", err);
     }
   };
 
@@ -105,18 +167,19 @@ export default function MidSen({ onBack }: MidSenProps) {
       setStep('arrange');
       setMatchRate(null);
     } else {
-      alert("🏆 스테이지 클리어! 완벽합니다.");
+      // ⭐️ 스테이지 클리어 시 수파베이스로 기록 전송!
+      sendLogToSupabase();
+      alert(`🏆 스테이지 ${stage} 클리어! 완벽합니다.`);
       resetToHome();
     }
   };
 
-  // 💡 예습 모드 앞으로/뒤로 가기 로직
   const handleNextPreview = () => {
     if (previewIdx + 1 < currentStageQs.length) {
       setPreviewIdx(prev => prev + 1);
       setMatchRate(null);
     } else {
-      setShowTestPrompt(true); // 20문장 끝나면 테스트 창 띄우기
+      setShowTestPrompt(true); 
     }
   };
 
@@ -134,9 +197,11 @@ export default function MidSen({ onBack }: MidSenProps) {
     setSelectedIds([]);
     setStep('preview');
     setShowTestPrompt(false);
+    // ⭐️ 홈으로 돌아갈 때 오답 및 시도 횟수 장부 초기화
+    setWrongSentences([]);
+    setAttemptCount(1);
   };
 
-  // 🎙️ 음성 인식 및 억양 일치율 계산기 (예습/테스트 공용으로 업그레이드)
   const startSpeakingChallenge = (targetText: string) => {
     const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRec) {
@@ -185,7 +250,6 @@ export default function MidSen({ onBack }: MidSenProps) {
           padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', marginBottom: '20px'
         }}>◀ 홈으로</button>
 
-        {/* --- [화면 A: 스테이지 선택 창] --- */}
         {stage === null ? (
           <div>
             <h2 style={{ color: '#38bdf8', textAlign: 'center', marginBottom: '30px', fontWeight: 800 }}>
@@ -193,7 +257,7 @@ export default function MidSen({ onBack }: MidSenProps) {
             </h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px' }}>
               {stages.map(s => (
-                <button key={s} onClick={() => { setStage(s); resetToHome(); setStage(s); }} style={{
+                <button key={s} onClick={() => { resetToHome(); setStage(s); }} style={{
                   background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '20px',
                   color: '#f8fafc', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s',
                   boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
@@ -205,14 +269,10 @@ export default function MidSen({ onBack }: MidSenProps) {
             </div>
           </div>
         ) : (
-          /* --- [화면 B: 메인 게임 구역] --- */
           <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '20px', padding: '24px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
             
-            {/* 💡 0단계: 문장 1개씩 보여주는 리뉴얼된 예습(Preview) 모드 */}
             {step === 'preview' && (
               <div style={{ animation: 'fadeIn 0.3s' }}>
-                
-                {/* 💡 예습 끝! 테스트 진행 여부 묻는 모달창 */}
                 {showTestPrompt ? (
                   <div style={{ textAlign: 'center', padding: '20px 0' }}>
                     <div style={{ fontSize: '50px', marginBottom: '10px' }}>🎯</div>
@@ -236,7 +296,6 @@ export default function MidSen({ onBack }: MidSenProps) {
                     </div>
                   </div>
                 ) : (
-                  /* 💡 1문장씩 보여주는 예습 화면 */
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontSize: '14px', fontWeight: 600, marginBottom: '20px' }}>
                       <span>STAGE {stage} [학습모드]</span>
@@ -251,7 +310,6 @@ export default function MidSen({ onBack }: MidSenProps) {
                       background: '#0f172a', padding: '20px', borderRadius: '12px', border: '1px solid #334155', 
                       marginBottom: '20px', fontSize: '24px', fontWeight: 700, color: '#38bdf8', lineHeight: '1.5'
                     }}>
-                      {/* 💡 [요청 4번] 단어 클릭 시 개별 발음 듣기 구현 */}
                       {previewQ?.eng.split(' ').map((word, wIdx) => (
                         <span key={wIdx} onClick={() => speakText(word.replace(/[^a-zA-Z]/g, ''), 0.85)} style={{
                           cursor: 'pointer', borderBottom: '2px dashed #475569', paddingBottom: '2px', marginRight: '8px', display: 'inline-block'
@@ -262,12 +320,10 @@ export default function MidSen({ onBack }: MidSenProps) {
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginBottom: '24px' }}>
-                      {/* 💡 [요청 3번] 전체 문장 다시 듣기 */}
                       <button onClick={() => speakText(previewQ?.eng || '', 0.85)} style={{
                         background: '#334155', border: '1px solid #475569', color: 'white', padding: '12px 20px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', flex: 1
                       }}>🔊 다시 듣기</button>
 
-                      {/* 💡 [요청 5번] 녹음 및 억양 매칭 (건너뛰기 가능) */}
                       <button onClick={() => startSpeakingChallenge(previewQ?.eng || '')} disabled={isRecording} style={{
                         background: isRecording ? '#ef4444' : '#8b5cf6', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '12px', fontWeight: 800, cursor: 'pointer', flex: 1.5
                       }}>
@@ -275,7 +331,6 @@ export default function MidSen({ onBack }: MidSenProps) {
                       </button>
                     </div>
 
-                    {/* 녹음 결과창 */}
                     {matchRate !== null && (
                       <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '12px', padding: '16px', marginBottom: '24px', textAlign: 'center' }}>
                         <div style={{ fontSize: '13px', color: '#94a3b8' }}>AI 발음 분석</div>
@@ -283,7 +338,6 @@ export default function MidSen({ onBack }: MidSenProps) {
                       </div>
                     )}
 
-                    {/* 💡 [요청 6번] 이전 / 다음(건너뛰기) 버튼 */}
                     <div style={{ display: 'flex', gap: '12px' }}>
                       <button onClick={handlePrevPreview} disabled={previewIdx === 0} style={{
                         flex: 1, background: previewIdx === 0 ? 'transparent' : '#334155', color: previewIdx === 0 ? '#475569' : '#f8fafc', 
@@ -301,7 +355,6 @@ export default function MidSen({ onBack }: MidSenProps) {
               </div>
             )}
 
-            {/* 1단계: 단어 배열 모드 (기존 유지 + 힌트 버튼 추가) */}
             {step === 'arrange' && (
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -309,7 +362,6 @@ export default function MidSen({ onBack }: MidSenProps) {
                     <span>STAGE {stage} [TEST]</span>
                     <span style={{ color: '#38bdf8', marginLeft: '10px' }}>Q {currentIdx + 1} / {currentStageQs.length}</span>
                   </div>
-                  {/* 💡 [요청] 문장 소리 들려주는 힌트 버튼 추가 */}
                   <button onClick={() => speakText(currentQ?.eng || '', 0.85)} style={{
                     background: 'transparent', border: '1px solid #38bdf8', color: '#38bdf8', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer'
                   }}>💡 힌트 듣기</button>
@@ -361,7 +413,6 @@ export default function MidSen({ onBack }: MidSenProps) {
               </div>
             )}
 
-            {/* 2단계: 정답 맞춘 후 [AI 억양 따라 말하기] 모드 */}
             {step === 'speak' && (
               <div style={{ textAlign: 'center', animation: 'fadeIn 0.3s' }}>
                 <div style={{ display: 'inline-block', background: '#065f46', color: '#34d399', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', marginBottom: '16px' }}>

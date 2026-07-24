@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { CONFIG } from '../config';
+// ⭐️ 구글 시트 주소(CONFIG)는 이제 안 씁니다! 수파베이스를 불러옵니다.
+import { supabase } from '../lib/supabase'; 
 
 interface Student {
   id: string;
@@ -14,55 +15,39 @@ interface HomeProps {
   onNavigate: (menu: string) => void;
   onLogout: () => void;
   onUpdateStudent: (updatedStudent: Student) => void; 
+  onBackToSelect?: () => void;
 }
 
-export default function Home({ student, onNavigate, onLogout, onUpdateStudent }: HomeProps) {
+export default function Home({ student, onNavigate, onLogout, onUpdateStudent, onBackToSelect }: HomeProps) {
   const [isUpdating, setIsUpdating] = useState(false);
 
-  // 💡 고래영어 초등부 전체 교재 리스트
   const bookList = ['240_1', '240_2', '240_3', '520_1', '520_2', '520_3', '860_1', '860_2', '860_3', '1240_1', '1240_2', '1240_3', '1680_1', '1680_2', '1680_3'];
 
-  // 💡 구글 시트로 보내고 응답을 철저하게 검사합니다.
+  // 💡 구글 시트 대신 '수파베이스'로 교재 정보를 업데이트하는 새로운 함수!
   const handleBookChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newBook = e.target.value;
     if (!newBook || newBook === student.currentBook) return;
 
     setIsUpdating(true);
     try {
-      const payload = {
-        type: "updateProgress",
-        studentId: student.id,
-        currentBook: newBook,
-        progress: student.progress, 
-        // 🚨 이 부분이 구글 시트 아래쪽 탭 이름과 정확히 100% 똑같아야 합니다!
-        sheetName: 'STUDENT_LIST' 
-      };
+      // 🚀 수파베이스의 students 테이블에서, 현재 학생의 아이디를 찾아 교재(currentBook)를 바꿉니다.
+      const { error } = await supabase
+        .from('students')
+        .update({ currentBook: newBook })
+        .eq('student_id', student.id); // App.tsx에서 받아온 데이터베이스의 컬럼명과 일치시킵니다.
 
-      const response = await fetch(CONFIG.WEB_APP_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(payload)
-      });
-
-      // 💡 [핵심] 서버의 대답을 까서 진짜 저장되었는지 확인합니다.
-      const result = await response.json();
-
-      if (result.error) {
-        alert("🚨 시트 이름 오류: " + result.error);
-        return;
-      }
-      
-      if (result.result === "error") {
-        alert("🚨 학생 정보 오류: " + result.message + "\n(구글 시트에 적힌 ID와 띄어쓰기 등이 완전히 일치하는지 확인해주세요!)");
+      if (error) {
+        console.error("수파베이스 저장 에러:", error);
+        alert("🚨 저장 중 오류가 발생했습니다: " + error.message);
         return;
       }
 
-      // 여기까지 통과했다면 구글 시트에 100% 정상 저장된 것입니다!
+      // 에러가 없다면 성공적으로 저장된 것입니다! 화면에도 즉시 반영합니다.
       onUpdateStudent({ ...student, currentBook: newBook });
-      alert("✅ 구글 시트에 정상적으로 저장되었습니다!");
+      alert("✅ 수파베이스에 교재가 정상적으로 변경되었습니다!");
 
     } catch (err) {
-      alert('통신 오류: 앱스 스크립트 연결을 확인해주세요.');
+      alert('통신 오류: 인터넷 연결을 확인해주세요.');
     } finally {
       setIsUpdating(false);
     }
@@ -85,7 +70,16 @@ export default function Home({ student, onNavigate, onLogout, onUpdateStudent }:
           <span style={{ fontSize: '14px', color: '#007aff', fontWeight: 'bold' }}>{student.grade} 🐋</span>
           <h3 style={{ margin: '5px 0 0 0', color: '#333' }}>{student.name} 학생 ({student.id})</h3>
         </div>
-        <button onClick={onLogout} style={{ padding: '6px 12px', backgroundColor: '#e63946', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>로그아웃</button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {onBackToSelect && (
+            <button onClick={onBackToSelect} style={{ padding: '6px 12px', backgroundColor: '#6c757d', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}>
+              🔙 과정 선택
+            </button>
+          )}
+          <button onClick={onLogout} style={{ padding: '6px 12px', backgroundColor: '#e63946', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}>
+            로그아웃
+          </button>
+        </div>
       </div>
 
       {/* 현재 진도 카드 */}

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CONFIG } from '../config';
+import { supabase } from '../lib/supabase'; 
 
 interface GoogleWord {
   book: string;
@@ -9,7 +10,6 @@ interface GoogleWord {
   kor: string;
 }
 
-// 💡 [수정] App.tsx에서 전달받는 currentBook 속성을 추가했습니다.
 interface WordProps {
   onBack: () => void;
   studentId?: string;
@@ -21,7 +21,6 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
   const [allWords, setAllWords] = useState<GoogleWord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 💡 [핵심] 학생의 현재 교재(currentBook)를 기본값으로 자동 셋팅합니다!
   const [book, setBook] = useState(currentBook);
   const [unit, setUnit] = useState('');
   const [day, setDay] = useState('');
@@ -35,6 +34,10 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
 
   const [userAnswer, setUserAnswer] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // ⭐️ [핵심 추가] 틀린 단어들과 재시험 횟수를 기억하는 공간!
+  const [wrongWords, setWrongWords] = useState<string[]>([]);
+  const [attemptCount, setAttemptCount] = useState(1);
 
   const currentWord = currentWordList[currentIndex];
 
@@ -90,7 +93,6 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
     fetchGoogleSheet();
   }, []);
 
-  // 💡 부모 컴포넌트에서 currentBook이 혹시라도 변경되면 다시 세팅해줍니다.
   useEffect(() => {
     if (currentBook) {
       setBook(currentBook);
@@ -149,11 +151,14 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
       setCurrentWordList([{ id: 1, kor: '해당 범위에 등록된 단어가 없습니다.', eng: 'none' }]);
       setAppliedProgress(`${targetBook} ${targetLesson} ${targetDay}`);
     }
+    // 새 시험을 시작할 때 모든 기록 초기화
     setCurrentIndex(0);
     setScore(0);
     setIsFinished(false);
     setFeedback(null);
     setUserAnswer('');
+    setWrongWords([]); 
+    setAttemptCount(1);
   };
 
   useEffect(() => {
@@ -170,41 +175,66 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
   const speakWord = (text: string) => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      text = text.replace(/[^a-zA-Z]/g, '');
+      const cleanText = text.replace(/[^a-zA-Z\s-]/g, '');
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      
       utterance.lang = 'en-US';
-      utterance.rate = 0.9;
+      utterance.rate = 0.85; 
+      utterance.pitch = 1.0; 
+
+      const voices = window.speechSynthesis.getVoices();
+      const englishVoices = voices.filter(v => v.lang.startsWith('en'));
+      const preferredVoices = ['Google US English', 'Samantha', 'Alex', 'Microsoft Zira'];
+      
+      let selectedVoice = null;
+      for (const pref of preferredVoices) {
+        selectedVoice = englishVoices.find(v => v.name.includes(pref));
+        if (selectedVoice) break;
+      }
+
+      if (selectedVoice) {
+        utterance.voice = selectedVoice;
+      } else if (englishVoices.length > 0) {
+        utterance.voice = englishVoices[0]; 
+      }
+
       window.speechSynthesis.speak(utterance);
     }
   };
 
-  const sendLogToGoogleSheet = async (finalScore: number) => {
+  // ⭐️ [핵심 변경] 수파베이스로 전송할 때 오답 목록(wrong_answers)도 함께 보냅니다!
+  const sendLogToSupabase = async (finalScore: number, finalAttempt: number, finalWrongs: string[]) => {
     if (finalScore !== currentWordList.length || currentWordList.length === 0) {
-      console.log("100점 만점이 아니므로 구글 시트에 기록을 전송하지 않습니다.");
-      return;
+      return; // 100점이 아닐 때는 기록을 보내지 않습니다. (100점 맞을 때 한 번에 전송)
     }
 
     try {
-      const detailedTaskType = `단어게임 (${book}_${unit}_${day})`;
+      const now = new Date();
+      const kstOffset = 9 * 60 * 60 * 1000;
+      const kstDate = new Date(now.getTime() + kstOffset);
+      const todayStr = kstDate.toISOString().split('T')[0];
 
-      await fetch(CONFIG.WEB_APP_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "text/plain;charset=utf-8",
-        },
-        body: JSON.stringify({
-          type: "saveLog",
-          sheetName: "ELEM_MANAGE",
-          studentId: studentId,
-          studentName: studentName,
-          taskType: detailedTaskType,
-          status: "완료",
-          score: String(finalScore),
-        }),
-      });
-      console.log("구글 시트에 로그 적재 성공");
+      const { error } = await supabase
+        .from('learning_logs')
+        .insert([{
+          student_id: studentId,
+          student_name: studentName,
+          task_type: '초등단어',
+          book_info: `${book}_${unit}_${day}`,
+          score: finalScore,
+          status: '완료',
+          attempt: finalAttempt,
+          log_date: todayStr,
+          wrong_answers: finalWrongs.length > 0 ? finalWrongs.join(', ') : '없음(한번에 통과)'
+        }]);
+
+      if (error) {
+        console.error("수파베이스 저장 에러:", error);
+      } else {
+        console.log("✅ 수파베이스에 오답 기록까지 완벽하게 적재 성공!");
+      }
     } catch (err) {
-      console.error("구글 시트 로그 전송 실패:", err);
+      console.error("수파베이스 로그 전송 실패:", err);
     }
   };
 
@@ -222,27 +252,36 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
     setIsFinished(false);
     setFeedback(null);
     setUserAnswer('');
+    setAttemptCount(prev => prev + 1); 
+    // 💡 주의: 재시험을 보더라도 wrongWords(오답 기록)는 지우지 않고 계속 누적합니다!
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentWord || currentWord.eng === 'none' || !userAnswer.trim()) return;
+    
     const isCorrect = userAnswer.trim().toLowerCase() === currentWord.eng.toLowerCase();
     speakWord(currentWord.eng);
+    
     let nextScore = score;
+    
     if (isCorrect) {
       nextScore = score + 1;
       setScore(nextScore);
       setFeedback({ isCorrect: true, msg: '정답입니다! 👍' });
     } else {
+      // ⭐️ 틀렸을 경우: 이미 기록된 오답이 아니면 오답 장부에 추가!
+      setWrongWords(prev => prev.includes(currentWord.eng) ? prev : [...prev, currentWord.eng]);
       setFeedback({ isCorrect: false, msg: `오답입니다. 정답은 [ ${currentWord.eng} ]` });
     }
+    
     setTimeout(() => {
       if (currentIndex + 1 < currentWordList.length) {
         setCurrentIndex(prev => prev + 1);
       } else {
         setIsFinished(true);
-        sendLogToGoogleSheet(nextScore);
+        // 마지막 문제를 풀었을 때 만점이면 수파베이스로 전송!
+        sendLogToSupabase(nextScore, attemptCount, wrongWords); 
       }
     }, 1500);
   };
@@ -293,7 +332,16 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
       {isFinished ? (
         <div style={{ textAlign: 'center', padding: '40px 20px', backgroundColor: '#f8f9fa', borderRadius: '16px' }}>
           <h2 style={{ margin: '0 0 10px 0' }}>단어 테스트 완료! 🎉</h2>
-          <p style={{ fontSize: '20px', color: '#333', marginBottom: '30px' }}>총 {currentWordList.length}문제 중 <strong>{score}</strong>문제 정답</p>
+          <p style={{ fontSize: '20px', color: '#333', marginBottom: '15px' }}>총 {currentWordList.length}문제 중 <strong>{score}</strong>문제 정답</p>
+          
+          {score === currentWordList.length && wrongWords.length > 0 && (
+            <div style={{ backgroundColor: '#fff5f5', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>
+              <p style={{ margin: 0, fontSize: '14px', fontWeight: 'bold', color: '#e53935' }}>
+                🔥 헷갈렸던 단어들: {wrongWords.join(', ')}
+              </p>
+            </div>
+          )}
+
           {score === currentWordList.length ? (
             <button onClick={onBack} style={{ width: '100%', padding: '16px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '12px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer' }}>완료 (홈으로 가기)</button>
           ) : (
