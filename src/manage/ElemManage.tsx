@@ -1,20 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { CONFIG } from '../config';
+import { supabase } from '../lib/supabase'; // 수파베이스 연결
 
-// 개별 학생 정보 규격
+// 개별 학생 정보 규격 (verbDone 추가)
 interface Student {
   id: string;
   name: string;
   currentBook: string;
   progress: string; 
   grade: string;    
-  wordDone: boolean;       // 오늘 단어게임 완료 여부
-  sentenceDone: boolean;   // 오늘 문장배열 완료 여부
-  recordDone: boolean;     // [추후 확장] 음성녹음 완료 여부
-  aiChatDone: boolean;     // [추후 확장] AI대화 완료 여부
+  wordDone: boolean;       // 단어게임 완료 
+  sentenceDone: boolean;   // 문장배열 완료 
+  verbDone: boolean;       // ⭐️ 3단 동사 완료 여부 추가
+  recordDone: boolean;     // 음성녹음 완료 
+  aiChatDone: boolean;     // AI대화 완료 
 }
 
-// 📚 원장님 요청 구조 반영 (시리즈 5개, 각 1~6권, Unit 1~4, Day 1~4)
+// 📚 교재 구조 리스트
 const SERIES_LIST = ['240', '520', '860', '1240', '1680'];
 const BOOK_NUM_LIST = ['1', '2', '3', '4', '5', '6'];
 const UNIT_LIST = ['Unit1', 'Unit2', 'Unit3', 'Unit4'];
@@ -25,79 +26,76 @@ export default function ElemManage() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   
-  // 수정용 상태 관리 (시리즈, 권, 유닛, 데이 분리)
+  // ⭐️ 학년 필터용 상태 관리
+  const [selectedGrade, setSelectedGrade] = useState<string>('전체');
+
+  // 수정용 상태 관리
   const [editSeries, setEditSeries] = useState('240');
   const [editBookNum, setEditBookNum] = useState('1');
   const [editUnit, setEditUnit] = useState('Unit1');
   const [editDay, setEditDay] = useState('Day1');
   const [isSaving, setIsSaving] = useState(false);
 
-  // 데이터 교차 분석 및 가져오기
+  // 데이터 불러오기
   const fetchAllLMSData = async () => {
     try {
       setIsLoading(true);
       
-      const [memberResponse, logResponse] = await Promise.all([
-        fetch(`${CONFIG.SHEETS.STUDENT_LIST}&_nocache=${Date.now()}`),
-        fetch(`${CONFIG.SHEETS.ELEM_MANAGE}&_nocache=${Date.now()}`)
-      ]);
+      const { data: studentsData, error: studentError } = await supabase
+        .from('students')
+        .select('*')
+        .like('grade', '%초%');
 
-      const memberText = await memberResponse.text();
-      const logText = await logResponse.text();
+      if (studentError) throw studentError;
 
-      // --- [A] 오늘 완수 로그 데이터 생성 ---
-      const logRows = logText.split('\n').map(r => r.trim()).filter(r => r !== '');
-      const now = new Date();
-      const todayStr1 = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-      const todayStr2 = `${now.getFullYear()}. ${now.getMonth() + 1}. ${now.getDate()}`;
+      const today = new Date();
+      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
 
-      const todayDoneMap = new Map<string, { word: boolean; sentence: boolean; record: boolean; ai: boolean }>();
+      const { data: logsData, error: logError } = await supabase
+        .from('learning_logs')
+        .select('student_id, task_type, status')
+        .gte('created_at', startOfDay) 
+        .eq('status', '완료');
 
-      logRows.slice(1).forEach(row => {
-        const cols = row.split(',').map(col => col.replace(/"/g, '').trim());
-        const timestamp = cols[0] || '';
-        const studentId = cols[1] || '';
-        const taskType = cols[3] || ''; 
-        const status = cols[4] || '';  
+      if (logError) throw logError;
 
-        if ((timestamp.includes(todayStr1) || timestamp.includes(todayStr2)) && status === '완료') {
-          if (!todayDoneMap.has(studentId)) {
-            todayDoneMap.set(studentId, { word: false, sentence: false, record: false, ai: false });
-          }
-          const record = todayDoneMap.get(studentId)!;
-          if (taskType === '단어게임') record.word = true;
-          if (taskType === '문장배열') record.sentence = true;
-          if (taskType === '음성녹음') record.record = true;
-          if (taskType === 'AI대화') record.ai = true;
+      // ⭐️ 3단 동사(verb) 체크 로직 추가
+      const todayDoneMap = new Map<string, { word: boolean; sentence: boolean; verb: boolean; record: boolean; ai: boolean }>();
+
+      (logsData || []).forEach(log => {
+        if (!todayDoneMap.has(log.student_id)) {
+          todayDoneMap.set(log.student_id, { word: false, sentence: false, verb: false, record: false, ai: false });
         }
+        const record = todayDoneMap.get(log.student_id)!;
+
+        if (log.task_type.includes('단어')) record.word = true;
+        if (log.task_type.includes('문장')) record.sentence = true;
+        if (log.task_type.includes('동사') || log.task_type.includes('3단')) record.verb = true; // ⭐️ 동사 체크
+        if (log.task_type.includes('녹음')) record.record = true;
+        if (log.task_type.includes('회화') || log.task_type.includes('AI') || log.task_type.includes('고래')) record.ai = true;
       });
 
-      // --- [B] 명단 대조 및 학생 객체 배열 가동 ---
-      const memberRows = memberText.split('\n').map(row => row.trim()).filter(row => row !== '');
-      
-      const allStudents: Student[] = memberRows.slice(1).map(row => {
-        const cols = row.split(',').map(col => col.replace(/"/g, '').trim());
-        const id = cols[0];
-        const doneStatus = todayDoneMap.get(id) || { word: false, sentence: false, record: false, ai: false };
+      const elemStudents: Student[] = (studentsData || []).map(row => {
+        const doneStatus = todayDoneMap.get(row.student_id) || { word: false, sentence: false, verb: false, record: false, ai: false };
 
         return {
-          id: id,
-          name: cols[1] || '이름없음',
-          currentBook: cols[2] || '240_1',
-          progress: cols[3] || 'Unit1 Day1',
-          grade: cols[4] || '초1',
+          id: row.student_id,
+          name: row.name || '이름없음',
+          currentBook: row.currentBook || '240_1',
+          progress: row.progress || 'Unit1 Day1',
+          grade: row.grade || '초1',
           wordDone: doneStatus.word,
           sentenceDone: doneStatus.sentence,
+          verbDone: doneStatus.verb, // ⭐️ 동사 상태 반영
           recordDone: doneStatus.record,
           aiChatDone: doneStatus.ai
         };
       });
 
-      const elemStudents = allStudents.filter(student => student.grade.includes('초') && !student.name.includes('body'));
-      setStudents(elemStudents);
+      setStudents(elemStudents.filter(s => !s.name.includes('body')));
       
     } catch (error) {
-      console.error("데이터 로드 에러", error);
+      console.error("수파베이스 데이터 로드 에러", error);
     } finally {
       setIsLoading(false);
     }
@@ -121,7 +119,6 @@ export default function ElemManage() {
     }
     setSelectedStudent(student);
     
-    // 교재 정보 파싱 (예: "240_1" -> 시리즈 "240", 권 "1")
     const [series = '240', bookNum = '1'] = (student.currentBook || '240_1').split('_');
     const { unit, day } = parseProgress(student.progress);
     
@@ -132,7 +129,7 @@ export default function ElemManage() {
   };
 
   const handleSaveProgress = async (e: React.MouseEvent) => {
-    e.stopPropagation(); // 행 클릭 이벤트 방지
+    e.stopPropagation(); 
     if (!selectedStudent) return;
     
     const fullBook = `${editSeries}_${editBookNum}`;
@@ -140,30 +137,24 @@ export default function ElemManage() {
     setIsSaving(true);
 
     try {
-      const response = await fetch(CONFIG.WEB_APP_URL, {
-        method: 'POST',
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          actionType: "saveProgress",
-          studentId: selectedStudent.id,
-          book: fullBook,
+      const { error } = await supabase
+        .from('students')
+        .update({
+          currentBook: fullBook,
           progress: fullProgress
         })
-      });
+        .eq('student_id', selectedStudent.id);
 
-      const result = await response.json();
+      if (error) throw error;
 
-      if (result.status === 'success') {
-        const updatedStudent = { ...selectedStudent, currentBook: fullBook, progress: fullProgress };
-        setStudents(prev => prev.map(s => s.id === selectedStudent.id ? updatedStudent : s));
-        setSelectedStudent(updatedStudent);
-        alert(`✅ ${selectedStudent.name} 학생의 진도가 [${fullBook}권 / ${fullProgress}]로 저장되었습니다.`);
-      } else {
-        alert("저장 실패: " + result.message);
-      }
+      const updatedStudent = { ...selectedStudent, currentBook: fullBook, progress: fullProgress };
+      setStudents(prev => prev.map(s => s.id === selectedStudent.id ? updatedStudent : s));
+      setSelectedStudent(updatedStudent);
+      alert(`✅ ${selectedStudent.name} 학생의 진도가 [${fullBook}권 / ${fullProgress}]로 저장되었습니다.`);
+      
     } catch (error) {
       console.error("진도 반영 실패:", error);
-      alert("네트워크 오류로 진도를 저장하지 못했습니다.");
+      alert("데이터베이스 저장에 실패했습니다. 다시 시도해주세요.");
     } finally {
       setIsSaving(false);
     }
@@ -179,6 +170,14 @@ export default function ElemManage() {
     border: isDone ? '1px solid #bbf7d0' : '1px solid #334155',
   });
 
+  // ⭐️ 선택된 학년만 걸러내기 (필터 기능)
+  const filteredStudents = selectedGrade === '전체' 
+    ? students 
+    : students.filter(s => s.grade === selectedGrade);
+
+  // ⭐️ 유동적인 학년 버튼 리스트 만들기 (초1, 초2 등)
+  const uniqueGrades = ['전체', '초1', '초2', '초3', '초4', '초5', '초6'];
+
   return (
     <div className="bg-[#0f172a] text-slate-100 p-6 rounded-2xl border border-slate-800 shadow-2xl">
       <div className="flex justify-between items-center mb-6">
@@ -191,23 +190,42 @@ export default function ElemManage() {
         </button>
       </div>
 
+      {/* ⭐️ 학년 필터 버튼 탭 */}
+      <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
+        {uniqueGrades.map(grade => (
+          <button
+            key={grade}
+            onClick={() => setSelectedGrade(grade)}
+            className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors whitespace-nowrap ${
+              selectedGrade === grade 
+                ? 'bg-indigo-600 text-white shadow-lg' 
+                : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+            }`}
+          >
+            {grade}
+          </button>
+        ))}
+      </div>
+
       <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-inner">
         <table className="w-full text-left border-collapse text-sm">
           <thead>
             <tr className="bg-slate-950 border-b border-slate-800 text-slate-400">
               <th className="p-4 w-1/5">학생 이름</th>
-              <th className="p-4 w-1/3">오늘 학습 현황 (자동 기록)</th>
+              <th className="p-4 w-2/5">오늘 학습 현황 (자동 기록)</th>
               <th className="p-4 w-auto">학습 진도 설정 (클릭 시 변경)</th>
             </tr>
           </thead>
           <tbody>
-            {students.length === 0 && !isLoading && (
+            {filteredStudents.length === 0 && !isLoading && (
               <tr>
-                <td colSpan={3} className="p-10 text-center text-slate-500">등록된 초등부 학생이 없습니다.</td>
+                <td colSpan={3} className="p-10 text-center text-slate-500">
+                  해당 학년({selectedGrade})에 등록된 학생이 없습니다.
+                </td>
               </tr>
             )}
             
-            {students.map(student => {
+            {filteredStudents.map(student => {
               const isSelected = selectedStudent?.id === student.id;
               
               return (
@@ -219,38 +237,35 @@ export default function ElemManage() {
                   {/* 이름 칸 */}
                   <td className="p-4">
                     <div className="font-bold text-lg text-white">{student.name}</div>
-                    <div className="text-xs text-slate-500 mt-1">{student.grade}</div>
+                    <div className="text-xs text-indigo-300 font-medium mt-1">{student.grade}</div>
                   </td>
                   
-                  {/* 오늘 미션 칸 */}
+                  {/* ⭐️ 오늘 미션 칸 (3단 동사 뱃지 추가) */}
                   <td className="p-4">
                     <div className="flex flex-wrap gap-2">
                       <span style={getMissionBadgeStyle(student.wordDone)}>{student.wordDone ? '✅ 단어' : '❌ 단어'}</span>
                       <span style={getMissionBadgeStyle(student.sentenceDone)}>{student.sentenceDone ? '✅ 문장' : '❌ 문장'}</span>
+                      <span style={getMissionBadgeStyle(student.verbDone)}>{student.verbDone ? '✅ 3단동사' : '❌ 3단동사'}</span>
                       <span style={getMissionBadgeStyle(student.aiChatDone)}>{student.aiChatDone ? '🤖 회화' : '☠️ 회화'}</span>
                     </div>
                   </td>
 
-                  {/* 진도 설정 칸 (클릭하면 수정 모드) */}
+                  {/* 진도 설정 칸 */}
                   <td className="p-4">
                     {isSelected ? (
                       <div className="flex flex-wrap gap-2 items-center" onClick={(e) => e.stopPropagation()}>
-                        {/* 시리즈 선택 (240, 520, 860, 1240, 1680) */}
                         <select value={editSeries} onChange={e => setEditSeries(e.target.value)} className="bg-slate-800 p-2 rounded text-sm border border-indigo-500/50 text-white outline-none">
                           {SERIES_LIST.map(s => <option key={s} value={s}>{s} 시리즈</option>)}
                         </select>
                         
-                        {/* 권 선택 (1~6권) */}
                         <select value={editBookNum} onChange={e => setEditBookNum(e.target.value)} className="bg-slate-800 p-2 rounded text-sm border border-indigo-500/50 text-white outline-none">
                           {BOOK_NUM_LIST.map(n => <option key={n} value={n}>{n}권</option>)}
                         </select>
 
-                        {/* 유닛 선택 (Unit 1~4) */}
                         <select value={editUnit} onChange={e => setEditUnit(e.target.value)} className="bg-slate-800 p-2 rounded text-sm border border-indigo-500/50 text-white outline-none">
                           {UNIT_LIST.map(u => <option key={u} value={u}>{u}</option>)}
                         </select>
 
-                        {/* 데이 선택 (Day 1~4) */}
                         <select value={editDay} onChange={e => setEditDay(e.target.value)} className="bg-slate-800 p-2 rounded text-sm border border-indigo-500/50 text-white outline-none">
                           {DAY_LIST.map(d => <option key={d} value={d}>{d}</option>)}
                         </select>
