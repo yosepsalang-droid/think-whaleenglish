@@ -242,7 +242,7 @@ export default function ElemManage() {
   const uniqueGrades = ['전체', '초1', '초2', '초3', '초4', '초5', '초6'];
 
   return (
-    <div className="bg-white text-gray-800 p-4 sm:p-6 rounded-2xl border border-gray-200 shadow-xl max-w-7xl mx-auto mt-4">
+    <div className="bg-white text-gray-800 p-4 sm:p-6 rounded-2xl shadow-xl max-w-7xl mx-auto mt-4">
       
       {/* 헤더 */}
       <div className="flex flex-col items-center justify-center mb-6">
@@ -274,18 +274,19 @@ export default function ElemManage() {
         </div>
       </div>
 
-      {/* ⭐️ 완벽한 엑셀 스타일 테이블 영역 */}
-      <div className="overflow-x-auto w-full bg-white border-2 border-gray-400">
-        {/* min-w-max 속성으로 화면이 좁아도 표가 절대 찌그러지지 않게 방어 */}
-        <table className="w-full text-center text-sm border-collapse min-w-max">
+      {/* ⭐️ 완벽한 엑셀 스타일 테이블 (선명한 테두리 + 왼쪽 정렬 적용) */}
+      <div className="overflow-x-auto w-full">
+        {/* border-collapse를 통해 엑셀처럼 겹치는 선이 없도록 깔끔하게 처리 */}
+        <table className="w-full text-sm border-collapse border-2 border-gray-400 min-w-max">
           <thead>
-            <tr className="bg-gray-200 text-gray-800">
-              <th className="py-2 px-3 border border-gray-300 font-bold whitespace-nowrap w-12">번호</th>
-              <th className="py-2 px-3 border border-gray-300 font-bold whitespace-nowrap w-16">학년</th>
-              <th className="py-2 px-3 border border-gray-300 font-bold whitespace-nowrap w-24">이름</th>
-              <th className="py-2 px-3 border border-gray-300 font-bold whitespace-nowrap">오늘 학습 현황</th>
-              <th className="py-2 px-3 border border-gray-300 font-bold whitespace-nowrap">학습 진도 설정</th>
-              <th className="py-2 px-3 border border-gray-300 font-bold whitespace-nowrap w-20">관리</th>
+            <tr className="bg-gray-100 text-gray-800">
+              {/* 항목 제목들도 모두 앞쪽(왼쪽) 정렬, 단 번호와 학년은 가운데가 예쁨 */}
+              <th className="py-2 px-3 border border-gray-400 font-bold text-center whitespace-nowrap w-12">번호</th>
+              <th className="py-2 px-3 border border-gray-400 font-bold text-center whitespace-nowrap w-16">학년</th>
+              <th className="py-2 px-3 border border-gray-400 font-bold text-left whitespace-nowrap w-24">이름</th>
+              <th className="py-2 px-3 border border-gray-400 font-bold text-left whitespace-nowrap">오늘 학습 현황</th>
+              <th className="py-2 px-3 border border-gray-400 font-bold text-left whitespace-nowrap">학습 진도 설정</th>
+              <th className="py-2 px-3 border border-gray-400 font-bold text-center whitespace-nowrap w-20">관리</th>
             </tr>
           </thead>
           <tbody>
@@ -304,17 +305,18 @@ export default function ElemManage() {
                 <tr 
                   key={student.id} 
                   onClick={() => handleSelectStudent(student)} 
-                  className={`cursor-pointer transition-colors border-b border-gray-300 ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                  className={`cursor-pointer transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
                 >
-                  <td className="py-2 px-3 border border-gray-300 text-gray-500 font-bold whitespace-nowrap">{index + 1}</td>
+                  <td className="py-2 px-3 border border-gray-300 text-gray-500 font-bold text-center whitespace-nowrap">{index + 1}</td>
                   
-                  <td className="py-2 px-3 border border-gray-300 text-gray-600 font-medium whitespace-nowrap">{student.grade}</td>
+                  <td className="py-2 px-3 border border-gray-300 text-gray-600 font-medium text-center whitespace-nowrap">{student.grade}</td>
 
-                  <td className="py-2 px-3 border border-gray-300 font-extrabold text-gray-900 text-base whitespace-nowrap">{student.name}</td>
+                  {/* 이름 앞쪽 정렬 */}
+                  <td className="py-2 px-3 border border-gray-300 font-extrabold text-gray-900 text-base text-left whitespace-nowrap">{student.name}</td>
                   
+                  {/* 학습 현황 뱃지들도 앞쪽 정렬 (justify-start) */}
                   <td className="py-2 px-3 border border-gray-300">
-                    {/* flex-nowrap으로 배지가 밑으로 안 떨어지고 한 줄로 유지됨 */}
-                    <div className="flex flex-nowrap justify-center gap-1.5 items-center w-full">
+                    <div className="flex flex-nowrap justify-start gap-1.5 items-center w-full">
                       <StatusBadge status={student.wordDone} fallback="❌ 단어" />
                       <StatusBadge status={student.sentenceDone} fallback="❌ 문장" />
                       <StatusBadge status={student.verbDone} fallback="❌ 3단동사" />
@@ -322,9 +324,10 @@ export default function ElemManage() {
                     </div>
                   </td>
 
+                  {/* 진도 설정 부분도 앞쪽 정렬 (justify-start) */}
                   <td className="py-2 px-3 border border-gray-300">
                     {isSelected ? (
-                      <div className="flex flex-nowrap justify-center gap-1 items-center" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex flex-nowrap justify-start gap-1 items-center" onClick={(e) => e.stopPropagation()}>
                         <select value={editSeries} onChange={e => setEditSeries(e.target.value)} className="bg-white p-1 rounded border border-gray-300 text-xs outline-none focus:border-blue-500">
                           {SERIES_LIST.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
@@ -346,7 +349,7 @@ export default function ElemManage() {
                         </button>
                       </div>
                     ) : (
-                      <div className="flex justify-center items-center gap-1">
+                      <div className="flex justify-start items-center gap-1">
                         <span className="text-gray-800 font-bold text-sm whitespace-nowrap">
                           {student.currentBook}권
                         </span>
@@ -357,7 +360,7 @@ export default function ElemManage() {
                     )}
                   </td>
 
-                  <td className="py-2 px-3 border border-gray-300">
+                  <td className="py-2 px-3 border border-gray-300 text-center">
                     <button 
                       onClick={(e) => openManageModal(e, student)}
                       className="bg-white hover:bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1 rounded text-xs font-bold transition-colors shadow-sm whitespace-nowrap"
