@@ -252,47 +252,45 @@ export default function ElemManage() {
         </button>
       </div>
 
-      {/* 학년 탭 버튼 */}
+      {/* ⭐️ 완전히 새로고침된 세련된 학년 탭 버튼 */}
       <div className="flex flex-col items-center gap-3 mb-6">
-        <div className="inline-flex bg-gray-100 p-1.5 rounded-xl shadow-inner overflow-x-auto max-w-full scrollbar-hide">
+        <div className="flex flex-wrap justify-center gap-2">
           {uniqueGrades.map(grade => (
             <button
               key={grade}
               onClick={() => setSelectedGrade(grade)}
-              className={`px-4 sm:px-6 py-2 rounded-lg text-sm font-bold transition-all duration-200 whitespace-nowrap ${
+              className={`px-5 py-2 rounded-full text-sm font-extrabold transition-all duration-200 shadow-sm border ${
                 selectedGrade === grade 
-                  ? 'bg-white text-blue-600 shadow-sm border border-gray-200' 
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50 border border-transparent'
+                  ? 'bg-blue-600 text-white border-blue-600 shadow-md transform scale-105' 
+                  : 'bg-white text-gray-500 border-gray-300 hover:bg-blue-50 hover:text-blue-500'
               }`}
             >
               {grade}
             </button>
           ))}
         </div>
-        <div className="text-sm font-bold text-gray-600">
+        <div className="text-sm font-bold text-gray-600 mt-1">
           총 <span className="text-blue-600 text-lg mx-1">{filteredStudents.length}</span> 명
         </div>
       </div>
 
-      {/* ⭐️ 완벽한 엑셀 스타일 테이블 (선명한 테두리 + 왼쪽 정렬 적용) */}
+      {/* ⭐️ 강제 테두리(Inline Style)가 적용된 진짜 엑셀 테이블 */}
       <div className="overflow-x-auto w-full">
-        {/* border-collapse를 통해 엑셀처럼 겹치는 선이 없도록 깔끔하게 처리 */}
-        <table className="w-full text-sm border-collapse border-2 border-gray-400 min-w-max">
+        <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: '900px' }} className="text-sm">
           <thead>
-            <tr className="bg-gray-100 text-gray-800">
-              {/* 항목 제목들도 모두 앞쪽(왼쪽) 정렬, 단 번호와 학년은 가운데가 예쁨 */}
-              <th className="py-2 px-3 border border-gray-400 font-bold text-center whitespace-nowrap w-12">번호</th>
-              <th className="py-2 px-3 border border-gray-400 font-bold text-center whitespace-nowrap w-16">학년</th>
-              <th className="py-2 px-3 border border-gray-400 font-bold text-left whitespace-nowrap w-24">이름</th>
-              <th className="py-2 px-3 border border-gray-400 font-bold text-left whitespace-nowrap">오늘 학습 현황</th>
-              <th className="py-2 px-3 border border-gray-400 font-bold text-left whitespace-nowrap">학습 진도 설정</th>
-              <th className="py-2 px-3 border border-gray-400 font-bold text-center whitespace-nowrap w-20">관리</th>
+            <tr style={{ backgroundColor: '#f3f4f6', color: '#374151' }}>
+              <th style={{ border: '1px solid #9ca3af', padding: '10px' }} className="font-bold text-center whitespace-nowrap w-12">번호</th>
+              <th style={{ border: '1px solid #9ca3af', padding: '10px' }} className="font-bold text-center whitespace-nowrap w-16">학년</th>
+              <th style={{ border: '1px solid #9ca3af', padding: '10px' }} className="font-bold text-left whitespace-nowrap w-24">이름</th>
+              <th style={{ border: '1px solid #9ca3af', padding: '10px' }} className="font-bold text-left whitespace-nowrap">오늘 학습 현황</th>
+              <th style={{ border: '1px solid #9ca3af', padding: '10px' }} className="font-bold text-left whitespace-nowrap">학습 진도 설정</th>
+              <th style={{ border: '1px solid #9ca3af', padding: '10px' }} className="font-bold text-center whitespace-nowrap w-20">관리</th>
             </tr>
           </thead>
           <tbody>
             {filteredStudents.length === 0 && !isLoading && (
               <tr>
-                <td colSpan={6} className="p-10 text-center text-gray-400 border border-gray-300">
+                <td colSpan={6} style={{ border: '1px solid #cbd5e1', padding: '40px' }} className="text-center text-gray-400">
                   해당 학년({selectedGrade})에 등록된 학생이 없습니다.
                 </td>
               </tr>
@@ -307,15 +305,13 @@ export default function ElemManage() {
                   onClick={() => handleSelectStudent(student)} 
                   className={`cursor-pointer transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
                 >
-                  <td className="py-2 px-3 border border-gray-300 text-gray-500 font-bold text-center whitespace-nowrap">{index + 1}</td>
+                  <td style={{ border: '1px solid #cbd5e1', padding: '8px' }} className="text-gray-500 font-bold text-center whitespace-nowrap">{index + 1}</td>
                   
-                  <td className="py-2 px-3 border border-gray-300 text-gray-600 font-medium text-center whitespace-nowrap">{student.grade}</td>
+                  <td style={{ border: '1px solid #cbd5e1', padding: '8px' }} className="text-gray-600 font-medium text-center whitespace-nowrap">{student.grade}</td>
 
-                  {/* 이름 앞쪽 정렬 */}
-                  <td className="py-2 px-3 border border-gray-300 font-extrabold text-gray-900 text-base text-left whitespace-nowrap">{student.name}</td>
+                  <td style={{ border: '1px solid #cbd5e1', padding: '8px' }} className="font-extrabold text-gray-900 text-base text-left whitespace-nowrap">{student.name}</td>
                   
-                  {/* 학습 현황 뱃지들도 앞쪽 정렬 (justify-start) */}
-                  <td className="py-2 px-3 border border-gray-300">
+                  <td style={{ border: '1px solid #cbd5e1', padding: '8px' }}>
                     <div className="flex flex-nowrap justify-start gap-1.5 items-center w-full">
                       <StatusBadge status={student.wordDone} fallback="❌ 단어" />
                       <StatusBadge status={student.sentenceDone} fallback="❌ 문장" />
@@ -324,8 +320,7 @@ export default function ElemManage() {
                     </div>
                   </td>
 
-                  {/* 진도 설정 부분도 앞쪽 정렬 (justify-start) */}
-                  <td className="py-2 px-3 border border-gray-300">
+                  <td style={{ border: '1px solid #cbd5e1', padding: '8px' }}>
                     {isSelected ? (
                       <div className="flex flex-nowrap justify-start gap-1 items-center" onClick={(e) => e.stopPropagation()}>
                         <select value={editSeries} onChange={e => setEditSeries(e.target.value)} className="bg-white p-1 rounded border border-gray-300 text-xs outline-none focus:border-blue-500">
@@ -360,7 +355,7 @@ export default function ElemManage() {
                     )}
                   </td>
 
-                  <td className="py-2 px-3 border border-gray-300 text-center">
+                  <td style={{ border: '1px solid #cbd5e1', padding: '8px' }} className="text-center">
                     <button 
                       onClick={(e) => openManageModal(e, student)}
                       className="bg-white hover:bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1 rounded text-xs font-bold transition-colors shadow-sm whitespace-nowrap"
@@ -375,7 +370,7 @@ export default function ElemManage() {
         </table>
       </div>
 
-      {/* 학생 관리 모달 (이전과 동일) */}
+      {/* 학생 관리 모달 */}
       {manageStudent && (
         <div className="fixed inset-0 bg-black/40 flex justify-center items-center z-50">
           <div className="bg-white border border-gray-200 p-6 rounded-2xl shadow-2xl w-96 relative mx-4">
