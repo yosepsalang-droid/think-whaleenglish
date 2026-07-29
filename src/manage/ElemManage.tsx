@@ -225,7 +225,7 @@ export default function ElemManage() {
   const StatusBadge = ({ status, fallback }: { status: string, fallback: string }) => {
     const isDone = status !== '';
     return (
-      <span className={`px-2 py-1 rounded text-[11px] sm:text-xs font-semibold border whitespace-nowrap ${
+      <span className={`px-2 py-0.5 rounded text-[11px] font-bold border whitespace-nowrap ${
         isDone 
           ? 'bg-green-50 text-green-700 border-green-200' 
           : 'bg-gray-50 text-gray-400 border-gray-200'
@@ -252,7 +252,7 @@ export default function ElemManage() {
         </button>
       </div>
 
-      {/* ⭐️ 세련된 학년 탭 버튼 (아이폰 스타일) */}
+      {/* 학년 탭 버튼 */}
       <div className="flex flex-col items-center gap-3 mb-6">
         <div className="inline-flex bg-gray-100 p-1.5 rounded-xl shadow-inner overflow-x-auto max-w-full scrollbar-hide">
           {uniqueGrades.map(grade => (
@@ -274,18 +274,18 @@ export default function ElemManage() {
         </div>
       </div>
 
-      {/* ⭐️ 엑셀 스타일 테이블 영역 (가로 스크롤 허용) */}
-      <div className="overflow-x-auto w-full border rounded-lg border-gray-300">
-        <table className="w-full text-center text-sm border-collapse min-w-[700px]">
+      {/* ⭐️ 완벽한 엑셀 스타일 테이블 영역 */}
+      <div className="overflow-x-auto w-full bg-white border-2 border-gray-400">
+        {/* min-w-max 속성으로 화면이 좁아도 표가 절대 찌그러지지 않게 방어 */}
+        <table className="w-full text-center text-sm border-collapse min-w-max">
           <thead>
-            <tr className="bg-gray-100 text-gray-700">
-              {/* ⭐️ 모든 칸에 명확한 테두리 (border) 추가 & 줄바꿈 금지(whitespace-nowrap) */}
-              <th className="p-3 font-bold border border-gray-300 whitespace-nowrap w-12">번호</th>
-              <th className="p-3 font-bold border border-gray-300 whitespace-nowrap w-16">학년</th>
-              <th className="p-3 font-bold border border-gray-300 whitespace-nowrap w-24">이름</th>
-              <th className="p-3 font-bold border border-gray-300 whitespace-nowrap min-w-[320px]">오늘 학습 현황</th>
-              <th className="p-3 font-bold border border-gray-300 whitespace-nowrap min-w-[250px]">학습 진도 설정</th>
-              <th className="p-3 font-bold border border-gray-300 whitespace-nowrap w-20">관리</th>
+            <tr className="bg-gray-200 text-gray-800">
+              <th className="py-2 px-3 border border-gray-300 font-bold whitespace-nowrap w-12">번호</th>
+              <th className="py-2 px-3 border border-gray-300 font-bold whitespace-nowrap w-16">학년</th>
+              <th className="py-2 px-3 border border-gray-300 font-bold whitespace-nowrap w-24">이름</th>
+              <th className="py-2 px-3 border border-gray-300 font-bold whitespace-nowrap">오늘 학습 현황</th>
+              <th className="py-2 px-3 border border-gray-300 font-bold whitespace-nowrap">학습 진도 설정</th>
+              <th className="py-2 px-3 border border-gray-300 font-bold whitespace-nowrap w-20">관리</th>
             </tr>
           </thead>
           <tbody>
@@ -304,26 +304,27 @@ export default function ElemManage() {
                 <tr 
                   key={student.id} 
                   onClick={() => handleSelectStudent(student)} 
-                  className={`cursor-pointer transition-colors ${isSelected ? 'bg-blue-50/50' : 'hover:bg-gray-50'}`}
+                  className={`cursor-pointer transition-colors border-b border-gray-300 ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
                 >
-                  <td className="p-2 border border-gray-300 text-gray-400 font-bold whitespace-nowrap">{index + 1}</td>
+                  <td className="py-2 px-3 border border-gray-300 text-gray-500 font-bold whitespace-nowrap">{index + 1}</td>
                   
-                  <td className="p-2 border border-gray-300 text-gray-600 font-medium whitespace-nowrap">{student.grade}</td>
+                  <td className="py-2 px-3 border border-gray-300 text-gray-600 font-medium whitespace-nowrap">{student.grade}</td>
 
-                  <td className="p-2 border border-gray-300 font-extrabold text-gray-900 text-base whitespace-nowrap">{student.name}</td>
+                  <td className="py-2 px-3 border border-gray-300 font-extrabold text-gray-900 text-base whitespace-nowrap">{student.name}</td>
                   
-                  <td className="p-2 border border-gray-300">
-                    <div className="flex flex-wrap justify-center gap-1.5">
+                  <td className="py-2 px-3 border border-gray-300">
+                    {/* flex-nowrap으로 배지가 밑으로 안 떨어지고 한 줄로 유지됨 */}
+                    <div className="flex flex-nowrap justify-center gap-1.5 items-center w-full">
                       <StatusBadge status={student.wordDone} fallback="❌ 단어" />
                       <StatusBadge status={student.sentenceDone} fallback="❌ 문장" />
                       <StatusBadge status={student.verbDone} fallback="❌ 3단동사" />
-                      <StatusBadge status={student.aiChatDone} fallback="☠️ 회화" />
+                      <StatusBadge status={student.aiChatDone} fallback="🤖 회화" />
                     </div>
                   </td>
 
-                  <td className="p-2 border border-gray-300">
+                  <td className="py-2 px-3 border border-gray-300">
                     {isSelected ? (
-                      <div className="flex justify-center gap-1 items-center" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex flex-nowrap justify-center gap-1 items-center" onClick={(e) => e.stopPropagation()}>
                         <select value={editSeries} onChange={e => setEditSeries(e.target.value)} className="bg-white p-1 rounded border border-gray-300 text-xs outline-none focus:border-blue-500">
                           {SERIES_LIST.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
@@ -339,7 +340,7 @@ export default function ElemManage() {
                         <button 
                           onClick={handleSaveProgress} 
                           disabled={isSaving}
-                          className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded font-bold shadow disabled:opacity-50 ml-1"
+                          className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded font-bold shadow disabled:opacity-50 ml-1 whitespace-nowrap"
                         >
                           {isSaving ? '저장중..' : '저장'}
                         </button>
@@ -352,12 +353,11 @@ export default function ElemManage() {
                         <span className="text-gray-600 text-sm whitespace-nowrap">
                           {student.progress}
                         </span>
-                        <span className="text-gray-400 text-xs ml-1 whitespace-nowrap hidden sm:inline">(클릭하여 수정)</span>
                       </div>
                     )}
                   </td>
 
-                  <td className="p-2 border border-gray-300">
+                  <td className="py-2 px-3 border border-gray-300">
                     <button 
                       onClick={(e) => openManageModal(e, student)}
                       className="bg-white hover:bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1 rounded text-xs font-bold transition-colors shadow-sm whitespace-nowrap"
