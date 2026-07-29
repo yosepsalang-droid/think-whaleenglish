@@ -10,7 +10,7 @@ interface RankingProps {
   data: RankingItem[];
   isLoading: boolean;
   isHonorRoll?: boolean; // 명예의 전당 여부
-  onBack: () => void; // <--- 이 줄을 추가!
+  onBack?: () => void; // <--- 이 줄을 추가!
 }
 
 export default function Ranking({ title, data, isLoading, isHonorRoll = false }: RankingProps) {
