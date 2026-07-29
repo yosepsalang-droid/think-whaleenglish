@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { CONFIG } from '../config';
-import { supabase } from '../lib/supabase'; 
+import { supabase } from '../lib/supabase'; // ⭐️ 수파베이스 직결
 
-interface GoogleSentence {
+interface SentenceData {
   book: string;
   lesson: string;
   day: string;
@@ -18,10 +17,9 @@ interface SentenceProps {
 }
 
 export default function Sentence({ onBack, studentId = "ST_TEST", studentName = "테스트학생", currentBook = "" }: SentenceProps) {
-  const [allSentences, setAllSentences] = useState<GoogleSentence[]>([]);
+  const [allSentences, setAllSentences] = useState<SentenceData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // ⭐️ [수정] 띄어쓰기 공백을 제거하여 자동 배정 기능 안정화
   const [book, setBook] = useState(currentBook ? currentBook.trim() : '');
   const [unit, setUnit] = useState('');
   const [day, setDay] = useState('');
@@ -48,60 +46,38 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
     return match ? parseInt(match[0], 10) : -1;
   };
 
-  const parseCSVRow = (row: string): string[] => {
-    const result: string[] = [];
-    let current = '';
-    let inQuotes = false;
-
-    for (let i = 0; i < row.length; i++) {
-      const char = row[i];
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === ',' && !inQuotes) {
-        result.push(current.trim());
-        current = '';
-      } else {
-        current += char;
-      }
-    }
-    result.push(current.trim());
-    return result;
-  };
-
+  // ⭐️ [완전 개편] 구글 시트 버리고 수파베이스에서 문장 데이터 다이렉트로 가져오기!
   useEffect(() => {
-    const fetchGoogleSheet = async () => {
+    const fetchSupabaseSentences = async () => {
       try {
-        const backupUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTA4Z1o77LMkO66syR0SmqmWPu6q5NapogmBA2iOxpd379nYZ4Gu7y9h7KmGTVb9H9WXNfM5EnFlBxe/pub?gid=752237439&single=true&output=csv";
-        const response = await fetch(CONFIG.SHEETS.ELEM_SENTENCE || backupUrl);
-        const csvText = await response.text();
-        const rows = csvText.split(/\r?\n/);
-        const parsedSentences: GoogleSentence[] = [];
+        // 수파베이스의 sentences 테이블에서 모든 데이터를 가져옵니다.
+        const { data, error } = await supabase.from('sentences').select('*');
 
-        rows.forEach((row, index) => {
-          if (index === 0 || !row.trim()) return;
-          const cells = parseCSVRow(row);
-          if (cells.length >= 6 && cells[0] && cells[4] && cells[5]) {
-            parsedSentences.push({
-              book: cells[0],
-              lesson: cells[1],
-              day: cells[2],
-              eng: cells[4],
-              kor: cells[5]
-            });
-          }
-        });
-        setAllSentences(parsedSentences);
-        setIsLoading(false);
+        if (error) throw error;
+
+        if (data) {
+          // 데이터베이스 컬럼명(book, lesson, day 등)을 우리 코드에 맞게 매핑
+          const parsedSentences: SentenceData[] = data.map(row => ({
+            book: String(row.book || row.Book || '').trim(),
+            lesson: String(row.lesson || row.unit || row.Unit || '').trim(),
+            day: String(row.day || row.Day || '').trim(),
+            eng: String(row.eng || row.english || row.Eng || '').trim(),
+            kor: String(row.kor || row.korean || row.Kor || '').trim()
+          })).filter(s => s.book && s.eng && s.kor); // 빈 데이터는 걸러냄
+
+          setAllSentences(parsedSentences);
+        }
       } catch (error) {
-        console.error("구글 시트 로딩 실패:", error);
-        alert("구글 시트 문장 데이터를 실시간 가져오지 못했습니다.");
+        console.error("수파베이스 문장 로딩 실패:", error);
+        alert("문장 데이터를 불러오지 못했습니다. 인터넷 연결을 확인해주세요.");
+      } finally {
         setIsLoading(false);
       }
     };
-    fetchGoogleSheet();
+    
+    fetchSupabaseSentences();
   }, []);
 
-  // ⭐️ [수정] 띄어쓰기 공백을 제거하여 찰떡같이 자동 선택되도록 반영
   useEffect(() => {
     if (currentBook) {
       setBook(currentBook.trim());
@@ -331,7 +307,7 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
   if (isLoading) {
     return (
       <div style={{ textAlign: 'center', marginTop: '100px', fontFamily: 'Pretendard, sans-serif' }}>
-        <h2>🐋 구글 시트에서 실시간 문장을 불러오는 중...</h2>
+        <h2>🐋 수파베이스에서 실시간 문장을 불러오는 중...</h2>
       </div>
     );
   }
