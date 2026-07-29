@@ -225,11 +225,17 @@ export default function ElemManage() {
   const StatusBadge = ({ status, fallback }: { status: string, fallback: string }) => {
     const isDone = status !== '';
     return (
-      <span className={`px-2 py-0.5 rounded text-[11px] font-bold border whitespace-nowrap ${
-        isDone 
-          ? 'bg-green-50 text-green-700 border-green-200' 
-          : 'bg-gray-50 text-gray-400 border-gray-200'
-      }`}>
+      <span style={{
+        padding: '2px 8px',
+        borderRadius: '4px',
+        fontSize: '11px',
+        fontWeight: 'bold',
+        border: '1px solid',
+        whiteSpace: 'nowrap',
+        backgroundColor: isDone ? '#f0fdf4' : '#f9fafb',
+        color: isDone ? '#15803d' : '#9ca3af',
+        borderColor: isDone ? '#bbf7d0' : '#e5e7eb'
+      }}>
         {isDone ? status : fallback}
       </span>
     );
@@ -242,55 +248,74 @@ export default function ElemManage() {
   const uniqueGrades = ['전체', '초1', '초2', '초3', '초4', '초5', '초6'];
 
   return (
-    <div className="bg-white text-gray-800 p-4 sm:p-6 rounded-2xl shadow-xl max-w-7xl mx-auto mt-4">
+    <div style={{ backgroundColor: 'white', color: '#1f2937', padding: '24px', borderRadius: '16px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', maxWidth: '80rem', margin: '16px auto' }}>
       
       {/* 헤더 */}
-      <div className="flex flex-col items-center justify-center mb-6">
-        <h2 className="text-2xl sm:text-3xl font-black text-gray-800 mb-2">👑 초등부 실시간 관제탑</h2>
-        <button onClick={fetchAllLMSData} className="mt-2 bg-blue-50 hover:bg-blue-100 text-blue-600 text-xs sm:text-sm px-4 py-2 rounded-lg border border-blue-200 font-bold transition-all shadow-sm">
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', marginBottom: '24px' }}>
+        <h2 style={{ fontSize: '24px', fontWeight: '900', color: '#1f2937', margin: '0 0 8px 0' }}>👑 초등부 실시간 관제탑</h2>
+        
+        {/* ⭐️ 강제 스타일 주입된 새로고침 버튼 */}
+        <button 
+          onClick={fetchAllLMSData} 
+          style={{ 
+            marginTop: '8px', padding: '8px 16px', backgroundColor: '#eff6ff', color: '#2563eb', 
+            border: '1px solid #bfdbfe', borderRadius: '8px', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer' 
+          }}
+        >
           {isLoading ? '⏳ 데이터 가져오는 중...' : '🔄 실시간 데이터 새로고침'}
         </button>
       </div>
 
-      {/* ⭐️ 완전히 새로고침된 세련된 학년 탭 버튼 */}
-      <div className="flex flex-col items-center gap-3 mb-6">
-        <div className="flex flex-wrap justify-center gap-2">
-          {uniqueGrades.map(grade => (
-            <button
-              key={grade}
-              onClick={() => setSelectedGrade(grade)}
-              className={`px-5 py-2 rounded-full text-sm font-extrabold transition-all duration-200 shadow-sm border ${
-                selectedGrade === grade 
-                  ? 'bg-blue-600 text-white border-blue-600 shadow-md transform scale-105' 
-                  : 'bg-white text-gray-500 border-gray-300 hover:bg-blue-50 hover:text-blue-500'
-              }`}
-            >
-              {grade}
-            </button>
-          ))}
+      {/* ⭐️ 강제 스타일 주입된 예쁜 둥근(알약) 학년 탭 버튼 */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '8px' }}>
+          {uniqueGrades.map(grade => {
+            const isSelected = selectedGrade === grade;
+            return (
+              <button
+                key={grade}
+                onClick={() => setSelectedGrade(grade)}
+                style={{
+                  padding: '8px 24px',
+                  borderRadius: '9999px', // 완벽한 알약 모양
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  border: isSelected ? '1px solid #2563eb' : '1px solid #d1d5db',
+                  backgroundColor: isSelected ? '#2563eb' : '#ffffff',
+                  color: isSelected ? '#ffffff' : '#6b7280',
+                  boxShadow: isSelected ? '0 4px 6px -1px rgba(37, 99, 235, 0.2)' : 'none',
+                  transition: 'all 0.2s ease-in-out'
+                }}
+              >
+                {grade}
+              </button>
+            )
+          })}
         </div>
-        <div className="text-sm font-bold text-gray-600 mt-1">
-          총 <span className="text-blue-600 text-lg mx-1">{filteredStudents.length}</span> 명
+        <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#4b5563' }}>
+          총 <span style={{ color: '#2563eb', fontSize: '18px', margin: '0 4px' }}>{filteredStudents.length}</span> 명
         </div>
       </div>
 
-      {/* ⭐️ 강제 테두리(Inline Style)가 적용된 진짜 엑셀 테이블 */}
-      <div className="overflow-x-auto w-full">
-        <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: '900px' }} className="text-sm">
+      {/* ⭐️ 강제 테두리 + 모든 항목 완벽하게 '가운데(Center)' 정렬된 테이블 */}
+      <div style={{ overflowX: 'auto', width: '100%' }}>
+        <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: '900px', fontSize: '14px' }}>
           <thead>
             <tr style={{ backgroundColor: '#f3f4f6', color: '#374151' }}>
-              <th style={{ border: '1px solid #9ca3af', padding: '10px' }} className="font-bold text-center whitespace-nowrap w-12">번호</th>
-              <th style={{ border: '1px solid #9ca3af', padding: '10px' }} className="font-bold text-center whitespace-nowrap w-16">학년</th>
-              <th style={{ border: '1px solid #9ca3af', padding: '10px' }} className="font-bold text-left whitespace-nowrap w-24">이름</th>
-              <th style={{ border: '1px solid #9ca3af', padding: '10px' }} className="font-bold text-left whitespace-nowrap">오늘 학습 현황</th>
-              <th style={{ border: '1px solid #9ca3af', padding: '10px' }} className="font-bold text-left whitespace-nowrap">학습 진도 설정</th>
-              <th style={{ border: '1px solid #9ca3af', padding: '10px' }} className="font-bold text-center whitespace-nowrap w-20">관리</th>
+              <th style={{ border: '1px solid #9ca3af', padding: '10px', textAlign: 'center', whiteSpace: 'nowrap', width: '48px' }}>번호</th>
+              <th style={{ border: '1px solid #9ca3af', padding: '10px', textAlign: 'center', whiteSpace: 'nowrap', width: '64px' }}>학년</th>
+              <th style={{ border: '1px solid #9ca3af', padding: '10px', textAlign: 'center', whiteSpace: 'nowrap', width: '96px' }}>이름</th>
+              {/* 제목들을 전부 center로 변경 */}
+              <th style={{ border: '1px solid #9ca3af', padding: '10px', textAlign: 'center', whiteSpace: 'nowrap' }}>오늘 학습 현황</th>
+              <th style={{ border: '1px solid #9ca3af', padding: '10px', textAlign: 'center', whiteSpace: 'nowrap' }}>학습 진도 설정</th>
+              <th style={{ border: '1px solid #9ca3af', padding: '10px', textAlign: 'center', whiteSpace: 'nowrap', width: '80px' }}>관리</th>
             </tr>
           </thead>
           <tbody>
             {filteredStudents.length === 0 && !isLoading && (
               <tr>
-                <td colSpan={6} style={{ border: '1px solid #cbd5e1', padding: '40px' }} className="text-center text-gray-400">
+                <td colSpan={6} style={{ border: '1px solid #cbd5e1', padding: '40px', textAlign: 'center', color: '#9ca3af' }}>
                   해당 학년({selectedGrade})에 등록된 학생이 없습니다.
                 </td>
               </tr>
@@ -303,16 +328,18 @@ export default function ElemManage() {
                 <tr 
                   key={student.id} 
                   onClick={() => handleSelectStudent(student)} 
-                  className={`cursor-pointer transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                  style={{ backgroundColor: isSelected ? '#eff6ff' : 'transparent', cursor: 'pointer', transition: 'background-color 0.2s' }}
                 >
-                  <td style={{ border: '1px solid #cbd5e1', padding: '8px' }} className="text-gray-500 font-bold text-center whitespace-nowrap">{index + 1}</td>
+                  <td style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'center', color: '#6b7280', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{index + 1}</td>
                   
-                  <td style={{ border: '1px solid #cbd5e1', padding: '8px' }} className="text-gray-600 font-medium text-center whitespace-nowrap">{student.grade}</td>
+                  <td style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'center', color: '#4b5563', fontWeight: '500', whiteSpace: 'nowrap' }}>{student.grade}</td>
 
-                  <td style={{ border: '1px solid #cbd5e1', padding: '8px' }} className="font-extrabold text-gray-900 text-base text-left whitespace-nowrap">{student.name}</td>
+                  {/* 이름도 중앙 정렬 */}
+                  <td style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'center', fontWeight: '800', color: '#111827', fontSize: '16px', whiteSpace: 'nowrap' }}>{student.name}</td>
                   
+                  {/* 학습 현황 뱃지들을 정중앙(justifyContent: center)으로 정렬 */}
                   <td style={{ border: '1px solid #cbd5e1', padding: '8px' }}>
-                    <div className="flex flex-nowrap justify-start gap-1.5 items-center w-full">
+                    <div style={{ display: 'flex', flexWrap: 'nowrap', justifyContent: 'center', alignItems: 'center', gap: '6px', width: '100%' }}>
                       <StatusBadge status={student.wordDone} fallback="❌ 단어" />
                       <StatusBadge status={student.sentenceDone} fallback="❌ 문장" />
                       <StatusBadge status={student.verbDone} fallback="❌ 3단동사" />
@@ -320,45 +347,46 @@ export default function ElemManage() {
                     </div>
                   </td>
 
+                  {/* 진도 설정도 정중앙(justifyContent: center)으로 정렬 */}
                   <td style={{ border: '1px solid #cbd5e1', padding: '8px' }}>
                     {isSelected ? (
-                      <div className="flex flex-nowrap justify-start gap-1 items-center" onClick={(e) => e.stopPropagation()}>
-                        <select value={editSeries} onChange={e => setEditSeries(e.target.value)} className="bg-white p-1 rounded border border-gray-300 text-xs outline-none focus:border-blue-500">
+                      <div style={{ display: 'flex', flexWrap: 'nowrap', justifyContent: 'center', alignItems: 'center', gap: '4px' }} onClick={(e) => e.stopPropagation()}>
+                        <select value={editSeries} onChange={e => setEditSeries(e.target.value)} style={{ padding: '4px', borderRadius: '4px', border: '1px solid #d1d5db', fontSize: '12px', outline: 'none' }}>
                           {SERIES_LIST.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
-                        <select value={editBookNum} onChange={e => setEditBookNum(e.target.value)} className="bg-white p-1 rounded border border-gray-300 text-xs outline-none focus:border-blue-500">
+                        <select value={editBookNum} onChange={e => setEditBookNum(e.target.value)} style={{ padding: '4px', borderRadius: '4px', border: '1px solid #d1d5db', fontSize: '12px', outline: 'none' }}>
                           {BOOK_NUM_LIST.map(n => <option key={n} value={n}>{n}권</option>)}
                         </select>
-                        <select value={editUnit} onChange={e => setEditUnit(e.target.value)} className="bg-white p-1 rounded border border-gray-300 text-xs outline-none focus:border-blue-500">
+                        <select value={editUnit} onChange={e => setEditUnit(e.target.value)} style={{ padding: '4px', borderRadius: '4px', border: '1px solid #d1d5db', fontSize: '12px', outline: 'none' }}>
                           {UNIT_LIST.map(u => <option key={u} value={u}>{u}</option>)}
                         </select>
-                        <select value={editDay} onChange={e => setEditDay(e.target.value)} className="bg-white p-1 rounded border border-gray-300 text-xs outline-none focus:border-blue-500">
+                        <select value={editDay} onChange={e => setEditDay(e.target.value)} style={{ padding: '4px', borderRadius: '4px', border: '1px solid #d1d5db', fontSize: '12px', outline: 'none' }}>
                           {DAY_LIST.map(d => <option key={d} value={d}>{d}</option>)}
                         </select>
                         <button 
                           onClick={handleSaveProgress} 
                           disabled={isSaving}
-                          className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded font-bold shadow disabled:opacity-50 ml-1 whitespace-nowrap"
+                          style={{ backgroundColor: '#2563eb', color: 'white', fontSize: '12px', padding: '6px 12px', borderRadius: '4px', fontWeight: 'bold', border: 'none', cursor: 'pointer', marginLeft: '4px', whiteSpace: 'nowrap' }}
                         >
                           {isSaving ? '저장중..' : '저장'}
                         </button>
                       </div>
                     ) : (
-                      <div className="flex justify-start items-center gap-1">
-                        <span className="text-gray-800 font-bold text-sm whitespace-nowrap">
+                      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ color: '#1f2937', fontWeight: 'bold', fontSize: '14px', whiteSpace: 'nowrap' }}>
                           {student.currentBook}권
                         </span>
-                        <span className="text-gray-600 text-sm whitespace-nowrap">
+                        <span style={{ color: '#4b5563', fontSize: '14px', whiteSpace: 'nowrap' }}>
                           {student.progress}
                         </span>
                       </div>
                     )}
                   </td>
 
-                  <td style={{ border: '1px solid #cbd5e1', padding: '8px' }} className="text-center">
+                  <td style={{ border: '1px solid #cbd5e1', padding: '8px', textAlign: 'center' }}>
                     <button 
                       onClick={(e) => openManageModal(e, student)}
-                      className="bg-white hover:bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1 rounded text-xs font-bold transition-colors shadow-sm whitespace-nowrap"
+                      style={{ backgroundColor: 'white', color: '#4b5563', border: '1px solid #d1d5db', padding: '4px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', whiteSpace: 'nowrap' }}
                     >
                       ⚙️ 관리
                     </button>
@@ -370,53 +398,53 @@ export default function ElemManage() {
         </table>
       </div>
 
-      {/* 학생 관리 모달 */}
+      {/* 학생 관리 모달 (이전과 동일) */}
       {manageStudent && (
-        <div className="fixed inset-0 bg-black/40 flex justify-center items-center z-50">
-          <div className="bg-white border border-gray-200 p-6 rounded-2xl shadow-2xl w-96 relative mx-4">
-            <h3 className="text-xl font-bold text-gray-800 mb-4">⚙️ 학생 정보 관리</h3>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 50 }}>
+          <div style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', padding: '24px', borderRadius: '16px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', width: '24rem', position: 'relative', margin: '0 16px' }}>
+            <h3 style={{ fontSize: '20px', fontWeight: 'bold', color: '#1f2937', margin: '0 0 16px 0' }}>⚙️ 학생 정보 관리</h3>
             
-            <div className="space-y-4 mb-6">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
               <div>
-                <label className="block text-sm text-gray-600 mb-1 font-bold">학생 이름</label>
+                <label style={{ display: 'block', fontSize: '14px', color: '#4b5563', marginBottom: '4px', fontWeight: 'bold' }}>학생 이름</label>
                 <input 
                   type="text" 
                   value={manageName}
                   onChange={(e) => setManageName(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2 text-gray-800 outline-none focus:border-blue-500 focus:bg-white transition-colors"
+                  style={{ width: '100%', boxSizing: 'border-box', backgroundColor: '#f9fafb', border: '1px solid #d1d5db', borderRadius: '8px', padding: '8px', color: '#1f2937', outline: 'none' }}
                 />
               </div>
               <div>
-                <label className="block text-sm text-gray-600 mb-1 font-bold">학년 (예: 초1, 초5)</label>
+                <label style={{ display: 'block', fontSize: '14px', color: '#4b5563', marginBottom: '4px', fontWeight: 'bold' }}>학년 (예: 초1, 초5)</label>
                 <input 
                   type="text" 
                   value={manageGrade}
                   onChange={(e) => setManageGrade(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2 text-gray-800 outline-none focus:border-blue-500 focus:bg-white transition-colors"
+                  style={{ width: '100%', boxSizing: 'border-box', backgroundColor: '#f9fafb', border: '1px solid #d1d5db', borderRadius: '8px', padding: '8px', color: '#1f2937', outline: 'none' }}
                 />
               </div>
             </div>
 
-            <div className="flex justify-between items-center pt-4 border-t border-gray-200">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '16px', borderTop: '1px solid #e5e7eb' }}>
               <button 
                 onClick={handleDeleteStudent}
                 disabled={isManaging}
-                className="text-red-500 hover:text-white hover:bg-red-500 px-3 py-2 rounded-lg text-sm font-bold transition-colors"
+                style={{ color: '#ef4444', backgroundColor: 'transparent', border: 'none', padding: '8px 12px', borderRadius: '8px', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer' }}
               >
                 🗑️ 퇴소 처리
               </button>
               
-              <div className="flex gap-2">
+              <div style={{ display: 'flex', gap: '8px' }}>
                 <button 
                   onClick={() => setManageStudent(null)}
-                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold transition-colors"
+                  style={{ backgroundColor: '#f3f4f6', color: '#374151', border: 'none', padding: '8px 16px', borderRadius: '8px', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer' }}
                 >
                   취소
                 </button>
                 <button 
                   onClick={handleUpdateStudentInfo}
                   disabled={isManaging}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md transition-colors"
+                  style={{ backgroundColor: '#2563eb', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '8px', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer' }}
                 >
                   {isManaging ? '저장중...' : '정보 수정'}
                 </button>
