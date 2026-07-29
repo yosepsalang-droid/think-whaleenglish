@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { CONFIG, withCacheBust } from '../config'; 
 import Ranking from './Ranking'; 
+// 💡 수파베이스 연동을 위한 import 추가!
+import { supabase } from '../lib/supabase'; 
 
 interface RankEntry {
   studentName: string;
@@ -36,32 +38,35 @@ export default function Grammar({
   const [allData, setAllData] = useState<any[]>([]);
   const [currentQ, setCurrentQ] = useState<any>(null);
 
-  // 💡 [핵심 신규 추가] 문법 게임 전용 자체 랭킹 계산 State
   const [myRank, setMyRank] = useState<number | null>(externalMyRank);
   const [myTotalScore, setMyTotalScore] = useState<number>(externalTotalScore);
   const [localRankings, setLocalRankings] = useState<{ thisMonth: RankEntry[]; lastMonth: RankEntry[] }>({ thisMonth: [], lastMonth: [] });
   const [isRankLoading, setIsRankLoading] = useState<boolean>(true);
 
-  // 1️⃣ 교재 문제 데이터 불러오기
+  // 1️⃣ 교재 문제 데이터 불러오기 (✨ 구글 시트 -> 수파베이스 sentence 테이블로 교체 완료!)
   useEffect(() => {
-    fetch(CONFIG.SHEETS.ELEM_GRAMMAR)
-      .then(res => res.text())
-      .then(text => {
-        const rows = text.split(/\r?\n/).slice(1);
-        const parsed = rows.map(r => { 
-            const c = r.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); 
-            return { 
-              book: c[0]?.trim(), 
-              eng: c[4]?.replace(/^"|"$/g, '').trim(), 
-              kor: c[5]?.replace(/^"|"$/g, '').trim() 
-            }; 
-        }).filter(i => i.eng && i.kor);
+    const fetchSentences = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('sentence')
+          .select('*');
 
-        setAllData(parsed);
-      });
+        if (error) throw error;
+
+        if (data) {
+          // eng와 kor 데이터가 모두 존재하는 유효한 문장만 필터링하여 게임 데이터로 세팅
+          const validData = data.filter(item => item.eng && item.kor);
+          setAllData(validData);
+        }
+      } catch (error) {
+        console.error("수파베이스 sentence 데이터 불러오기 에러:", error);
+      }
+    };
+
+    fetchSentences();
   }, []);
 
-  // 💡 [핵심 신규 추가] 구글 시트에서 문법 게임 점수만 쏙 뽑아와서 실시간 랭킹 만들기
+  // 💡 실시간 랭킹 만들기 (기존 로직 유지)
   const fetchAndCalculateRank = (options?: { delayMs?: number }) => {
     const { delayMs = 0 } = options ?? {};
     const logSheetUrl = CONFIG.SHEETS.GRAMMAR_LOG;
@@ -94,7 +99,6 @@ export default function Grammar({
           const scoreVal = parseInt(cols[3]?.replace(/^"|"$/g, '').trim() || '0', 10);
           const taskType = cols[5]?.replace(/^"|"$/g, '').trim();
 
-          // ✨ '문법게임'과 '단어게임' 두 가지 점수를 모두 합산합니다!
           if (!name || isNaN(scoreVal) || scoreVal <= 0) return;
           if (taskType !== '문법게임' && taskType !== '단어게임') return;
 
@@ -127,7 +131,6 @@ export default function Grammar({
           lastMonth: lastMonthRankings
         });
 
-        // 내 랭킹과 점수 세팅
         const myIdx = thisMonthRankings.findIndex(item => item.studentName === studentName.trim());
         if (myIdx !== -1) {
           setMyRank(myIdx + 1);
@@ -149,7 +152,6 @@ export default function Grammar({
     else doFetch();
   };
 
-  // 학생 이름이 정해지면 랭킹 불러오기 시작
   useEffect(() => {
     fetchAndCalculateRank();
   }, [studentName]);
@@ -209,7 +211,7 @@ export default function Grammar({
     
     const initialQuestion = generateProblem(allData, 1);
     if (!initialQuestion) { 
-      alert("시트에 1단계 문제 데이터가 부족합니다."); 
+      alert("시트에 1단계 문제 데이터가 부족합니다. 데이터 로딩을 확인해주세요."); 
       return; 
     }
     
@@ -271,7 +273,7 @@ export default function Grammar({
       const nextQuestion = generateProblem(allData, nextStage);
       
       if (!nextQuestion) {
-        alert(`시트에 데이터가 부족하여 여기까지만 진행됩니다!`);
+        alert(`데이터가 부족하여 여기까지만 진행됩니다!`);
         endGame(currentScore);
         return;
       }
@@ -310,7 +312,7 @@ export default function Grammar({
 
     const refreshAfterSave = () => {
       onGameComplete?.(finalScore);
-      fetchAndCalculateRank({ delayMs: 1500 }); // 점수 반영 후 랭킹 다시 불러오기
+      fetchAndCalculateRank({ delayMs: 1500 }); 
     };
 
     sendLog()
@@ -453,7 +455,7 @@ export default function Grammar({
             setScore(0);
           }} 
           style={styles.startBtn}
-        >         처음으로 돌아가기
+        >        처음으로 돌아가기
         </button>
       </div>
     </div>
