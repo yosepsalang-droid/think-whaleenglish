@@ -104,30 +104,38 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
     isListening ? recognitionRef.current.stop() : recognitionRef.current.start();
   };
 
-  // 💡 [핵심] 한글 및 설명 부분은 절대 소리내어 읽지 않도록 필터링 완벽 강화!
+  // 💡 [개선] 사람과 최대한 비슷한 자연스러운 억양과 목소리 세팅
   const speakWhale = (text: string) => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
       
-      // 1. [추천 대답] 이후의 내용은 모두 날려버림
       let englishPart = text.split('[')[0]; 
       
-      // 2. 괄호 안의 내용(한국어 설명) 및 모든 한글 문자 강제 제거
       englishPart = englishPart
         .replace(/\(.*?\)/g, '')
-        .replace(/[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/g, '') // 한글이 실수로 밖에 나와도 다 지워버림!
+        .replace(/[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/g, '') 
         .trim();
       
-      // 만약 읽을 영어 내용이 없다면 음성 출력 건너뜀
       if (!englishPart) return;
 
       const utterance = new SpeechSynthesisUtterance(englishPart);
       utterance.lang = 'en-US';
-      utterance.rate = 0.9; 
-      utterance.pitch = 1.1; 
+      
+      // 높낮이(pitch)를 1.0(기본값)으로 맞추고 속도를 살짝 늦춰 또렷하고 자연스럽게 발음
+      utterance.rate = 0.95; 
+      utterance.pitch = 1.0; 
       
       const voices = window.speechSynthesis.getVoices();
-      const bestVoice = voices.find(v => v.lang === 'en-US' && (v.name.includes('Google') || v.name.includes('Samantha')));
+      
+      // 사람과 가장 비슷한 프리미엄 AI 음성들 우선 배치
+      const bestVoice = voices.find(v => 
+        v.name.includes('Google US English') || 
+        v.name.includes('Microsoft Aria') || 
+        v.name.includes('Microsoft Zira') || 
+        v.name.includes('Samantha') || 
+        v.name.includes('Alex')
+      ) || voices.find(v => v.lang === 'en-US');
+
       if (bestVoice) {
         utterance.voice = bestVoice;
       }
@@ -156,7 +164,7 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
       const targetWords = wordsData?.map(w => `${w.eng}(${w.kor})`).join(', ') || '없음';
       const targetSentences = sentencesData?.map(s => `${s.eng}(${s.kor})`).join(', ') || '없음';
 
-      // 💡 [핵심] 문법 교정 시 "한국어 설명은 반드시 괄호 안에 넣으라"고 지시
+      // 💡 [개선] 융통성 있는 대화 유도 및 정답 강요 방지 프롬프트
       const instruction = `
         너는 초등학생에게 영어를 가르쳐주는 친근하고 발랄한 원어민 고래 선생님(Whale)이야.
         로봇처럼 딱딱하게 굴지 말고, 진짜 외국인 친구처럼 아주 부드럽고 자연스럽게 대화해줘.
@@ -164,21 +172,22 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
         [오늘의 학습 목표: 교재 단어와 문장]
         - 단어: ${targetWords}
         - 문장: ${targetSentences}
-        이 목표 내용들을 억지로 강요하지 말고, 일상 대화 속에 아주 자연스럽게 녹여내서 질문해줘.
 
-        [매우 중요 규칙 1: 틀린 문장 교정]
-        만약 아이가 보낸 영어 문장의 문법이나 단어가 틀렸거나 어색하다면:
+        [매우 중요 규칙 1: 대화의 유연성 (창의적 대답 대환영!)]
+        아이가 교재에 있는 목표 단어(예: orange) 대신 다른 단어(예: tomato, apple)를 사용해서 대답하더라도, 문맥상 말이 되고 영어 문법이 맞다면 절대 틀렸다고 하지 마! 
+        오히려 "Wow, tomatoes! Are they red or green?" 처럼 아이의 창의적인 대답을 받아쳐 주고 아주 자연스럽게 대화를 이어가줘. 
+
+        [매우 중요 규칙 2: 틀린 문장 교정]
+        만약 아이가 보낸 문장의 문법이 정말로 심각하게 틀렸거나 뜻이 아예 안 통할 때만:
         1. 먼저 영어로 짧게 격려해줘. (예: Good try! But let's try it again.)
-        2. 그 다음, 어디가 틀렸고 올바른 표현은 무엇인지 한국어로 설명하는데, 이 한국어 설명은 **반드시 괄호 ( ) 안에** 적어야 해!! (음성 엔진이 한글을 읽지 못하게 하기 위함)
-        3. 아이가 올바르게 다시 말할 수 있도록 유도해.
-        예시: Good try! Let's try it again. (아주 잘했어! 하지만 'a'가 빠졌네. 'It is a pen.'이 정확한 표현이야. 자, 정답을 다시 한번 말해볼까?)
+        2. 그 다음, 어디가 틀렸고 올바른 표현은 무엇인지 한국어로 설명하는데, 이 한국어 설명은 **반드시 괄호 ( ) 안에** 적어야 해!!
 
-        [매우 중요 규칙 2: 대화 종료]
-        아이가 "Bye", "Goodbye", "잘 가", "그만할래" 등 작별 인사를 하거나 대화를 끝내려 한다면, 따뜻한 작별 인사를 건넨 후 네 응답의 맨 마지막에 반드시 [END_CHAT] 이라는 키워드를 적어줘. 이 키워드가 있어야 시스템이 종료돼.
+        [매우 중요 규칙 3: 대화 종료]
+        아이가 "Bye", "Goodbye", "잘 가", "그만할래" 등 작별 인사를 하거나 대화를 끝내려 한다면, 따뜻한 작별 인사를 건넨 후 네 응답의 맨 마지막에 반드시 [END_CHAT] 이라는 키워드를 적어줘.
 
         [응답 형식 규칙]
         - 네가 하는 대화 문장 뒤에는 괄호()를 치고 자연스러운 한국어 번역을 넣어줘.
-        - 대답 맨 밑에는 항상 [추천 대답] 이라는 제목으로 아이가 정답으로 말할 수 있는 영어 문장과 (한국어 뜻)을 1~2개 제시해줘.
+        - 대답 맨 밑에는 항상 [추천 대답] 이라는 제목으로 아이가 대답할 수 있는 영어 문장과 (한국어 뜻)을 1~2개 제시해줘.
       `;
       
       setSystemPrompt(instruction);
@@ -223,7 +232,9 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
         const currentHistory = [...apiHistory, newUserMsg];
         
         const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || CONFIG.GEMINI.API_KEY;
-        const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=" + API_KEY;
+        
+        // 💡 [개선] 존재하지 않던 3.6 버전을 최신 공식 1.5-flash 버전으로 수정!
+        const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + API_KEY;
         
         const response = await fetch(url, {
           method: "POST",
@@ -237,7 +248,12 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
         const data = await response.json();
         if (data.error) throw new Error(data.error.message || "Gemini 통신 에러");
 
-        let aiReply = data.candidates[0].content.parts[0].text;
+        // 💡 [개선] AI 응답이 비정상일 때 화면이 멈추지 않도록 방어 로직 추가
+        let aiReply = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        
+        if (!aiReply) {
+          throw new Error("AI가 빈 응답을 반환했습니다.");
+        }
         
         let isEndingNow = false;
         if (aiReply.includes('[END_CHAT]')) {
@@ -258,7 +274,8 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
       }
     } catch (err) {
       console.error("AI 응답 오류:", err);
-      setMessages(prev => [...prev, { sender: 'whale', text: "Sorry, something went wrong. (미안해, 통신에 오류가 발생했어.)" }]);
+      // 에러가 났을 때도 시스템 메시지로 확실히 띄워주기
+      setMessages(prev => [...prev, { sender: 'system', text: `앗, 고래 선생님과 통신이 잠시 끊겼어요. 다시 한 번 말해줄래요? (오류: 통신 지연)` }]);
     } finally {
       setIsAIThinking(false);
     }
