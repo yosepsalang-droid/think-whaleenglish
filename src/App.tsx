@@ -3,18 +3,19 @@ import { fetchIntegratedRankings, type IntegratedRankingResult } from './utils/g
 import { supabase } from './lib/supabase'; 
 
 // 🧸 초등부 컴포넌트
-import Home from './elem/Home';
+import ElementaryHome from './elem/ElementaryHome';
 import Word from './elem/Word';
 import Sentence from './elem/Sentence';
 import WhaleChat from './elem/WhaleChat';
 import Grammar from './elem/Grammar';
 import WordMaster from './elem/WordMaster';
+import Ranking from './elem/Ranking'; // ⭐️ 랭킹전 추가!
 
 // 📘 중등부 학습 컴포넌트
 import MidHome from './mid/MidHome';
 import Voca from './mid/Voca';
 import MidSen from './mid/MidSen';
-import VerbTest from './mid/VerbTest';
+import VerbTest from './mid/VerbTest'; // 초등부에서도 공용으로 사용됩니다.
 
 // 👑 원장님 관제탑
 import Lms from './manage/Lms'; 
@@ -132,7 +133,6 @@ export default function App() {
     setShowSchoolSelect(false);
   };
 
-  // ⭐️ 과정 선택 화면으로 돌아가는 함수 추가
   const handleBackToSelect = () => {
     setStudentMode(null);
     setShowSchoolSelect(true);
@@ -148,22 +148,32 @@ export default function App() {
       if (currentMenu === 'midSen') return <MidSen onBack={() => setCurrentMenu('midHome')} />;
       if (currentMenu === 'verbTest') return <VerbTest onBack={() => setCurrentMenu('midHome')} studentId={loggedInStudent.id} studentName={loggedInStudent.name} />;
       
-      // ⭐️ MidHome에 onBackToSelect 전달
       return <MidHome student={loggedInStudent} onNavigate={setCurrentMenu} onLogout={() => { setIsLoggedIn(false); setId(''); setStudentMode(null); }} onBackToSelect={handleBackToSelect} />;
     }
 
     if (loggedInStudent && studentMode === 'elementary') {
       return (
         <div>
-          {/* ⭐️ Home에 onBackToSelect 전달 */}
+          {/* ⭐️ ElementaryHome에 student 객체와 onNavigate 권한을 완벽하게 넘겨줍니다 */}
           {currentMenu === 'home' && (
-            <Home student={loggedInStudent} onNavigate={setCurrentMenu} onLogout={() => { setIsLoggedIn(false); setId(''); setStudentMode(null); }} onUpdateStudent={(updatedStudent) => setLoggedInStudent(updatedStudent)} onBackToSelect={handleBackToSelect} />
+            <ElementaryHome 
+              student={loggedInStudent} 
+              onNavigate={setCurrentMenu}
+              onLogout={() => { setIsLoggedIn(false); setId(''); setStudentMode(null); }} 
+              onBackToSelect={handleBackToSelect}
+            />
           )}
+          
+          {/* ⭐️ 하위 메뉴 컴포넌트 연결 완료 */}
           {currentMenu === 'word' && <Word onBack={() => setCurrentMenu('home')} studentId={loggedInStudent.id} studentName={loggedInStudent.name} currentBook={loggedInStudent.currentBook} />}
           {currentMenu === 'sentence' && <Sentence onBack={() => setCurrentMenu('home')} studentId={loggedInStudent.id} studentName={loggedInStudent.name} currentBook={loggedInStudent.currentBook} />}
+          {currentMenu === 'verbTest' && <VerbTest onBack={() => setCurrentMenu('home')} studentId={loggedInStudent.id} studentName={loggedInStudent.name} />}
+          
           {currentMenu === 'chat' && <WhaleChat onBack={() => setCurrentMenu('home')} currentBook={loggedInStudent.currentBook} />}
+          
           {currentMenu === 'grammar' && <Grammar student={loggedInStudent} onBack={() => setCurrentMenu('home')} totalScore={integratedRank.totalScore} myRank={integratedRank.myRank} rankings={{ thisMonth: integratedRank.thisMonth, lastMonth: integratedRank.lastMonth }} loadingRank={integratedRank.loading} onGameComplete={handleGameComplete} />}
           {currentMenu === 'wordMaster' && <WordMaster studentName={loggedInStudent.name} grade={loggedInStudent.grade} onBack={() => setCurrentMenu('home')} totalScore={integratedRank.totalScore} myRank={integratedRank.myRank} loadingRank={integratedRank.loading} onGameComplete={handleGameComplete} />}
+          {currentMenu === 'ranking' && <Ranking onBack={() => setCurrentMenu('home')} />}
         </div>
       );
     }

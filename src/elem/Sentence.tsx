@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { CONFIG } from '../config';
-import { supabase } from '../lib/supabase'; // ⭐️ 수파베이스 열쇠 추가!
+import { supabase } from '../lib/supabase'; 
 
 interface GoogleSentence {
   book: string;
@@ -21,7 +21,8 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
   const [allSentences, setAllSentences] = useState<GoogleSentence[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const [book, setBook] = useState(currentBook);
+  // ⭐️ [수정] 띄어쓰기 공백을 제거하여 자동 배정 기능 안정화
+  const [book, setBook] = useState(currentBook ? currentBook.trim() : '');
   const [unit, setUnit] = useState('');
   const [day, setDay] = useState('');
   const [appliedProgress, setAppliedProgress] = useState('교재를 선택하세요');
@@ -35,7 +36,6 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
   const [selectedWords, setSelectedWords] = useState<string[]>([]);
   const [availableWords, setAvailableWords] = useState<string[]>([]);
 
-  // ⭐️ [핵심 추가] 문장 오답 기록과 재도전 횟수를 기억하는 공간!
   const [wrongSentences, setWrongSentences] = useState<string[]>([]);
   const [attemptCount, setAttemptCount] = useState(1);
 
@@ -94,16 +94,17 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
         setIsLoading(false);
       } catch (error) {
         console.error("구글 시트 로딩 실패:", error);
-        alert("구글 시트 문장 데이터를 실시간으로 가져오지 못했습니다.");
+        alert("구글 시트 문장 데이터를 실시간 가져오지 못했습니다.");
         setIsLoading(false);
       }
     };
     fetchGoogleSheet();
   }, []);
 
+  // ⭐️ [수정] 띄어쓰기 공백을 제거하여 찰떡같이 자동 선택되도록 반영
   useEffect(() => {
     if (currentBook) {
-      setBook(currentBook);
+      setBook(currentBook.trim());
     }
   }, [currentBook]);
 
@@ -184,7 +185,6 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
       setAppliedProgress(`${targetBook} ${targetLesson} ${targetDay}`);
     }
 
-    // 기록 초기화
     setCurrentIndex(0);
     setScore(0);
     setIsFinished(false);
@@ -201,11 +201,10 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
     }
   }, [currentSentenceList, currentIndex]);
 
-  // ⭐️ [핵심 변경] 고품질 원어민 발음 패치 (문장이라 쉼표, 마침표도 허용합니다)
   const speakWord = (text: string) => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
-      const cleanText = text.replace(/[^a-zA-Z\s-.,?!']/g, ''); // 기호 허용
+      const cleanText = text.replace(/[^a-zA-Z\s-.,?!']/g, ''); 
       const utterance = new SpeechSynthesisUtterance(cleanText);
       
       utterance.lang = 'en-US';
@@ -232,7 +231,6 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
     }
   };
 
-  // ⭐️ [핵심 변경] 수파베이스에 문장 기록 적재 (task_type을 '초등문장'으로 분류)
   const sendLogToSupabase = async (finalScore: number, finalAttempt: number, finalWrongs: string[]) => {
     if (finalScore !== currentSentenceList.length || currentSentenceList.length === 0) {
       return; 
@@ -249,7 +247,7 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
         .insert([{
           student_id: studentId,
           student_name: studentName,
-          task_type: '초등문장', // 리포트 분리를 위해 '초등문장'으로 저장합니다!
+          task_type: '초등문장', 
           book_info: `${book}_${unit}_${day}`,
           score: finalScore,
           status: '완료',
@@ -281,7 +279,7 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
     setScore(0);
     setIsFinished(false);
     setFeedback(null);
-    setAttemptCount(prev => prev + 1); // 재도전 횟수 증가
+    setAttemptCount(prev => prev + 1); 
     if (currentSentence && currentSentence.eng !== 'none') {
       setAvailableWords([...currentSentence.chunks]);
       setSelectedWords([]);
@@ -316,7 +314,6 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
       setFeedback({ isCorrect: true, msg: '정답입니다! 👏' });
       speakWord(currentSentence.eng);
     } else {
-      // ⭐️ 오답일 경우 배열에 추가
       setWrongSentences(prev => prev.includes(currentSentence.eng) ? prev : [...prev, currentSentence.eng]);
       setFeedback({ isCorrect: false, msg: `오답입니다. 정답은 [ ${currentSentence.eng} ]` });
     }
@@ -326,7 +323,7 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
         setCurrentIndex(currentIndex + 1);
       } else {
         setIsFinished(true);
-        sendLogToSupabase(nextScore, attemptCount, wrongSentences); // 수파베이스 전송!
+        sendLogToSupabase(nextScore, attemptCount, wrongSentences); 
       }
     }, 2000);
   };
@@ -371,7 +368,6 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
           <h2 style={{ margin: '0 0 10px 0' }}>테스트 완료! 🎉</h2>
           <p style={{ fontSize: '20px', color: '#333', marginBottom: '15px' }}>총 {currentSentenceList.length}문제 중 <strong>{score}</strong>문제 정답</p>
           
-          {/* ⭐️ 오답 문장 표시 영역 추가 */}
           {score === currentSentenceList.length && wrongSentences.length > 0 && (
             <div style={{ backgroundColor: '#fff5f5', padding: '15px', borderRadius: '8px', marginBottom: '20px', textAlign: 'left' }}>
               <p style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 'bold', color: '#e53935' }}>
