@@ -5,7 +5,6 @@ interface Student {
   id: string;
   name: string;
   currentBook: string;
-  progress: string; 
   grade: string;    
   wordDone: string;       
   sentenceDone: string;   
@@ -16,15 +15,15 @@ interface Student {
 
 const SERIES_LIST = ['240', '520', '860', '1240', '1680'];
 const BOOK_NUM_LIST = ['1', '2', '3', '4', '5', '6'];
-const UNIT_LIST = ['Unit1', 'Unit2', 'Unit3', 'Unit4'];
-const DAY_LIST = ['Day1', 'Day2', 'Day3', 'Day4'];
 
+// 💡 텍스트 추출 로직 초강화: U3D1, Unit3 Day1, unit 3 day 1 등 모든 형태에서 숫자만 쏙 뽑아냄
 const parseUnitDay = (bookInfo: string) => {
   if (!bookInfo) return '';
-  const unitMatch = bookInfo.match(/unit\s*(\d+)/i);
-  const dayMatch = bookInfo.match(/day\s*(\d+)/i);
-  if (unitMatch && dayMatch) {
-    return `(U${unitMatch[1]}D${dayMatch[1]})`;
+  const uMatch = bookInfo.match(/u(?:nit)?\s*(\d+)/i);
+  const dMatch = bookInfo.match(/d(?:ay)?\s*(\d+)/i);
+  
+  if (uMatch && dMatch) {
+    return `(U${uMatch[1]}D${dMatch[1]})`;
   }
   return '';
 };
@@ -38,8 +37,6 @@ export default function ElemManage() {
 
   const [editSeries, setEditSeries] = useState('240');
   const [editBookNum, setEditBookNum] = useState('1');
-  const [editUnit, setEditUnit] = useState('Unit1');
-  const [editDay, setEditDay] = useState('Day1');
   const [isSaving, setIsSaving] = useState(false);
 
   const [manageStudent, setManageStudent] = useState<Student | null>(null);
@@ -78,6 +75,7 @@ export default function ElemManage() {
         const record = todayDoneMap.get(log.student_id)!;
         const detail = parseUnitDay(log.book_info); 
 
+        // 💡 강력해진 detail 추출 로직 덕분에 이제 예쁘게 (U*D*)가 붙습니다.
         if (log.task_type.includes('단어')) record.word = `✅ 단어${detail}`;
         if (log.task_type.includes('문장')) record.sentence = `✅ 문장${detail}`;
         if (log.task_type.includes('동사') || log.task_type.includes('3단')) record.verb = `✅ 3단동사${detail}`; 
@@ -92,7 +90,6 @@ export default function ElemManage() {
           id: row.student_id,
           name: row.name || '이름없음',
           currentBook: row.currentBook || '240_1',
-          progress: row.progress || 'Unit1 Day1',
           grade: row.grade || '초1',
           wordDone: doneStatus.word,
           sentenceDone: doneStatus.sentence,
@@ -115,13 +112,6 @@ export default function ElemManage() {
     fetchAllLMSData();
   }, []);
 
-  const parseProgress = (progressStr: string) => {
-    const parts = (progressStr || '').split(' ');
-    const unit = parts[0] && parts[0].startsWith('Unit') ? parts[0] : 'Unit1';
-    const day = parts[1] && parts[1].startsWith('Day') ? parts[1] : 'Day1';
-    return { unit, day };
-  };
-
   const handleSelectStudent = (student: Student) => {
     if (selectedStudent?.id === student.id) {
       setSelectedStudent(null);
@@ -130,12 +120,8 @@ export default function ElemManage() {
     setSelectedStudent(student);
     
     const [series = '240', bookNum = '1'] = (student.currentBook || '240_1').split('_');
-    const { unit, day } = parseProgress(student.progress);
-    
     setEditSeries(series);
     setEditBookNum(bookNum);
-    setEditUnit(unit);
-    setEditDay(day);
   };
 
   const handleSaveProgress = async (e: React.MouseEvent) => {
@@ -143,27 +129,25 @@ export default function ElemManage() {
     if (!selectedStudent) return;
     
     const fullBook = `${editSeries}_${editBookNum}`;
-    const fullProgress = `${editUnit} ${editDay}`;
     setIsSaving(true);
 
     try {
       const { error } = await supabase
         .from('students')
         .update({
-          currentBook: fullBook,
-          progress: fullProgress
+          currentBook: fullBook
         })
         .eq('student_id', selectedStudent.id);
 
       if (error) throw error;
 
-      const updatedStudent = { ...selectedStudent, currentBook: fullBook, progress: fullProgress };
+      const updatedStudent = { ...selectedStudent, currentBook: fullBook };
       setStudents(prev => prev.map(s => s.id === selectedStudent.id ? updatedStudent : s));
       setSelectedStudent(updatedStudent);
-      alert(`✅ ${selectedStudent.name} 학생의 진도가 [${fullBook}권 / ${fullProgress}]로 저장되었습니다.`);
+      alert(`✅ ${selectedStudent.name} 학생의 교재가 [${fullBook}권]으로 변경되었습니다.`);
       
     } catch (error) {
-      alert("진도 저장에 실패했습니다.");
+      alert("교재 변경에 실패했습니다.");
     } finally {
       setIsSaving(false);
     }
@@ -249,7 +233,6 @@ export default function ElemManage() {
   const uniqueGrades = ['전체', '초1', '초2', '초3', '초4', '초5', '초6'];
 
   return (
-    // 전체 너비를 유연하게 채우도록 width: '100%' 로 수정
     <div style={{ backgroundColor: 'white', color: '#1f2937', padding: '16px', borderRadius: '12px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', width: '100%', boxSizing: 'border-box', margin: '0 auto', fontFamily: 'Pretendard, sans-serif' }}>
       
       {/* 헤더 & 학년 탭 */}
@@ -298,7 +281,6 @@ export default function ElemManage() {
         </div>
       </div>
 
-      {/* ⭐️ 반응형 테이블: 강제 너비(minWidth)를 풀고 width 100% 로 알아서 맞춰지게 수정 */}
       <div style={{ overflowX: 'auto', width: '100%' }}>
         <table style={{ borderCollapse: 'collapse', width: '100%', tableLayout: 'auto', fontSize: '13px' }}>
           <thead>
@@ -306,8 +288,10 @@ export default function ElemManage() {
               <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '4%' }}>번호</th>
               <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '5%' }}>학년</th>
               <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '8%' }}>이름</th>
-              <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap' }}>오늘 학습 현황</th>
-              <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap' }}>학습 진도 설정</th>
+              {/* 💡 오늘 학습 현황을 더 넓게 */}
+              <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '45%' }}>오늘 학습 현황</th>
+              {/* 💡 진도 설정 -> 교재 설정으로 변경 및 칸 축소 */}
+              <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '15%' }}>교재 설정</th>
               <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '7%' }}>관리</th>
             </tr>
           </thead>
@@ -344,6 +328,7 @@ export default function ElemManage() {
                     </div>
                   </td>
 
+                  {/* 💡 Unit/Day 선택창을 날려버리고 오직 교재(Book)만 선택하게 수정! */}
                   <td style={{ border: '1px solid #e2e8f0', padding: '4px 2px' }}>
                     {isSelected ? (
                       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', gap: '4px' }} onClick={(e) => e.stopPropagation()}>
@@ -352,12 +337,6 @@ export default function ElemManage() {
                         </select>
                         <select value={editBookNum} onChange={e => setEditBookNum(e.target.value)} style={{ padding: '2px', borderRadius: '4px', border: '1px solid #d1d5db', fontSize: '12px', outline: 'none' }}>
                           {BOOK_NUM_LIST.map(n => <option key={n} value={n}>{n}권</option>)}
-                        </select>
-                        <select value={editUnit} onChange={e => setEditUnit(e.target.value)} style={{ padding: '2px', borderRadius: '4px', border: '1px solid #d1d5db', fontSize: '12px', outline: 'none' }}>
-                          {UNIT_LIST.map(u => <option key={u} value={u}>{u}</option>)}
-                        </select>
-                        <select value={editDay} onChange={e => setEditDay(e.target.value)} style={{ padding: '2px', borderRadius: '4px', border: '1px solid #d1d5db', fontSize: '12px', outline: 'none' }}>
-                          {DAY_LIST.map(d => <option key={d} value={d}>{d}</option>)}
                         </select>
                         <button 
                           onClick={handleSaveProgress} 
@@ -371,9 +350,6 @@ export default function ElemManage() {
                       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                         <span style={{ color: '#1f2937', fontWeight: 'bold', fontSize: '13px', whiteSpace: 'nowrap' }}>
                           {student.currentBook}권
-                        </span>
-                        <span style={{ color: '#4b5563', fontSize: '13px', whiteSpace: 'nowrap' }}>
-                          {student.progress}
                         </span>
                       </div>
                     )}
@@ -394,7 +370,7 @@ export default function ElemManage() {
         </table>
       </div>
 
-      {/* 학생 관리 모달 */}
+      {/* 학생 관리 모달 (이전과 동일) */}
       {manageStudent && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 50 }}>
           <div style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', padding: '24px', borderRadius: '16px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', width: '24rem', position: 'relative', margin: '0 16px' }}>
