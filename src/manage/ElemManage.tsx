@@ -226,7 +226,7 @@ export default function ElemManage() {
     const isDone = status !== '';
     return (
       <span style={{
-        padding: '2px 6px',
+        padding: '2px 4px',
         borderRadius: '4px',
         fontSize: '11px',
         fontWeight: 'bold',
@@ -249,9 +249,10 @@ export default function ElemManage() {
   const uniqueGrades = ['전체', '초1', '초2', '초3', '초4', '초5', '초6'];
 
   return (
-    <div style={{ backgroundColor: 'white', color: '#1f2937', padding: '16px 24px', borderRadius: '12px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', maxWidth: '100%', margin: '0 auto', fontFamily: 'Pretendard, sans-serif' }}>
+    // 전체 너비를 유연하게 채우도록 width: '100%' 로 수정
+    <div style={{ backgroundColor: 'white', color: '#1f2937', padding: '16px', borderRadius: '12px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', width: '100%', boxSizing: 'border-box', margin: '0 auto', fontFamily: 'Pretendard, sans-serif' }}>
       
-      {/* 헤더 & 학년 탭 (가로로 배치하여 공간 낭비 방지) */}
+      {/* 헤더 & 학년 탭 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#1f2937', margin: 0 }}>👑 초등부 관제탑</h2>
@@ -267,7 +268,7 @@ export default function ElemManage() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ display: 'flex', gap: '6px' }}>
+          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
             {uniqueGrades.map(grade => {
               const isSelected = selectedGrade === grade;
               return (
@@ -275,7 +276,7 @@ export default function ElemManage() {
                   key={grade}
                   onClick={() => setSelectedGrade(grade)}
                   style={{
-                    padding: '6px 16px',
+                    padding: '6px 14px',
                     borderRadius: '20px',
                     fontSize: '13px',
                     fontWeight: 'bold',
@@ -297,17 +298,17 @@ export default function ElemManage() {
         </div>
       </div>
 
-      {/* ⭐️ 노트북 전용: 촘촘하게 압축된 진짜 엑셀 테이블 */}
+      {/* ⭐️ 반응형 테이블: 강제 너비(minWidth)를 풀고 width 100% 로 알아서 맞춰지게 수정 */}
       <div style={{ overflowX: 'auto', width: '100%' }}>
-        <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: '950px', fontSize: '13px' }}>
+        <table style={{ borderCollapse: 'collapse', width: '100%', tableLayout: 'auto', fontSize: '13px' }}>
           <thead>
             <tr style={{ backgroundColor: '#f3f4f6', color: '#374151', borderBottom: '2px solid #9ca3af' }}>
-              <th style={{ border: '1px solid #cbd5e1', padding: '6px 4px', textAlign: 'center', whiteSpace: 'nowrap', width: '40px' }}>번호</th>
-              <th style={{ border: '1px solid #cbd5e1', padding: '6px 4px', textAlign: 'center', whiteSpace: 'nowrap', width: '50px' }}>학년</th>
-              <th style={{ border: '1px solid #cbd5e1', padding: '6px 4px', textAlign: 'center', whiteSpace: 'nowrap', width: '80px' }}>이름</th>
-              <th style={{ border: '1px solid #cbd5e1', padding: '6px 4px', textAlign: 'center', whiteSpace: 'nowrap' }}>오늘 학습 현황</th>
-              <th style={{ border: '1px solid #cbd5e1', padding: '6px 4px', textAlign: 'center', whiteSpace: 'nowrap', width: '280px' }}>학습 진도 설정</th>
-              <th style={{ border: '1px solid #cbd5e1', padding: '6px 4px', textAlign: 'center', whiteSpace: 'nowrap', width: '70px' }}>관리</th>
+              <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '4%' }}>번호</th>
+              <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '5%' }}>학년</th>
+              <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '8%' }}>이름</th>
+              <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap' }}>오늘 학습 현황</th>
+              <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap' }}>학습 진도 설정</th>
+              <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '7%' }}>관리</th>
             </tr>
           </thead>
           <tbody>
@@ -328,14 +329,14 @@ export default function ElemManage() {
                   onClick={() => handleSelectStudent(student)} 
                   style={{ backgroundColor: isSelected ? '#eff6ff' : 'transparent', cursor: 'pointer', transition: 'background-color 0.1s' }}
                 >
-                  <td style={{ border: '1px solid #e2e8f0', padding: '6px', textAlign: 'center', color: '#6b7280', fontWeight: 'bold' }}>{index + 1}</td>
+                  <td style={{ border: '1px solid #e2e8f0', padding: '6px 2px', textAlign: 'center', color: '#6b7280', fontWeight: 'bold' }}>{index + 1}</td>
                   
-                  <td style={{ border: '1px solid #e2e8f0', padding: '6px', textAlign: 'center', color: '#4b5563', fontWeight: '500' }}>{student.grade}</td>
+                  <td style={{ border: '1px solid #e2e8f0', padding: '6px 2px', textAlign: 'center', color: '#4b5563', fontWeight: '500' }}>{student.grade}</td>
 
-                  <td style={{ border: '1px solid #e2e8f0', padding: '6px', textAlign: 'center', fontWeight: '800', color: '#111827', fontSize: '14px' }}>{student.name}</td>
+                  <td style={{ border: '1px solid #e2e8f0', padding: '6px 2px', textAlign: 'center', fontWeight: '800', color: '#111827', fontSize: '14px', whiteSpace: 'nowrap' }}>{student.name}</td>
                   
-                  <td style={{ border: '1px solid #e2e8f0', padding: '4px' }}>
-                    <div style={{ display: 'flex', flexWrap: 'nowrap', justifyContent: 'center', alignItems: 'center', gap: '4px', width: '100%' }}>
+                  <td style={{ border: '1px solid #e2e8f0', padding: '4px 2px' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', gap: '4px', width: '100%' }}>
                       <StatusBadge status={student.wordDone} fallback="❌ 단어" />
                       <StatusBadge status={student.sentenceDone} fallback="❌ 문장" />
                       <StatusBadge status={student.verbDone} fallback="❌ 3단동사" />
@@ -343,9 +344,9 @@ export default function ElemManage() {
                     </div>
                   </td>
 
-                  <td style={{ border: '1px solid #e2e8f0', padding: '4px' }}>
+                  <td style={{ border: '1px solid #e2e8f0', padding: '4px 2px' }}>
                     {isSelected ? (
-                      <div style={{ display: 'flex', flexWrap: 'nowrap', justifyContent: 'center', alignItems: 'center', gap: '4px' }} onClick={(e) => e.stopPropagation()}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', gap: '4px' }} onClick={(e) => e.stopPropagation()}>
                         <select value={editSeries} onChange={e => setEditSeries(e.target.value)} style={{ padding: '2px', borderRadius: '4px', border: '1px solid #d1d5db', fontSize: '12px', outline: 'none' }}>
                           {SERIES_LIST.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
@@ -361,13 +362,13 @@ export default function ElemManage() {
                         <button 
                           onClick={handleSaveProgress} 
                           disabled={isSaving}
-                          style={{ backgroundColor: '#2563eb', color: 'white', fontSize: '12px', padding: '4px 10px', borderRadius: '4px', fontWeight: 'bold', border: 'none', cursor: 'pointer', marginLeft: '4px', whiteSpace: 'nowrap' }}
+                          style={{ backgroundColor: '#2563eb', color: 'white', fontSize: '12px', padding: '4px 8px', borderRadius: '4px', fontWeight: 'bold', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}
                         >
                           {isSaving ? '저장중' : '저장'}
                         </button>
                       </div>
                     ) : (
-                      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                         <span style={{ color: '#1f2937', fontWeight: 'bold', fontSize: '13px', whiteSpace: 'nowrap' }}>
                           {student.currentBook}권
                         </span>
@@ -378,7 +379,7 @@ export default function ElemManage() {
                     )}
                   </td>
 
-                  <td style={{ border: '1px solid #e2e8f0', padding: '6px', textAlign: 'center' }}>
+                  <td style={{ border: '1px solid #e2e8f0', padding: '6px 2px', textAlign: 'center' }}>
                     <button 
                       onClick={(e) => openManageModal(e, student)}
                       style={{ backgroundColor: 'white', color: '#4b5563', border: '1px solid #d1d5db', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', whiteSpace: 'nowrap' }}
@@ -393,7 +394,7 @@ export default function ElemManage() {
         </table>
       </div>
 
-      {/* 학생 관리 모달 (이전과 동일) */}
+      {/* 학생 관리 모달 */}
       {manageStudent && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 50 }}>
           <div style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', padding: '24px', borderRadius: '16px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', width: '24rem', position: 'relative', margin: '0 16px' }}>

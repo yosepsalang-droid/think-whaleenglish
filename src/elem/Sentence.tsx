@@ -41,29 +41,27 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
 
   const normalize = (val: string) => (val || '').toLowerCase().replace(/\s+/g, '').trim();
 
+  // 문자와 숫자 섞인 텍스트에서 숫자만 쏙 뽑아내는 함수
   const extractDayNum = (dayStr: string): number => {
     const match = (dayStr || '').match(/\d+/);
     return match ? parseInt(match[0], 10) : -1;
   };
 
-  // ⭐️ [완전 개편] 구글 시트 버리고 수파베이스에서 문장 데이터 다이렉트로 가져오기!
   useEffect(() => {
     const fetchSupabaseSentences = async () => {
       try {
-        // 수파베이스의 sentences 테이블에서 모든 데이터를 가져옵니다.
         const { data, error } = await supabase.from('sentences').select('*');
 
         if (error) throw error;
 
         if (data) {
-          // 데이터베이스 컬럼명(book, lesson, day 등)을 우리 코드에 맞게 매핑
           const parsedSentences: SentenceData[] = data.map(row => ({
             book: String(row.book || row.Book || '').trim(),
             lesson: String(row.lesson || row.unit || row.Unit || '').trim(),
             day: String(row.day || row.Day || '').trim(),
             eng: String(row.eng || row.english || row.Eng || '').trim(),
             kor: String(row.kor || row.korean || row.Kor || '').trim()
-          })).filter(s => s.book && s.eng && s.kor); // 빈 데이터는 걸러냄
+          })).filter(s => s.book && s.eng && s.kor); 
 
           setAllSentences(parsedSentences);
         }
@@ -110,14 +108,17 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
     return Array.from(new Set(filtered.map(s => s.lesson?.trim()))).filter(Boolean);
   }, [allSentences, book]);
 
+  // 해당 유닛에 속한 Day들을 추출하고 숫자 순서대로 정렬
   const days = useMemo(() => {
     const filtered = allSentences.filter(s =>
       normalize(s.book) === normalize(book) &&
       normalize(s.lesson) === normalize(unit)
     );
-    return Array.from(new Set(filtered.map(s => s.day?.trim()))).filter(Boolean);
+    const uniqueDays = Array.from(new Set(filtered.map(s => s.day?.trim()))).filter(Boolean);
+    return uniqueDays.sort((a, b) => extractDayNum(a) - extractDayNum(b));
   }, [allSentences, book, unit]);
 
+  // ⭐️ 누적 출제 로직
   const filterSentences = (targetBook: string, targetLesson: string, targetDay: string) => {
     const targetDayNumber = extractDayNum(targetDay);
 
@@ -129,6 +130,7 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
 
       const currentDayNumber = extractDayNum(s.day);
 
+      // 목표 Day가 4라면, Day 1~4까지 모두 포함 (<= 조건)
       if (targetDayNumber !== -1 && currentDayNumber !== -1) {
         return currentDayNumber <= targetDayNumber;
       }
@@ -152,8 +154,8 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
       setCurrentSentenceList(examFormat);
 
       const label = targetDayNumber > 1
-        ? `${targetBook} ${targetLesson} (Day1 ~ ${targetDay} 누적)`
-        : `${targetBook} ${targetLesson} ${targetDay}`;
+        ? `${targetBook} ${targetLesson} (Day 1~${targetDayNumber} 누적)`
+        : `${targetBook} ${targetLesson} Day 1`;
       setAppliedProgress(label);
 
     } else {
@@ -207,6 +209,7 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
     }
   };
 
+  // ⭐️ 관제탑 연동을 위한 규격화된 로그 저장 로직
   const sendLogToSupabase = async (finalScore: number, finalAttempt: number, finalWrongs: string[]) => {
     if (finalScore !== currentSentenceList.length || currentSentenceList.length === 0) {
       return; 
@@ -218,13 +221,18 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
       const kstDate = new Date(now.getTime() + kstOffset);
       const todayStr = kstDate.toISOString().split('T')[0];
 
+      // 관제탑 정규식에 완벽히 매칭되도록 "UnitX DayY" 형태로 강제 변환
+      const uNum = unit.match(/\d+/)?.[0] || '1';
+      const dNum = day.match(/\d+/)?.[0] || '1';
+      const formattedBookInfo = `${book} Unit${uNum} Day${dNum}`; // 예: 240_1 Unit3 Day4
+
       const { error } = await supabase
         .from('learning_logs')
         .insert([{
           student_id: studentId,
           student_name: studentName,
           task_type: '초등문장', 
-          book_info: `${book}_${unit}_${day}`,
+          book_info: formattedBookInfo, // ⭐️ 규격화된 진도 데이터 저장!
           score: finalScore,
           status: '완료',
           attempt: finalAttempt,
@@ -235,7 +243,7 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
       if (error) {
         console.error("수파베이스 저장 에러:", error);
       } else {
-        console.log("✅ 수파베이스에 초등 문장 기록 완벽하게 적재 성공!");
+        console.log(`✅ 수파베이스에 초등 문장 기록(${formattedBookInfo}) 완벽 적재 성공!`);
       }
     } catch (err) {
       console.error("수파베이스 로그 전송 실패:", err);
@@ -331,12 +339,17 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
           {units.map(u => <option key={u} value={u}>{u}</option>)}
         </select>
 
-        <select value={day} onChange={(e) => setDay(e.target.value)} disabled={!unit} style={selectStyle}>
-          <option value="">Day</option>
-          {days.map(d => <option key={d} value={d}>{d}</option>)}
+        {/* ⭐️ 누적 출제 UI 개선: Day 1~2, Day 1~3 형태로 직관적 표시 */}
+        <select value={day} onChange={(e) => setDay(e.target.value)} disabled={!unit} style={{...selectStyle, width: '30%'}}>
+          <option value="">Day (누적)</option>
+          {days.map(d => {
+            const dNum = extractDayNum(d);
+            const displayLabel = dNum > 1 ? `Day 1~${dNum}` : `Day 1`;
+            return <option key={d} value={d}>{displayLabel}</option>;
+          })}
         </select>
 
-        <button onClick={handleApplyProgress} style={{ width: '24%', padding: '10px 0', backgroundColor: '#333', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px', boxSizing: 'border-box' }}>확인</button>
+        <button onClick={handleApplyProgress} style={{ width: '20%', padding: '10px 0', backgroundColor: '#333', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px', boxSizing: 'border-box' }}>확인</button>
       </div>
 
       {isFinished ? (
@@ -410,7 +423,7 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
 }
 
 const selectStyle = {
-  width: '25%',
+  width: '24%',
   minWidth: '0',
   padding: '10px 4px',
   borderRadius: '8px',
