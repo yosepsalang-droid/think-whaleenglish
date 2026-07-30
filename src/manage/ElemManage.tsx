@@ -16,16 +16,16 @@ interface Student {
 const SERIES_LIST = ['240', '520', '860', '1240', '1680'];
 const BOOK_NUM_LIST = ['1', '2', '3', '4', '5', '6'];
 
-// 💡 텍스트 추출 로직 초강화: U3D1, Unit3 Day1, unit 3 day 1 등 모든 형태에서 숫자만 쏙 뽑아냄
+// 💡 텍스트 추출 로직 초강화: U, Unit, unit, 유닛 등 어떤 형태든 뒤에 오는 숫자만 귀신같이 뽑아냄
 const parseUnitDay = (bookInfo: string) => {
   if (!bookInfo) return '';
-  const uMatch = bookInfo.match(/u(?:nit)?\s*(\d+)/i);
-  const dMatch = bookInfo.match(/d(?:ay)?\s*(\d+)/i);
+  const uMatch = bookInfo.match(/(?:u|unit|유닛)[^\d]*(\d+)/i);
+  const dMatch = bookInfo.match(/(?:d|day|데이)[^\d]*(\d+)/i);
   
   if (uMatch && dMatch) {
     return `(U${uMatch[1]}D${dMatch[1]})`;
   }
-  return '';
+  return ''; // 못 찾으면 빈칸 반환
 };
 
 export default function ElemManage() {
@@ -55,13 +55,19 @@ export default function ElemManage() {
 
       if (studentError) throw studentError;
 
-      const today = new Date();
-      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
+      // 💡 한국 시간(KST) 기준으로 정확한 '오늘 자정(00:00)' 구하기 (시차 문제 해결!)
+      const now = new Date();
+      const kstOffset = 9 * 60 * 60 * 1000;
+      const kstNow = new Date(now.getTime() + kstOffset);
+      const kstDateStr = kstNow.toISOString().split('T')[0]; // 예: 2026-07-30
+      
+      // KST 자정을 다시 UTC 형식으로 변환하여 수파베이스에 던짐
+      const startOfTodayUTC = new Date(`${kstDateStr}T00:00:00+09:00`).toISOString();
 
       const { data: logsData, error: logError } = await supabase
         .from('learning_logs')
         .select('student_id, task_type, status, book_info')
-        .gte('created_at', startOfDay) 
+        .gte('created_at', startOfTodayUTC) // 👈 정확히 한국시간 오늘 0시 이후 것만!
         .eq('status', '완료');
 
       if (logError) throw logError;
@@ -75,7 +81,6 @@ export default function ElemManage() {
         const record = todayDoneMap.get(log.student_id)!;
         const detail = parseUnitDay(log.book_info); 
 
-        // 💡 강력해진 detail 추출 로직 덕분에 이제 예쁘게 (U*D*)가 붙습니다.
         if (log.task_type.includes('단어')) record.word = `✅ 단어${detail}`;
         if (log.task_type.includes('문장')) record.sentence = `✅ 문장${detail}`;
         if (log.task_type.includes('동사') || log.task_type.includes('3단')) record.verb = `✅ 3단동사${detail}`; 
@@ -235,7 +240,6 @@ export default function ElemManage() {
   return (
     <div style={{ backgroundColor: 'white', color: '#1f2937', padding: '16px', borderRadius: '12px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', width: '100%', boxSizing: 'border-box', margin: '0 auto', fontFamily: 'Pretendard, sans-serif' }}>
       
-      {/* 헤더 & 학년 탭 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#1f2937', margin: 0 }}>👑 초등부 관제탑</h2>
@@ -288,9 +292,7 @@ export default function ElemManage() {
               <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '4%' }}>번호</th>
               <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '5%' }}>학년</th>
               <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '8%' }}>이름</th>
-              {/* 💡 오늘 학습 현황을 더 넓게 */}
               <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '45%' }}>오늘 학습 현황</th>
-              {/* 💡 진도 설정 -> 교재 설정으로 변경 및 칸 축소 */}
               <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '15%' }}>교재 설정</th>
               <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '7%' }}>관리</th>
             </tr>
@@ -328,7 +330,6 @@ export default function ElemManage() {
                     </div>
                   </td>
 
-                  {/* 💡 Unit/Day 선택창을 날려버리고 오직 교재(Book)만 선택하게 수정! */}
                   <td style={{ border: '1px solid #e2e8f0', padding: '4px 2px' }}>
                     {isSelected ? (
                       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', gap: '4px' }} onClick={(e) => e.stopPropagation()}>
@@ -370,7 +371,7 @@ export default function ElemManage() {
         </table>
       </div>
 
-      {/* 학생 관리 모달 (이전과 동일) */}
+      {/* 모달창 생략 없이 원본 유지 */}
       {manageStudent && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 50 }}>
           <div style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', padding: '24px', borderRadius: '16px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', width: '24rem', position: 'relative', margin: '0 16px' }}>
