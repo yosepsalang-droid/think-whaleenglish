@@ -22,7 +22,6 @@ interface StudentStats {
   retestCount: number;
   wordCount?: number;     
   sentenceCount?: number; 
-  // 💡 [추가됨] 지난주 대비 성장을 보여주기 위한 이전 점수 데이터
   prevWord?: number;
   prevSentence?: number;
   prevAi?: number;
@@ -38,7 +37,7 @@ export default function ReportManage() {
   });
   
   const [comment, setComment] = useState('');
-  const [nextGoal, setNextGoal] = useState(''); // 💡 [추가됨] 다음 주 목표 상태 관리
+  const [nextGoal, setNextGoal] = useState('');
   
   const reportRef = useRef<HTMLDivElement>(null);
 
@@ -96,13 +95,12 @@ export default function ReportManage() {
         });
         const stats: StudentStats = await response.json();
         
-        // 💡 백엔드 연동 전까지 빈 공간을 채워줄 임시 스마트 데이터
+        // 💡 주의: 화면 시각화를 위한 임시 랜덤 데이터입니다! 추후 백엔드에서 받아오도록 수정이 필요합니다.
         const safeStats = {
           ...stats,
           wordCount: stats.wordCount || Math.floor(Math.random() * 50) + 100, 
           sentenceCount: stats.sentenceCount || Math.floor(Math.random() * 30) + 20, 
           retestCount: stats.retestCount !== undefined ? stats.retestCount : Math.floor(Math.random() * 5),
-          // 지난주 점수를 임의로 생성 (현재 점수에서 약간의 오차 적용)
           prevWord: stats.prevWord || Math.max(0, stats.word - (Math.floor(Math.random() * 15) - 5)),
           prevSentence: stats.prevSentence || Math.max(0, stats.sentence - (Math.floor(Math.random() * 15) - 5)),
           prevAi: stats.prevAi || Math.max(0, stats.ai - (Math.floor(Math.random() * 15) - 5)),
@@ -117,7 +115,6 @@ export default function ReportManage() {
     fetchRealStats();
   }, [selectedStudent]);
 
-  // 코멘트 및 목표 자동 생성 로직
   useEffect(() => {
     if (!selectedStudent) return;
     
@@ -133,7 +130,6 @@ export default function ReportManage() {
     const bestSubject = statsArray[0];
     const needsWorkSubject = statsArray[3];
 
-    // --- 1. 코멘트 자동 생성 ---
     let autoComment = `${selectedStudent.name} 학생의 이번 주 학습 리포트입니다.\n\n`;
     if (avg >= 90) {
       autoComment += `이번 주도 결석 없이 성실하게 학습을 완료했으며, 전반적인 성취도가 매우 우수합니다! 🌟\n`;
@@ -150,7 +146,6 @@ export default function ReportManage() {
     autoComment += `\n다음 주도 우리 아이가 성취감을 느낄 수 있도록 아낌없는 폭풍 칭찬 부탁드립니다!`;
     setComment(autoComment);
 
-    // --- 2. 목표 자동 생성 ---
     if (needsWorkSubject.score < 75) {
       setNextGoal(`🎯 다음 주 목표: [${needsWorkSubject.name}] 파트 집중 복습 및 오답 노트 정리 완료하기`);
     } else {
@@ -166,7 +161,6 @@ export default function ReportManage() {
     { subject: 'Grammar', score: realStats.grammar, prev: realStats.prevGrammar, fullMark: 100, fill: '#ff7300' },
   ];
 
-  // 성장 추세 뱃지 렌더링 함수
   const renderTrendBadge = (current: number, prev: number = 0) => {
     const diff = current - prev;
     if (diff > 0) return <span style={{ color: '#16a34a', fontSize: '13px', fontWeight: '900', backgroundColor: '#dcfce7', padding: '2px 6px', borderRadius: '4px' }}>▲ {diff}</span>;
@@ -193,7 +187,6 @@ export default function ReportManage() {
   return (
     <div style={{ padding: '40px', backgroundColor: '#f4f6f8', minHeight: '100vh', fontFamily: 'Pretendard, sans-serif' }}>
       
-      {/* 컨트롤 패널 */}
       <div style={{ maxWidth: '1200px', margin: '0 auto 20px auto', display: 'flex', gap: '20px', alignItems: 'center' }}>
         <h3 style={{ margin: 0 }}>👩‍🎓 학생 선택:</h3>
         <select 
@@ -208,10 +201,8 @@ export default function ReportManage() {
         <span style={{ color: '#666', fontSize: '14px' }}>* 학생을 선택하면 자동으로 리포트가 완성됩니다.</span>
       </div>
 
-      {/* 리포트 본문 (캡처 영역) */}
       <div ref={reportRef} style={{ maxWidth: '1200px', margin: '0 auto', backgroundColor: 'white', border: '1px solid #ccc', padding: '40px', boxShadow: '0 0 10px rgba(0,0,0,0.05)' }}>
         
-        {/* 헤더 */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '2px solid #222', paddingBottom: '10px', marginBottom: '30px' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '15px' }}>
             <h1 style={{ margin: 0, fontSize: '24px', fontWeight: '900' }}>Weekly Report</h1>
@@ -230,45 +221,51 @@ export default function ReportManage() {
         <div style={{ marginBottom: '35px' }}>
           <h2 style={{ fontSize: '14px', color: '#555', borderBottom: '1px solid #eee', paddingBottom: '5px' }}>1. Student Information</h2>
           <div style={{ display: 'flex', gap: '30px', marginTop: '20px' }}>
-            <div style={{ width: '150px', height: '180px', backgroundColor: '#e2e8f0', display: 'flex', justifyContent: 'center', alignItems: 'center', border: '1px solid #ccc', borderRadius: '8px' }}>
+            <div style={{ width: '150px', height: '160px', backgroundColor: '#e2e8f0', display: 'flex', justifyContent: 'center', alignItems: 'center', border: '1px solid #ccc', borderRadius: '8px' }}>
               <span style={{ color: '#888', textAlign: 'center', padding: '10px', fontWeight: 'bold' }}>{selectedStudent?.currentBook || '교재 없음'}</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', fontSize: '15px', paddingTop: '10px' }}>
               <div style={{ display: 'flex' }}><span style={{ width: '60px', color: '#666', fontWeight: 'bold' }}>이름:</span> <b>{selectedStudent?.name || '-'}</b></div>
               <div style={{ display: 'flex' }}><span style={{ width: '60px', color: '#666', fontWeight: 'bold' }}>과정:</span> <span>{selectedStudent?.grade || '-'}</span></div>
               <div style={{ display: 'flex' }}><span style={{ width: '60px', color: '#666', fontWeight: 'bold' }}>교재:</span> <span>{selectedStudent?.currentBook || '-'}</span></div>
-              <div style={{ display: 'flex' }}><span style={{ width: '60px', color: '#666', fontWeight: 'bold' }}>진도:</span> <span>{selectedStudent?.progress || '-'}</span></div>
+              {/* 💡 요청하신 '진도' 부분은 삭제했습니다. */}
             </div>
           </div>
         </div>
 
-        {/* 2. 이번 주 누적 학습량 & 오답 극복 지표 */}
+        {/* 2. 이번 주 누적 학습량 & 오답 극복 지표 (위아래 2줄 정렬 반영) */}
         <div style={{ marginBottom: '35px' }}>
           <h2 style={{ fontSize: '14px', color: '#555', borderBottom: '1px solid #eee', paddingBottom: '5px' }}>2. Learning Volume & Attitude (학습량 및 태도)</h2>
           <div style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
-            <div style={{ flex: 1, backgroundColor: '#f0f9ff', padding: '20px', borderRadius: '12px', border: '1px solid #bae6fd', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '17px', fontWeight: 'bold', color: '#0369a1' }}>📚 단어 마스터</span>
+            
+            {/* 단어 마스터 박스 */}
+            <div style={{ flex: 1, backgroundColor: '#f0f9ff', padding: '25px 20px', borderRadius: '12px', border: '1px solid #bae6fd', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+              <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#0369a1' }}>📚 단어 마스터</span>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-                <span style={{ fontSize: '28px', fontWeight: '900', color: '#0284c7' }}>{realStats.wordCount}</span><span style={{ fontSize: '15px', color: '#0369a1', fontWeight: 'bold' }}>개</span>
+                <span style={{ fontSize: '32px', fontWeight: '900', color: '#0284c7' }}>{realStats.wordCount}</span><span style={{ fontSize: '16px', color: '#0369a1', fontWeight: 'bold' }}>개</span>
               </div>
             </div>
-            <div style={{ flex: 1, backgroundColor: '#f0fdf4', padding: '20px', borderRadius: '12px', border: '1px solid #bbf7d0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '17px', fontWeight: 'bold', color: '#15803d' }}>🗣️ 체화된 문장</span>
+
+            {/* 체화된 문장 박스 */}
+            <div style={{ flex: 1, backgroundColor: '#f0fdf4', padding: '25px 20px', borderRadius: '12px', border: '1px solid #bbf7d0', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+              <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#15803d' }}>🗣️ 체화된 문장</span>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-                <span style={{ fontSize: '28px', fontWeight: '900', color: '#16a34a' }}>{realStats.sentenceCount}</span><span style={{ fontSize: '15px', color: '#15803d', fontWeight: 'bold' }}>개</span>
+                <span style={{ fontSize: '32px', fontWeight: '900', color: '#16a34a' }}>{realStats.sentenceCount}</span><span style={{ fontSize: '16px', color: '#15803d', fontWeight: 'bold' }}>개</span>
               </div>
             </div>
-            {/* 💡 [추가됨] 재시험을 긍정적인 '오답 극복(도전)'으로 포장 */}
-            <div style={{ flex: 1, backgroundColor: '#fff7ed', padding: '20px', borderRadius: '12px', border: '1px solid #fed7aa', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '17px', fontWeight: 'bold', color: '#c2410c' }}>🔥 오답 극복 (도전)</span>
+
+            {/* 오답 극복 박스 */}
+            <div style={{ flex: 1, backgroundColor: '#fff7ed', padding: '25px 20px', borderRadius: '12px', border: '1px solid #fed7aa', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+              <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#c2410c' }}>🔥 오답 극복 (도전)</span>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
                 {realStats.retestCount > 0 ? (
-                  <><span style={{ fontSize: '28px', fontWeight: '900', color: '#ea580c' }}>{realStats.retestCount}</span><span style={{ fontSize: '15px', color: '#c2410c', fontWeight: 'bold' }}>회 성공</span></>
+                  <><span style={{ fontSize: '32px', fontWeight: '900', color: '#ea580c' }}>{realStats.retestCount}</span><span style={{ fontSize: '16px', color: '#c2410c', fontWeight: 'bold' }}>회 성공</span></>
                 ) : (
-                  <span style={{ fontSize: '20px', fontWeight: '900', color: '#ea580c' }}>원샷 원킬! 🎯</span>
+                  <span style={{ fontSize: '22px', fontWeight: '900', color: '#ea580c' }}>원샷 원킬! 🎯</span>
                 )}
               </div>
             </div>
+
           </div>
         </div>
 
@@ -293,13 +290,11 @@ export default function ReportManage() {
           <h2 style={{ fontSize: '14px', color: '#555', borderBottom: '1px solid #eee', paddingBottom: '5px' }}>4. Overall Balance (학습 밸런스 및 성장)</h2>
           <div style={{ display: 'flex', marginTop: '15px', border: '1px solid #ddd', borderRadius: '8px', overflow: 'hidden' }}>
             
-            {/* 좌측 점수판 (성장 뱃지 추가) */}
             <div style={{ flex: 1, borderRight: '1px solid #ddd', padding: '25px', display: 'flex', flexDirection: 'column', gap: '25px', backgroundColor: '#f8fafc', justifyContent: 'center' }}>
               {chartData.map((data, idx) => (
                 <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <span style={{ fontSize: '15px', fontWeight: '900', color: '#334155' }}>{data.subject}</span>
-                    {/* 💡 [추가됨] 이전 주 대비 얼마나 올랐는지 보여주는 뱃지 */}
                     {renderTrendBadge(data.score, data.prev)}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -312,7 +307,6 @@ export default function ReportManage() {
               ))}
             </div>
             
-            {/* 우측 레이더 차트 */}
             <div style={{ flex: 1.5, height: '320px', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#ffffff', paddingTop: '15px' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart cx="50%" cy="50%" outerRadius="70%" data={chartData}>
@@ -337,7 +331,6 @@ export default function ReportManage() {
               placeholder="이번 주 코멘트가 여기에 생성됩니다."
               style={{ width: '100%', height: '120px', padding: '16px', border: '1px solid #cbd5e1', borderRadius: '8px', boxSizing: 'border-box', resize: 'vertical', fontSize: '15px', lineHeight: '1.6', outline: 'none', backgroundColor: '#f8fafc', color: '#334155', fontWeight: '500' }}
             />
-            {/* 💡 [추가됨] 다음 주 목표 설정 입력칸 */}
             <input 
               type="text"
               value={nextGoal}
