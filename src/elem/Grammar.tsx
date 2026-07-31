@@ -17,7 +17,7 @@ interface GrammarProps {
   onGameComplete?: (addedScore?: number) => void;
 }
 
-// 💡 미니 랭킹 카드 컴포넌트
+// 💡 미니 랭킹 카드 컴포넌트 (숫자에 콤마 적용 완료)
 function MiniRankingCard({ title, data, isLoading }: { title: string; data: RankEntry[]; isLoading: boolean }) {
   return (
     <div style={{ backgroundColor: '#f8fafc', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0', textAlign: 'left' }}>
@@ -31,7 +31,7 @@ function MiniRankingCard({ title, data, isLoading }: { title: string; data: Rank
           {data.map((item, idx) => (
             <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', backgroundColor: 'white', padding: '8px 12px', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
               <span style={{ fontWeight: '500', color: '#475569' }}>{idx + 1}위. {item.studentName}</span>
-              <span style={{ fontWeight: 'bold', color: '#2563eb' }}>{item.score}점</span>
+              <span style={{ fontWeight: 'bold', color: '#2563eb' }}>{item.score.toLocaleString()}점</span>
             </div>
           ))}
         </div>
@@ -65,7 +65,6 @@ export default function Grammar({
   const [localRankings, setLocalRankings] = useState<{ thisMonth: RankEntry[]; lastMonth: RankEntry[] }>({ thisMonth: [], lastMonth: [] });
   const [isRankLoading, setIsRankLoading] = useState<boolean>(true);
 
-  // 1️⃣ 수파베이스 데이터 가져오기 (무한 로딩 버그 픽스!)
   useEffect(() => {
     const fetchSentences = async () => {
       try {
@@ -112,7 +111,6 @@ export default function Grammar({
       } catch (error) {
         console.error("수파베이스 sentence 데이터 불러오기 에러:", error);
       } finally {
-        // 💡 멈춤 버그 해결: 에러가 나거나 데이터가 0개여도 무조건 로딩을 끝내고 버튼을 활성화시킵니다!
         setIsDataLoaded(true); 
       }
     };
@@ -149,11 +147,15 @@ export default function Grammar({
 
           const dateStr = cols[0]?.replace(/^"|"$/g, '').trim(); 
           const name = cols[1]?.replace(/^"|"$/g, '').trim();   
+          const grade = cols[2]?.replace(/^"|"$/g, '').trim(); // 💡 3번째 열: 과정(학년) 데이터 추출
           const scoreVal = parseInt(cols[3]?.replace(/^"|"$/g, '').trim() || '0', 10);
           const taskType = cols[5]?.replace(/^"|"$/g, '').trim();
 
           if (!name || isNaN(scoreVal) || scoreVal <= 0) return;
           if (taskType !== '문법게임' && taskType !== '단어게임') return;
+
+          // 💡 [핵심 수정] 학년 정보에 '초'가 포함되지 않은 경우(예: 중등부) 랭킹 합산에서 제외
+          if (!grade.includes('초')) return;
 
           let rowYear = 0;
           let rowMonth = 0;
@@ -184,6 +186,7 @@ export default function Grammar({
           lastMonth: lastMonthRankings
         });
 
+        // 내 랭킹과 내 누적 점수 업데이트
         const myIdx = thisMonthRankings.findIndex(item => item.studentName === studentName.trim());
         if (myIdx !== -1) {
           setMyRank(myIdx + 1);
@@ -407,7 +410,7 @@ export default function Grammar({
               </div>
               <div style={{ width: '1px', backgroundColor: '#e2e8f0' }}></div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 'bold', marginBottom: '4px' }}>🔥 총 합산 점수</span>
+                <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 'bold', marginBottom: '4px' }}>🔥 이번 달 누적 점수</span>
                 <strong style={{ fontSize: '18px', color: '#2563eb' }}>{myTotalScore.toLocaleString()}점</strong>
               </div>
             </div>
@@ -453,7 +456,7 @@ export default function Grammar({
           </p>
           <div style={styles.finalScoreBox}>
             <span style={{fontSize: '16px', color: '#475569'}}>현재 누적 점수</span>
-            <strong style={{fontSize: '36px', color: '#2563eb', display: 'block'}}>{score}점</strong>
+            <strong style={{fontSize: '36px', color: '#2563eb', display: 'block'}}>{score.toLocaleString()}점</strong>
           </div>
           <button 
             onClick={() => setGameState('GAME')} 
@@ -508,7 +511,7 @@ export default function Grammar({
         <p style={{fontSize: '18px', color: '#64748b', marginBottom: '20px'}}>{studentName} 학생의 최종 성적</p>
         <div style={styles.finalScoreBox}>
           <span style={{fontSize: '16px', color: '#475569'}}>최종 점수</span>
-          <strong style={{fontSize: '40px', color: '#2563eb', display: 'block'}}>{score}점</strong>
+          <strong style={{fontSize: '40px', color: '#2563eb', display: 'block'}}>{score.toLocaleString()}점</strong>
           <span style={{fontSize: '14px', color: '#64748b', marginTop: '5px'}}>최고 도달: STAGE {stage}</span>
         </div>
         <button 
