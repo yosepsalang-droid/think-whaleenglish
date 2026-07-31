@@ -40,7 +40,7 @@ function MiniRankingCard({ title, data, isLoading }: { title: string; data: Rank
   );
 }
 
-export default function GameGrammar({
+export default function Grammar({
   onBack,
   student,
   totalScore: externalTotalScore = 0,
@@ -57,7 +57,7 @@ export default function GameGrammar({
   const [timeLeft, setTimeLeft] = useState(10);
   
   const [allData, setAllData] = useState<any[]>([]);
-  const [isDataLoaded, setIsDataLoaded] = useState(false); // 💡 데이터 로딩 완료 체크용
+  const [isDataLoaded, setIsDataLoaded] = useState(false); 
   const [currentQ, setCurrentQ] = useState<any>(null);
 
   const [myRank, setMyRank] = useState<number | null>(externalMyRank);
@@ -65,7 +65,7 @@ export default function GameGrammar({
   const [localRankings, setLocalRankings] = useState<{ thisMonth: RankEntry[]; lastMonth: RankEntry[] }>({ thisMonth: [], lastMonth: [] });
   const [isRankLoading, setIsRankLoading] = useState<boolean>(true);
 
-  // 1️⃣ 수파베이스 데이터 가져오기 (1000개 제한 돌파 및 데이터 보정 로직 추가)
+  // 1️⃣ 수파베이스 데이터 가져오기 (무한 로딩 버그 픽스!)
   useEffect(() => {
     const fetchSentences = async () => {
       try {
@@ -74,7 +74,6 @@ export default function GameGrammar({
         let from = 0;
         const step = 1000;
 
-        // 이어달리기(Pagination)로 모든 데이터 쓸어오기
         while (true) {
           const { data, error } = await supabase
             .from('sentence')
@@ -91,30 +90,30 @@ export default function GameGrammar({
           }
         }
 
-        if (allFetchedData.length > 0) {
-          const validData = allFetchedData.map(row => {
-            // 대소문자 상관없이 데이터를 안전하게 추출
-            const b = String(row.book || row.Book || '').trim();
-            const l = String(row.lesson || row.Unit || row.unit || '').trim();
-            
-            // 만약 수파베이스에 교재(240)와 레슨(1)이 나뉘어 있다면 '240_1' 형태로 합쳐줌
-            let combinedBook = b;
-            if (b && !b.includes('_') && l) {
-              combinedBook = `${b}_${l}`;
-            }
-
-            return {
-              book: combinedBook,
-              eng: String(row.eng || row.english || row.Eng || '').trim(),
-              kor: String(row.kor || row.korean || row.Kor || '').trim()
-            };
-          }).filter(item => item.eng && item.kor); // 영어와 한글이 모두 있는 유효한 데이터만 필터링
+        const validData = allFetchedData.map(row => {
+          const b = String(row.book || row.Book || '').trim();
+          const l = String(row.lesson || row.Unit || row.unit || '').trim();
           
-          setAllData(validData);
-          setIsDataLoaded(true); // 데이터 로딩 완료!
-        }
+          let combinedBook = b;
+          if (b && !b.includes('_') && l) {
+            combinedBook = `${b}_${l}`;
+          }
+
+          return {
+            book: combinedBook,
+            eng: String(row.eng || row.english || row.Eng || '').trim(),
+            kor: String(row.kor || row.korean || row.Kor || '').trim()
+          };
+        }).filter(item => item.eng && item.kor);
+        
+        setAllData(validData);
+        console.log("✅ 수파베이스 문장 로딩 완료:", validData.length, "개");
+
       } catch (error) {
         console.error("수파베이스 sentence 데이터 불러오기 에러:", error);
+      } finally {
+        // 💡 멈춤 버그 해결: 에러가 나거나 데이터가 0개여도 무조건 로딩을 끝내고 버튼을 활성화시킵니다!
+        setIsDataLoaded(true); 
       }
     };
 
@@ -265,8 +264,7 @@ export default function GameGrammar({
     
     const initialQuestion = generateProblem(allData, 1);
     if (!initialQuestion) { 
-      // 💡 에러 메시지도 구글 시트에서 데이터베이스로 알맞게 변경했습니다!
-      alert("데이터베이스에 1단계 문제 데이터가 부족합니다. 교재 이름(예: 240_1)이 정확한지 확인해주세요."); 
+      alert("데이터베이스에 1단계 문제 데이터가 부족합니다. 수파베이스 sentence 테이블에 데이터가 있는지 확인해주세요."); 
       return; 
     }
     
@@ -428,7 +426,6 @@ export default function GameGrammar({
             />
           </div>
 
-          {/* 💡 데이터 로딩 전에는 버튼을 비활성화하고 문구를 바꿉니다! */}
           <button 
             onClick={startGame} 
             disabled={!isDataLoaded}
