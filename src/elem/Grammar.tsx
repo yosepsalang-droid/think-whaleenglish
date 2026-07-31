@@ -17,7 +17,6 @@ interface GrammarProps {
   onGameComplete?: (addedScore?: number) => void;
 }
 
-// 💡 미니 랭킹 카드 컴포넌트 (숫자에 콤마 적용 완료)
 function MiniRankingCard({ title, data, isLoading }: { title: string; data: RankEntry[]; isLoading: boolean }) {
   return (
     <div style={{ backgroundColor: '#f8fafc', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0', textAlign: 'left' }}>
@@ -74,8 +73,9 @@ export default function Grammar({
         const step = 1000;
 
         while (true) {
+          // 💡 [핵심 수정] 테이블 이름을 'sentence'에서 'sentences'로 변경했습니다!
           const { data, error } = await supabase
-            .from('sentence')
+            .from('sentences')
             .select('*')
             .range(from, from + step - 1);
 
@@ -109,7 +109,7 @@ export default function Grammar({
         console.log("✅ 수파베이스 문장 로딩 완료:", validData.length, "개");
 
       } catch (error) {
-        console.error("수파베이스 sentence 데이터 불러오기 에러:", error);
+        console.error("수파베이스 sentences 데이터 불러오기 에러:", error);
       } finally {
         setIsDataLoaded(true); 
       }
@@ -147,14 +147,12 @@ export default function Grammar({
 
           const dateStr = cols[0]?.replace(/^"|"$/g, '').trim(); 
           const name = cols[1]?.replace(/^"|"$/g, '').trim();   
-          const grade = cols[2]?.replace(/^"|"$/g, '').trim(); // 💡 3번째 열: 과정(학년) 데이터 추출
+          const grade = cols[2]?.replace(/^"|"$/g, '').trim(); 
           const scoreVal = parseInt(cols[3]?.replace(/^"|"$/g, '').trim() || '0', 10);
           const taskType = cols[5]?.replace(/^"|"$/g, '').trim();
 
           if (!name || isNaN(scoreVal) || scoreVal <= 0) return;
           if (taskType !== '문법게임' && taskType !== '단어게임') return;
-
-          // 💡 [핵심 수정] 학년 정보에 '초'가 포함되지 않은 경우(예: 중등부) 랭킹 합산에서 제외
           if (!grade.includes('초')) return;
 
           let rowYear = 0;
@@ -186,7 +184,6 @@ export default function Grammar({
           lastMonth: lastMonthRankings
         });
 
-        // 내 랭킹과 내 누적 점수 업데이트
         const myIdx = thisMonthRankings.findIndex(item => item.studentName === studentName.trim());
         if (myIdx !== -1) {
           setMyRank(myIdx + 1);
@@ -267,7 +264,8 @@ export default function Grammar({
     
     const initialQuestion = generateProblem(allData, 1);
     if (!initialQuestion) { 
-      alert("데이터베이스에 1단계 문제 데이터가 부족합니다. 수파베이스 sentence 테이블에 데이터가 있는지 확인해주세요."); 
+      // 💡 경고창 메시지도 정확한 테이블 이름(sentences)으로 수정했습니다.
+      alert("데이터베이스에 1단계 문제 데이터가 부족합니다. 수파베이스 sentences 테이블에 데이터가 있는지 확인해주세요."); 
       return; 
     }
     
