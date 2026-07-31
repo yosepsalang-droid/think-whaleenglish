@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { supabase } from '../lib/supabase'; // ⭐️ 수파베이스 직결
+import { supabase } from '../lib/supabase';
 
 interface SentenceData {
   book: string;
@@ -41,21 +41,40 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
 
   const normalize = (val: string) => (val || '').toLowerCase().replace(/\s+/g, '').trim();
 
-  // 문자와 숫자 섞인 텍스트에서 숫자만 쏙 뽑아내는 함수
   const extractDayNum = (dayStr: string): number => {
     const match = (dayStr || '').match(/\d+/);
     return match ? parseInt(match[0], 10) : -1;
   };
 
+  // ⭐️ 1,000개 제한 돌파! 데이터가 끝날 때까지 이어달리기(Pagination)로 모두 가져옵니다.
   useEffect(() => {
     const fetchSupabaseSentences = async () => {
       try {
-        const { data, error } = await supabase.from('sentences').select('*');
+        setIsLoading(true);
+        let allFetchedData: any[] = [];
+        let from = 0;
+        const step = 1000;
 
-        if (error) throw error;
+        while (true) {
+          const { data, error } = await supabase
+            .from('sentences')
+            .select('*')
+            .range(from, from + step - 1); // 0~999, 1000~1999 식으로 쪼개서 가져옴
 
-        if (data) {
-          const parsedSentences: SentenceData[] = data.map(row => ({
+          if (error) throw error;
+          
+          if (data && data.length > 0) {
+            allFetchedData = [...allFetchedData, ...data];
+            // 가져온 데이터가 1000개 미만이면 마지막 페이지라는 뜻이므로 종료
+            if (data.length < step) break; 
+            from += step;
+          } else {
+            break;
+          }
+        }
+
+        if (allFetchedData.length > 0) {
+          const parsedSentences: SentenceData[] = allFetchedData.map(row => ({
             book: String(row.book || row.Book || '').trim(),
             lesson: String(row.lesson || row.unit || row.Unit || '').trim(),
             day: String(row.day || row.Day || '').trim(),
@@ -108,7 +127,6 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
     return Array.from(new Set(filtered.map(s => s.lesson?.trim()))).filter(Boolean);
   }, [allSentences, book]);
 
-  // 해당 유닛에 속한 Day들을 추출하고 숫자 순서대로 정렬
   const days = useMemo(() => {
     const filtered = allSentences.filter(s =>
       normalize(s.book) === normalize(book) &&
@@ -118,7 +136,6 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
     return uniqueDays.sort((a, b) => extractDayNum(a) - extractDayNum(b));
   }, [allSentences, book, unit]);
 
-  // ⭐️ 누적 출제 로직
   const filterSentences = (targetBook: string, targetLesson: string, targetDay: string) => {
     const targetDayNumber = extractDayNum(targetDay);
 
@@ -130,7 +147,6 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
 
       const currentDayNumber = extractDayNum(s.day);
 
-      // 목표 Day가 4라면, Day 1~4까지 모두 포함 (<= 조건)
       if (targetDayNumber !== -1 && currentDayNumber !== -1) {
         return currentDayNumber <= targetDayNumber;
       }
@@ -209,7 +225,6 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
     }
   };
 
-  // ⭐️ 관제탑 연동을 위한 규격화된 로그 저장 로직
   const sendLogToSupabase = async (finalScore: number, finalAttempt: number, finalWrongs: string[]) => {
     if (finalScore !== currentSentenceList.length || currentSentenceList.length === 0) {
       return; 
@@ -221,10 +236,9 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
       const kstDate = new Date(now.getTime() + kstOffset);
       const todayStr = kstDate.toISOString().split('T')[0];
 
-      // 관제탑 정규식에 완벽히 매칭되도록 "UnitX DayY" 형태로 강제 변환
       const uNum = unit.match(/\d+/)?.[0] || '1';
       const dNum = day.match(/\d+/)?.[0] || '1';
-      const formattedBookInfo = `${book} Unit${uNum} Day${dNum}`; // 예: 240_1 Unit3 Day4
+      const formattedBookInfo = `${book} Unit${uNum} Day${dNum}`;
 
       const { error } = await supabase
         .from('learning_logs')
@@ -232,7 +246,7 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
           student_id: studentId,
           student_name: studentName,
           task_type: '초등문장', 
-          book_info: formattedBookInfo, // ⭐️ 규격화된 진도 데이터 저장!
+          book_info: formattedBookInfo, 
           score: finalScore,
           status: '완료',
           attempt: finalAttempt,
@@ -242,8 +256,6 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
 
       if (error) {
         console.error("수파베이스 저장 에러:", error);
-      } else {
-        console.log(`✅ 수파베이스에 초등 문장 기록(${formattedBookInfo}) 완벽 적재 성공!`);
       }
     } catch (err) {
       console.error("수파베이스 로그 전송 실패:", err);
@@ -312,10 +324,11 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
     }, 2000);
   };
 
+  // ⭐️ 로딩 문구 완전히 변경 완료!
   if (isLoading) {
     return (
       <div style={{ textAlign: 'center', marginTop: '100px', fontFamily: 'Pretendard, sans-serif' }}>
-        <h2>🐋 수파베이스에서 실시간 문장을 불러오는 중...</h2>
+        <h2>데이터베이스에서 실시간 학습 자료를 불러오는 중... 🚀</h2>
       </div>
     );
   }
@@ -339,7 +352,6 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
           {units.map(u => <option key={u} value={u}>{u}</option>)}
         </select>
 
-        {/* ⭐️ 누적 출제 UI 개선: Day 1~2, Day 1~3 형태로 직관적 표시 */}
         <select value={day} onChange={(e) => setDay(e.target.value)} disabled={!unit} style={{...selectStyle, width: '30%'}}>
           <option value="">Day (누적)</option>
           {days.map(d => {

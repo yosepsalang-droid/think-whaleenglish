@@ -1,19 +1,17 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 
-interface RankingItem {
+interface RankData {
   studentName: string;
   score: number;
 }
 
 interface RankingProps {
-  title: string;
-  data: RankingItem[];
-  isLoading: boolean;
-  isHonorRoll?: boolean; // 명예의 전당 여부
-  onBack?: () => void; // <--- 이 줄을 추가!
+  onBack: () => void; 
 }
 
-export default function Ranking({ title, data, isLoading, isHonorRoll = false }: RankingProps) {
+// 💡 카드 디자인 컴포넌트
+function RankingCard({ title, data, isLoading, isHonorRoll = false }: { title: string; data: RankData[]; isLoading: boolean; isHonorRoll?: boolean }) {
   return (
     <div style={{ backgroundColor: isHonorRoll ? '#fffdf0' : '#f3faff', border: `2px solid ${isHonorRoll ? '#ffda79' : '#a2d2ff'}`, borderRadius: '16px', padding: '16px', marginBottom: '16px' }}>
       <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', color: isHonorRoll ? '#cc8e00' : '#0077b6', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -29,13 +27,119 @@ export default function Ranking({ title, data, isLoading, isHonorRoll = false }:
           {data.map((item, index) => (
             <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 12px', backgroundColor: 'white', borderRadius: '6px' }}>
               <span style={{ fontSize: '13px', fontWeight: '500' }}>
-                {isHonorRoll ? ['🥇', '🥈', '🥉'][index] : `${index + 1}위.`} {item.studentName}
+                {isHonorRoll && index < 3 ? ['🥇', '🥈', '🥉'][index] : `${index + 1}위.`} {item.studentName}
               </span>
               <span style={{ fontSize: '13px', color: '#0077b6', fontWeight: 'bold' }}>{item.score}점</span>
             </div>
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// 💡 메인 랭킹 화면 (데이터 로직 포함)
+export default function Ranking({ onBack }: RankingProps) {
+  const [thisMonthRankings, setThisMonthRankings] = useState<RankData[]>([]);
+  const [lastMonthRankings, setLastMonthRankings] = useState<RankData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchRankings = async () => {
+      try {
+        setIsLoading(true);
+
+        // 1. 🚨 이중 덧셈 버그 제거: 브라우저 시간에 맡김 (알아서 한국 시간 KST로 인식)
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth(); // 0(1월) ~ 11(12월)
+
+        // 이번 달 시작일 (예: 2026년 8월 1일 00:00:00 KST)
+        const startOfThisMonth = new Date(year, month, 1);
+        
+        // 지난 달 시작일 (예: 2026년 7월 1일 00:00:00 KST)
+        const startOfLastMonth = new Date(year, month - 1, 1);
+
+        // 2. 수파베이스 통신: toISOString()을 쓰면 한국 시간을 UTC로 예쁘게 번역해서 서버에 물어봄
+        const { data, error } = await supabase
+          .from('learning_logs')
+          .select('student_name, score, created_at')
+          .gte('created_at', startOfLastMonth.toISOString()) 
+          .eq('status', '완료'); 
+
+        if (error) throw error;
+
+        const thisMonthMap = new Map<string, number>();
+        const lastMonthMap = new Map<string, number>();
+
+        // 3. 날짜 분류: +9시간 하던 낡은 로직 제거!
+        (data || []).forEach(log => {
+          if (!log.student_name || typeof log.score !== 'number') return;
+          
+          // 브라우저가 수파베이스의 UTC 시간을 자동으로 KST로 변환해줌!
+          const logDate = new Date(log.created_at);
+
+          // 이번 달 기록인지 지난 달 기록인지 깔끔하게 판별
+          if (logDate >= startOfThisMonth) {
+            const current = thisMonthMap.get(log.student_name) || 0;
+            thisMonthMap.set(log.student_name, current + log.score);
+          } else {
+            const current = lastMonthMap.get(log.student_name) || 0;
+            lastMonthMap.set(log.student_name, current + log.score);
+          }
+        });
+
+        // 4. 점수 정렬
+        const sortedThisMonth = Array.from(thisMonthMap.entries())
+          .map(([name, score]) => ({ studentName: name, score }))
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 50); // 이번 달은 상위 50명까지
+
+        const sortedLastMonth = Array.from(lastMonthMap.entries())
+          .map(([name, score]) => ({ studentName: name, score }))
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 3); // 지난 달은 명예의 전당용 3명까지
+
+        setThisMonthRankings(sortedThisMonth);
+        setLastMonthRankings(sortedLastMonth);
+
+      } catch (error) {
+        console.error("랭킹 데이터 로딩 실패:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchRankings();
+  }, []);
+
+  return (
+    <div style={{ fontFamily: 'Pretendard, sans-serif', padding: '20px', maxWidth: '500px', margin: '0 auto', boxSizing: 'border-box' }}>
+      
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <button 
+          onClick={onBack} 
+          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #ccc', backgroundColor: 'white', cursor: 'pointer', fontWeight: 'bold' }}
+        >
+          ← 뒤로가기
+        </button>
+        <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 'bold' }}>통합 랭킹전</h2>
+        <div style={{ width: '80px' }}></div>
+      </div>
+
+      <RankingCard 
+        title="지난달 명예의 전당" 
+        data={lastMonthRankings} 
+        isLoading={isLoading} 
+        isHonorRoll={true} 
+      />
+
+      <RankingCard 
+        title="이번달 실시간 랭킹" 
+        data={thisMonthRankings} 
+        isLoading={isLoading} 
+      />
+      
     </div>
   );
 }

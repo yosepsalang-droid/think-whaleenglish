@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { CONFIG } from '../config';
 import { supabase } from '../lib/supabase'; 
 
-interface GoogleWord {
+interface WordData {
   book: string;
   lesson: string;
   day: string;
@@ -18,10 +17,9 @@ interface WordProps {
 }
 
 export default function Word({ onBack, studentId = "ST_TEST", studentName = "테스트학생", currentBook = "" }: WordProps) {
-  const [allWords, setAllWords] = useState<GoogleWord[]>([]);
+  const [allWords, setAllWords] = useState<WordData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // ⭐️ [수정] 띄어쓰기 공백을 제거하여 찰떡같이 매칭되도록 보완
   const [book, setBook] = useState(currentBook ? currentBook.trim() : '');
   const [unit, setUnit] = useState('');
   const [day, setDay] = useState('');
@@ -43,57 +41,55 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
 
   const normalize = (val: string) => (val || '').toLowerCase().replace(/\s+/g, '').trim();
 
-  const parseCSVRow = (row: string): string[] => {
-    const result: string[] = [];
-    let current = '';
-    let inQuotes = false;
-    for (let i = 0; i < row.length; i++) {
-      const char = row[i];
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === ',' && !inQuotes) {
-        result.push(current.trim());
-        current = '';
-      } else {
-        current += char;
-      }
-    }
-    result.push(current.trim());
-    return result;
-  };
-
+  // ⭐️ 수파베이스 1000개 제한 돌파 (이어달리기 데이터 로출)
   useEffect(() => {
-    const fetchGoogleSheet = async () => {
+    const fetchSupabaseWords = async () => {
       try {
-        const response = await fetch(CONFIG.SHEETS.ELEM_WORD);
-        const csvText = await response.text();
-        const rows = csvText.split(/\r?\n/);
-        const parsedWords: GoogleWord[] = [];
-        rows.forEach((row, index) => {
-          if (index === 0 || !row.trim()) return;
-          const cells = parseCSVRow(row);
-          if (cells.length >= 5 && cells[0] && cells[3] && cells[4]) {
-            parsedWords.push({
-              book: cells[0],
-              lesson: cells[1],
-              day: cells[2],
-              eng: cells[3],
-              kor: cells[4]
-            });
+        setIsLoading(true);
+        let allFetchedData: any[] = [];
+        let from = 0;
+        const step = 1000;
+
+        while (true) {
+          const { data, error } = await supabase
+            .from('words')
+            .select('*')
+            .range(from, from + step - 1);
+
+          if (error) throw error;
+          
+          if (data && data.length > 0) {
+            allFetchedData = [...allFetchedData, ...data];
+            // 가져온 데이터가 1000개 미만이면 마지막 페이지라는 뜻이므로 종료
+            if (data.length < step) break; 
+            from += step;
+          } else {
+            break;
           }
-        });
-        setAllWords(parsedWords);
-        setIsLoading(false);
+        }
+
+        if (allFetchedData.length > 0) {
+          const parsedWords: WordData[] = allFetchedData.map(row => ({
+            book: String(row.book || row.Book || '').trim(),
+            lesson: String(row.lesson || row.unit || row.Unit || '').trim(),
+            day: String(row.day || row.Day || '').trim(),
+            eng: String(row.eng || row.english || row.Eng || '').trim(),
+            kor: String(row.kor || row.korean || row.Kor || '').trim()
+          })).filter(w => w.book && w.eng && w.kor); 
+
+          setAllWords(parsedWords);
+        }
       } catch (error) {
-        console.error("구글 시트 로딩 실패:", error);
-        alert("구글 시트 데이터를 실시간 가져오지 못했습니다.");
+        console.error("수파베이스 단어 로딩 실패:", error);
+        alert("단어 데이터를 불러오지 못했습니다. 인터넷 연결을 확인해주세요.");
+      } finally {
         setIsLoading(false);
       }
     };
-    fetchGoogleSheet();
+    
+    fetchSupabaseWords();
   }, []);
 
-  // ⭐️ [수정] 띄어쓰기 공백을 제거하여 자동 선택 안정화
   useEffect(() => {
     if (currentBook) {
       setBook(currentBook.trim());
@@ -289,7 +285,7 @@ export default function Word({ onBack, studentId = "ST_TEST", studentName = "테
   if (isLoading) {
     return (
       <div style={{ textAlign: 'center', marginTop: '100px', fontFamily: 'Pretendard, sans-serif' }}>
-        <h2>🐋 구글 시트에서 실시간 단어장을 불러오는 중...</h2>
+        <h2>데이터베이스에서 실시간 학습 자료를 불러오는 중... 🚀</h2>
       </div>
     );
   }
