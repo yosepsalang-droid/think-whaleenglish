@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { CONFIG, withCacheBust } from '../config'; 
-import Ranking from './Ranking'; 
-// 💡 수파베이스 연동을 위한 import 추가!
+// 💡 이제 외부 Ranking.tsx를 불러오지 않고 내부에 미니 랭킹을 만듭니다.
 import { supabase } from '../lib/supabase'; 
 
 interface RankEntry {
@@ -17,6 +16,29 @@ interface GrammarProps {
   rankings?: { thisMonth: RankEntry[]; lastMonth: RankEntry[] };
   loadingRank?: boolean;
   onGameComplete?: (addedScore?: number) => void;
+}
+
+// 💡 문법 게임 로비 전용 미니 랭킹 카드 컴포넌트 추가
+function MiniRankingCard({ title, data, isLoading }: { title: string; data: RankEntry[]; isLoading: boolean }) {
+  return (
+    <div style={{ backgroundColor: '#f8fafc', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0', textAlign: 'left' }}>
+      <h3 style={{ margin: '0 0 12px 0', fontSize: '15px', color: '#334155' }}>{title}</h3>
+      {isLoading ? (
+        <p style={{ fontSize: '13px', color: '#94a3b8', margin: 0 }}>데이터를 불러오는 중입니다...</p>
+      ) : data.length === 0 ? (
+        <p style={{ fontSize: '13px', color: '#94a3b8', margin: 0 }}>아직 기록이 없습니다.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          {data.map((item, idx) => (
+            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', backgroundColor: 'white', padding: '8px 12px', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
+              <span style={{ fontWeight: '500', color: '#475569' }}>{idx + 1}위. {item.studentName}</span>
+              <span style={{ fontWeight: 'bold', color: '#2563eb' }}>{item.score}점</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function Grammar({
@@ -43,7 +65,6 @@ export default function Grammar({
   const [localRankings, setLocalRankings] = useState<{ thisMonth: RankEntry[]; lastMonth: RankEntry[] }>({ thisMonth: [], lastMonth: [] });
   const [isRankLoading, setIsRankLoading] = useState<boolean>(true);
 
-  // 1️⃣ 교재 문제 데이터 불러오기 (✨ 구글 시트 -> 수파베이스 sentence 테이블로 교체 완료!)
   useEffect(() => {
     const fetchSentences = async () => {
       try {
@@ -54,7 +75,6 @@ export default function Grammar({
         if (error) throw error;
 
         if (data) {
-          // eng와 kor 데이터가 모두 존재하는 유효한 문장만 필터링하여 게임 데이터로 세팅
           const validData = data.filter(item => item.eng && item.kor);
           setAllData(validData);
         }
@@ -66,7 +86,6 @@ export default function Grammar({
     fetchSentences();
   }, []);
 
-  // 💡 실시간 랭킹 만들기 (기존 로직 유지)
   const fetchAndCalculateRank = (options?: { delayMs?: number }) => {
     const { delayMs = 0 } = options ?? {};
     const logSheetUrl = CONFIG.SHEETS.GRAMMAR_LOG;
@@ -361,12 +380,13 @@ export default function Grammar({
           )}
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '30px' }}>
-            <Ranking 
+            {/* 💡 에러의 원인이었던 <Ranking> 대신 <MiniRankingCard> 사용! */}
+            <MiniRankingCard 
               title="🏆 지난달 명예의 전당 (TOP 3)"
               data={localRankings.lastMonth.slice(0, 3)}
               isLoading={isRankLoading}
             />
-            <Ranking 
+            <MiniRankingCard 
               title="🔥 이번달 실시간 랭킹 (TOP 5)"
               data={localRankings.thisMonth.slice(0, 5)}
               isLoading={isRankLoading}

@@ -173,7 +173,9 @@ export default function App() {
           
           {currentMenu === 'grammar' && <Grammar student={loggedInStudent} onBack={() => setCurrentMenu('home')} totalScore={integratedRank.totalScore} myRank={integratedRank.myRank} rankings={{ thisMonth: integratedRank.thisMonth, lastMonth: integratedRank.lastMonth }} loadingRank={integratedRank.loading} onGameComplete={handleGameComplete} />}
           {currentMenu === 'wordMaster' && <WordMaster studentName={loggedInStudent.name} grade={loggedInStudent.grade} onBack={() => setCurrentMenu('home')} totalScore={integratedRank.totalScore} myRank={integratedRank.myRank} loadingRank={integratedRank.loading} onGameComplete={handleGameComplete} />}
-          {currentMenu === 'ranking' && <Ranking title="명예의 전당" data={[]} isLoading={false} onBack={() => setCurrentMenu('home')} />}
+          
+          {/* ⭐️ 여기서 에러를 유발하던 title, data, isLoading을 깔끔하게 제거했습니다! */}
+          {currentMenu === 'ranking' && <Ranking onBack={() => setCurrentMenu('home')} />}
         </div>
       );
     }
