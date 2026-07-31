@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { CONFIG, withCacheBust } from '../config'; 
-// 💡 이제 외부 Ranking.tsx를 불러오지 않고 내부에 미니 랭킹을 만듭니다.
 import { supabase } from '../lib/supabase'; 
 
 interface RankEntry {
@@ -18,7 +17,7 @@ interface GrammarProps {
   onGameComplete?: (addedScore?: number) => void;
 }
 
-// 💡 문법 게임 로비 전용 미니 랭킹 카드 컴포넌트 추가
+// 💡 미니 랭킹 카드 컴포넌트
 function MiniRankingCard({ title, data, isLoading }: { title: string; data: RankEntry[]; isLoading: boolean }) {
   return (
     <div style={{ backgroundColor: '#f8fafc', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0', textAlign: 'left' }}>
@@ -41,7 +40,7 @@ function MiniRankingCard({ title, data, isLoading }: { title: string; data: Rank
   );
 }
 
-export default function Grammar({
+export default function GameGrammar({
   onBack,
   student,
   totalScore: externalTotalScore = 0,
@@ -58,6 +57,7 @@ export default function Grammar({
   const [timeLeft, setTimeLeft] = useState(10);
   
   const [allData, setAllData] = useState<any[]>([]);
+  const [isDataLoaded, setIsDataLoaded] = useState(false); // 💡 데이터 로딩 완료 체크용
   const [currentQ, setCurrentQ] = useState<any>(null);
 
   const [myRank, setMyRank] = useState<number | null>(externalMyRank);
@@ -65,18 +65,53 @@ export default function Grammar({
   const [localRankings, setLocalRankings] = useState<{ thisMonth: RankEntry[]; lastMonth: RankEntry[] }>({ thisMonth: [], lastMonth: [] });
   const [isRankLoading, setIsRankLoading] = useState<boolean>(true);
 
+  // 1️⃣ 수파베이스 데이터 가져오기 (1000개 제한 돌파 및 데이터 보정 로직 추가)
   useEffect(() => {
     const fetchSentences = async () => {
       try {
-        const { data, error } = await supabase
-          .from('sentence')
-          .select('*');
+        setIsDataLoaded(false);
+        let allFetchedData: any[] = [];
+        let from = 0;
+        const step = 1000;
 
-        if (error) throw error;
+        // 이어달리기(Pagination)로 모든 데이터 쓸어오기
+        while (true) {
+          const { data, error } = await supabase
+            .from('sentence')
+            .select('*')
+            .range(from, from + step - 1);
 
-        if (data) {
-          const validData = data.filter(item => item.eng && item.kor);
+          if (error) throw error;
+          if (data && data.length > 0) {
+            allFetchedData = [...allFetchedData, ...data];
+            if (data.length < step) break;
+            from += step;
+          } else {
+            break;
+          }
+        }
+
+        if (allFetchedData.length > 0) {
+          const validData = allFetchedData.map(row => {
+            // 대소문자 상관없이 데이터를 안전하게 추출
+            const b = String(row.book || row.Book || '').trim();
+            const l = String(row.lesson || row.Unit || row.unit || '').trim();
+            
+            // 만약 수파베이스에 교재(240)와 레슨(1)이 나뉘어 있다면 '240_1' 형태로 합쳐줌
+            let combinedBook = b;
+            if (b && !b.includes('_') && l) {
+              combinedBook = `${b}_${l}`;
+            }
+
+            return {
+              book: combinedBook,
+              eng: String(row.eng || row.english || row.Eng || '').trim(),
+              kor: String(row.kor || row.korean || row.Kor || '').trim()
+            };
+          }).filter(item => item.eng && item.kor); // 영어와 한글이 모두 있는 유효한 데이터만 필터링
+          
           setAllData(validData);
+          setIsDataLoaded(true); // 데이터 로딩 완료!
         }
       } catch (error) {
         console.error("수파베이스 sentence 데이터 불러오기 에러:", error);
@@ -230,7 +265,8 @@ export default function Grammar({
     
     const initialQuestion = generateProblem(allData, 1);
     if (!initialQuestion) { 
-      alert("시트에 1단계 문제 데이터가 부족합니다. 데이터 로딩을 확인해주세요."); 
+      // 💡 에러 메시지도 구글 시트에서 데이터베이스로 알맞게 변경했습니다!
+      alert("데이터베이스에 1단계 문제 데이터가 부족합니다. 교재 이름(예: 240_1)이 정확한지 확인해주세요."); 
       return; 
     }
     
@@ -380,7 +416,6 @@ export default function Grammar({
           )}
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '30px' }}>
-            {/* 💡 에러의 원인이었던 <Ranking> 대신 <MiniRankingCard> 사용! */}
             <MiniRankingCard 
               title="🏆 지난달 명예의 전당 (TOP 3)"
               data={localRankings.lastMonth.slice(0, 3)}
@@ -393,7 +428,19 @@ export default function Grammar({
             />
           </div>
 
-          <button onClick={startGame} style={{...styles.startBtn, marginTop: '20px'}}>스피드 문법 게임 시작하기</button>
+          {/* 💡 데이터 로딩 전에는 버튼을 비활성화하고 문구를 바꿉니다! */}
+          <button 
+            onClick={startGame} 
+            disabled={!isDataLoaded}
+            style={{
+              ...styles.startBtn, 
+              marginTop: '20px',
+              backgroundColor: isDataLoaded ? '#2563eb' : '#94a3b8',
+              cursor: isDataLoaded ? 'pointer' : 'not-allowed'
+            }}
+          >
+            {isDataLoaded ? '스피드 문법 게임 시작하기' : '문제 데이터를 불러오는 중... ⏳'}
+          </button>
         </div>
       </div>
     );
