@@ -104,7 +104,6 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
     isListening ? recognitionRef.current.stop() : recognitionRef.current.start();
   };
 
-  // 💡 [개선] 사람과 최대한 비슷한 자연스러운 억양과 목소리 세팅
   const speakWhale = (text: string) => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
@@ -120,14 +119,10 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
 
       const utterance = new SpeechSynthesisUtterance(englishPart);
       utterance.lang = 'en-US';
-      
-      // 높낮이(pitch)를 1.0(기본값)으로 맞추고 속도를 살짝 늦춰 또렷하고 자연스럽게 발음
       utterance.rate = 0.95; 
       utterance.pitch = 1.0; 
       
       const voices = window.speechSynthesis.getVoices();
-      
-      // 사람과 가장 비슷한 프리미엄 AI 음성들 우선 배치
       const bestVoice = voices.find(v => 
         v.name.includes('Google US English') || 
         v.name.includes('Microsoft Aria') || 
@@ -164,7 +159,6 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
       const targetWords = wordsData?.map(w => `${w.eng}(${w.kor})`).join(', ') || '없음';
       const targetSentences = sentencesData?.map(s => `${s.eng}(${s.kor})`).join(', ') || '없음';
 
-      // 💡 [개선] 융통성 있는 대화 유도 및 정답 강요 방지 프롬프트
       const instruction = `
         너는 초등학생에게 영어를 가르쳐주는 친근하고 발랄한 원어민 고래 선생님(Whale)이야.
         로봇처럼 딱딱하게 굴지 말고, 진짜 외국인 친구처럼 아주 부드럽고 자연스럽게 대화해줘.
@@ -232,27 +226,50 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
         const currentHistory = [...apiHistory, newUserMsg];
         
         const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || CONFIG.GEMINI.API_KEY;
-        
-        // 💡 [개선] 존재하지 않던 3.6 버전을 최신 공식 1.5-flash 버전으로 수정!
         const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + API_KEY;
         
-        const response = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: systemPrompt }] },
-            contents: currentHistory
-          })
-        });
+        let aiReply = "";
+        let attempt = 0;
+        const maxAttempts = 3; // 💡 3번까지 재시도 설정
 
-        const data = await response.json();
-        if (data.error) throw new Error(data.error.message || "Gemini 통신 에러");
+        // 💡 [핵심 강화] 통신 지연 대비: 최대 3회 재시도 및 10초 타임아웃 
+        while (attempt < maxAttempts) {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10초 넘어가면 강제 취소
 
-        // 💡 [개선] AI 응답이 비정상일 때 화면이 멈추지 않도록 방어 로직 추가
-        let aiReply = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        
-        if (!aiReply) {
-          throw new Error("AI가 빈 응답을 반환했습니다.");
+            const response = await fetch(url, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                contents: currentHistory
+              }),
+              signal: controller.signal // 타임아웃 컨트롤러 연결
+            });
+            
+            clearTimeout(timeoutId);
+
+            const data = await response.json();
+            if (data.error) throw new Error(data.error.message || "Gemini API 통신 에러");
+
+            aiReply = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            
+            if (!aiReply) {
+              throw new Error("AI가 빈 응답을 반환했습니다.");
+            }
+            
+            break; // 💡 성공적으로 응답을 받으면 반복문(재시도) 탈출
+          } catch (err: any) {
+            attempt++;
+            console.warn(`API 호출 실패 (시도 ${attempt}/${maxAttempts}):`, err);
+            
+            if (attempt >= maxAttempts) {
+              throw err; // 3번 모두 실패하면 최종 에러 발생
+            }
+            // 💡 실패 시 1.5초 대기 후 재시도 (API 서버 부하 방지)
+            await new Promise(res => setTimeout(res, 1500));
+          }
         }
         
         let isEndingNow = false;
@@ -273,8 +290,7 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
         }
       }
     } catch (err) {
-      console.error("AI 응답 오류:", err);
-      // 에러가 났을 때도 시스템 메시지로 확실히 띄워주기
+      console.error("AI 응답 오류 (최종 실패):", err);
       setMessages(prev => [...prev, { sender: 'system', text: `앗, 고래 선생님과 통신이 잠시 끊겼어요. 다시 한 번 말해줄래요? (오류: 통신 지연)` }]);
     } finally {
       setIsAIThinking(false);
