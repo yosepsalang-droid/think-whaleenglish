@@ -10,7 +10,7 @@ interface RankingProps {
   onBack: () => void; 
 }
 
-// 💡 카드 디자인 컴포넌트
+// 💡 카드 디자인 컴포넌트 (누적 점수 콤마 적용)
 function RankingCard({ title, data, isLoading, isHonorRoll = false }: { title: string; data: RankData[]; isLoading: boolean; isHonorRoll?: boolean }) {
   return (
     <div style={{ backgroundColor: isHonorRoll ? '#fffdf0' : '#f3faff', border: `2px solid ${isHonorRoll ? '#ffda79' : '#a2d2ff'}`, borderRadius: '16px', padding: '16px', marginBottom: '16px' }}>
@@ -29,7 +29,8 @@ function RankingCard({ title, data, isLoading, isHonorRoll = false }: { title: s
               <span style={{ fontSize: '13px', fontWeight: '500' }}>
                 {isHonorRoll && index < 3 ? ['🥇', '🥈', '🥉'][index] : `${index + 1}위.`} {item.studentName}
               </span>
-              <span style={{ fontSize: '13px', color: '#0077b6', fontWeight: 'bold' }}>{item.score}점</span>
+              {/* 💡 점수에 천 단위 콤마(toLocaleString) 추가 */}
+              <span style={{ fontSize: '13px', color: '#0077b6', fontWeight: 'bold' }}>{item.score.toLocaleString()}점</span>
             </div>
           ))}
         </div>
@@ -49,21 +50,17 @@ export default function Ranking({ onBack }: RankingProps) {
       try {
         setIsLoading(true);
 
-        // 1. 🚨 이중 덧셈 버그 제거: 브라우저 시간에 맡김 (알아서 한국 시간 KST로 인식)
         const now = new Date();
         const year = now.getFullYear();
-        const month = now.getMonth(); // 0(1월) ~ 11(12월)
+        const month = now.getMonth(); 
 
-        // 이번 달 시작일 (예: 2026년 8월 1일 00:00:00 KST)
         const startOfThisMonth = new Date(year, month, 1);
-        
-        // 지난 달 시작일 (예: 2026년 7월 1일 00:00:00 KST)
         const startOfLastMonth = new Date(year, month - 1, 1);
 
-        // 2. 수파베이스 통신: toISOString()을 쓰면 한국 시간을 UTC로 예쁘게 번역해서 서버에 물어봄
+        // 💡 grade(학년/과정) 컬럼을 추가로 불러옵니다.
         const { data, error } = await supabase
           .from('learning_logs')
-          .select('student_name, score, created_at')
+          .select('student_name, score, created_at, grade') 
           .gte('created_at', startOfLastMonth.toISOString()) 
           .eq('status', '완료'); 
 
@@ -72,14 +69,14 @@ export default function Ranking({ onBack }: RankingProps) {
         const thisMonthMap = new Map<string, number>();
         const lastMonthMap = new Map<string, number>();
 
-        // 3. 날짜 분류: +9시간 하던 낡은 로직 제거!
         (data || []).forEach(log => {
           if (!log.student_name || typeof log.score !== 'number') return;
           
-          // 브라우저가 수파베이스의 UTC 시간을 자동으로 KST로 변환해줌!
+          // 💡 중등부 제외 로직: grade 컬럼에 '초'가 포함되어 있지 않으면 패스합니다.
+          if (!log.grade || !log.grade.includes('초')) return;
+
           const logDate = new Date(log.created_at);
 
-          // 이번 달 기록인지 지난 달 기록인지 깔끔하게 판별
           if (logDate >= startOfThisMonth) {
             const current = thisMonthMap.get(log.student_name) || 0;
             thisMonthMap.set(log.student_name, current + log.score);
@@ -89,16 +86,15 @@ export default function Ranking({ onBack }: RankingProps) {
           }
         });
 
-        // 4. 점수 정렬
         const sortedThisMonth = Array.from(thisMonthMap.entries())
           .map(([name, score]) => ({ studentName: name, score }))
           .sort((a, b) => b.score - a.score)
-          .slice(0, 50); // 이번 달은 상위 50명까지
+          .slice(0, 50); 
 
         const sortedLastMonth = Array.from(lastMonthMap.entries())
           .map(([name, score]) => ({ studentName: name, score }))
           .sort((a, b) => b.score - a.score)
-          .slice(0, 3); // 지난 달은 명예의 전당용 3명까지
+          .slice(0, 3); 
 
         setThisMonthRankings(sortedThisMonth);
         setLastMonthRankings(sortedLastMonth);
