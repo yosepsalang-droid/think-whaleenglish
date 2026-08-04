@@ -16,7 +16,6 @@ interface Student {
 const SERIES_LIST = ['240', '520', '860', '1240', '1680'];
 const BOOK_NUM_LIST = ['1', '2', '3', '4', '5', '6'];
 
-// 💡 텍스트 추출 로직 초강화: U, Unit, unit, 유닛 등 어떤 형태든 뒤에 오는 숫자만 귀신같이 뽑아냄
 const parseUnitDay = (bookInfo: string) => {
   if (!bookInfo) return '';
   const uMatch = bookInfo.match(/(?:u|unit|유닛)[^\d]*(\d+)/i);
@@ -25,7 +24,7 @@ const parseUnitDay = (bookInfo: string) => {
   if (uMatch && dMatch) {
     return `(U${uMatch[1]}D${dMatch[1]})`;
   }
-  return ''; // 못 찾으면 빈칸 반환
+  return '';
 };
 
 export default function ElemManage() {
@@ -34,6 +33,9 @@ export default function ElemManage() {
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   
   const [selectedGrade, setSelectedGrade] = useState<string>('전체');
+
+  // 💡 [추가됨] 날짜 필터링을 위한 State
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
   const [editSeries, setEditSeries] = useState('240');
   const [editBookNum, setEditBookNum] = useState('1');
@@ -55,19 +57,20 @@ export default function ElemManage() {
 
       if (studentError) throw studentError;
 
-      // 💡 한국 시간(KST) 기준으로 정확한 '오늘 자정(00:00)' 구하기 (시차 문제 해결!)
-      const now = new Date();
+      // 💡 선택된 날짜 기준으로 KST 시간 구하기
       const kstOffset = 9 * 60 * 60 * 1000;
-      const kstNow = new Date(now.getTime() + kstOffset);
-      const kstDateStr = kstNow.toISOString().split('T')[0]; // 예: 2026-07-30
+      const kstSelectedDate = new Date(selectedDate.getTime() + kstOffset);
+      const kstDateStr = kstSelectedDate.toISOString().split('T')[0]; // 예: 2026-08-04
       
-      // KST 자정을 다시 UTC 형식으로 변환하여 수파베이스에 던짐
-      const startOfTodayUTC = new Date(`${kstDateStr}T00:00:00+09:00`).toISOString();
+      // 💡 [핵심 강화] 해당 날짜의 00:00:00 부터 23:59:59 까지만 엄격하게 필터링!
+      const startOfDayUTC = new Date(`${kstDateStr}T00:00:00+09:00`).toISOString();
+      const endOfDayUTC = new Date(`${kstDateStr}T23:59:59.999+09:00`).toISOString();
 
       const { data: logsData, error: logError } = await supabase
         .from('learning_logs')
         .select('student_id, task_type, status, book_info')
-        .gte('created_at', startOfTodayUTC) // 👈 정확히 한국시간 오늘 0시 이후 것만!
+        .gte('created_at', startOfDayUTC) // 👈 시작 시간 조건
+        .lte('created_at', endOfDayUTC)   // 👈 끝나는 시간 조건 (이게 없어서 오류가 났었습니다!)
         .eq('status', '완료');
 
       if (logError) throw logError;
@@ -113,9 +116,24 @@ export default function ElemManage() {
     }
   };
 
+  // 💡 selectedDate 가 바뀔 때마다 데이터를 다시 불러옵니다.
   useEffect(() => {
     fetchAllLMSData();
-  }, []);
+  }, [selectedDate]);
+
+  // 💡 [추가됨] 날짜 변경 함수
+  const changeDate = (days: number) => {
+    const newDate = new Date(selectedDate);
+    newDate.setDate(newDate.getDate() + days);
+    setSelectedDate(newDate);
+  };
+
+  const getFormattedDate = (date: Date) => {
+    const kstOffset = 9 * 60 * 60 * 1000;
+    return new Date(date.getTime() + kstOffset).toISOString().split('T')[0];
+  };
+
+  const isToday = getFormattedDate(selectedDate) === getFormattedDate(new Date());
 
   const handleSelectStudent = (student: Student) => {
     if (selectedStudent?.id === student.id) {
@@ -243,6 +261,16 @@ export default function ElemManage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#1f2937', margin: 0 }}>👑 초등부 관제탑</h2>
+          
+          {/* 💡 [추가됨] 날짜 이동 컨트롤러 */}
+          <div style={{ display: 'flex', alignItems: 'center', backgroundColor: '#f3f4f6', borderRadius: '8px', padding: '4px', border: '1px solid #e5e7eb' }}>
+            <button onClick={() => changeDate(-1)} style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', padding: '4px 8px', fontSize: '14px', color: '#4b5563', fontWeight: 'bold' }}>◀</button>
+            <span style={{ fontSize: '14px', fontWeight: '900', color: isToday ? '#2563eb' : '#374151', padding: '0 8px', minWidth: '110px', textAlign: 'center' }}>
+              {getFormattedDate(selectedDate)} {isToday && '(오늘)'}
+            </span>
+            <button onClick={() => changeDate(1)} disabled={isToday} style={{ border: 'none', backgroundColor: 'transparent', cursor: isToday ? 'not-allowed' : 'pointer', padding: '4px 8px', fontSize: '14px', color: isToday ? '#d1d5db' : '#4b5563', fontWeight: 'bold' }}>▶</button>
+          </div>
+
           <button 
             onClick={fetchAllLMSData} 
             style={{ 
@@ -292,7 +320,8 @@ export default function ElemManage() {
               <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '4%' }}>번호</th>
               <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '5%' }}>학년</th>
               <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '8%' }}>이름</th>
-              <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '45%' }}>오늘 학습 현황</th>
+              {/* 💡 헤더에 선택한 날짜가 표시되도록 변경 */}
+              <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '45%' }}>{getFormattedDate(selectedDate)} 학습 현황</th>
               <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '15%' }}>교재 설정</th>
               <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '7%' }}>관리</th>
             </tr>
@@ -371,7 +400,6 @@ export default function ElemManage() {
         </table>
       </div>
 
-      {/* 모달창 생략 없이 원본 유지 */}
       {manageStudent && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 50 }}>
           <div style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', padding: '24px', borderRadius: '16px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', width: '24rem', position: 'relative', margin: '0 16px' }}>
