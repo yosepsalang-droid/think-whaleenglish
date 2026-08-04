@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { CONFIG } from '../config';
-import { supabase } from '../lib/supabase'; // 💡 수파베이스 연동 추가
+import { supabase } from '../lib/supabase';
 import html2canvas from 'html2canvas';
 import {
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer,
@@ -32,6 +32,14 @@ interface StudentStats {
 export default function ReportManage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  
+  // 💡 학년 필터링용 State 추가
+  const [selectedGrade, setSelectedGrade] = useState<string>('전체');
+  
+  // 💡 다운로드 상태 시각화 State
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadSuccess, setDownloadSuccess] = useState(false);
+
   const [realStats, setRealStats] = useState<StudentStats>({ 
     word: 0, sentence: 0, ai: 0, grammar: 0, retestCount: 0, 
     wordCount: 0, sentenceCount: 0, prevWord: 0, prevSentence: 0, prevAi: 0, prevGrammar: 0 
@@ -63,11 +71,11 @@ export default function ReportManage() {
   useEffect(() => {
     const fetchStudents = async () => {
       try {
-        // 💡 수파베이스에서 학생 명단 가져오기로 변경
         const { data, error } = await supabase
           .from('students')
           .select('*')
-          .order('name', { ascending: true });
+          .order('grade', { ascending: true })
+          .order('name', { ascending: true }); // 💡 학년별, 이름별 정렬 추가
 
         if (error) throw error;
 
@@ -80,7 +88,6 @@ export default function ReportManage() {
             progress: ''
           }));
           
-          // 테스트용 'body' 계정 필터링
           const validStudents = formattedStudents.filter(s => !s.name.includes('body'));
 
           setStudents(validStudents);
@@ -94,6 +101,31 @@ export default function ReportManage() {
     };
     fetchStudents();
   }, []);
+
+  // 💡 학년 목록 추출 및 필터링 로직
+  const uniqueGrades = ['전체', ...Array.from(new Set(students.map(s => s.grade))).filter(Boolean)];
+  
+  const filteredStudents = selectedGrade === '전체' 
+    ? students 
+    : students.filter(s => s.grade === selectedGrade);
+
+  // 학년 필터가 바뀔 때, 해당 학년의 첫 번째 학생을 자동 선택
+  useEffect(() => {
+    if (filteredStudents.length > 0 && (!selectedStudent || selectedStudent.grade !== selectedGrade) && selectedGrade !== '전체') {
+      setSelectedStudent(filteredStudents[0]);
+    }
+  }, [selectedGrade]);
+
+  const currentIndex = filteredStudents.findIndex(s => s.id === selectedStudent?.id);
+
+  // 이전/다음 학생 이동 함수
+  const handlePrevStudent = () => {
+    if (currentIndex > 0) setSelectedStudent(filteredStudents[currentIndex - 1]);
+  };
+
+  const handleNextStudent = () => {
+    if (currentIndex < filteredStudents.length - 1) setSelectedStudent(filteredStudents[currentIndex + 1]);
+  };
 
   useEffect(() => {
     if (!selectedStudent) return;
@@ -111,7 +143,6 @@ export default function ReportManage() {
         });
         const stats: StudentStats = await response.json();
         
-        // 💡 주의: 화면 시각화를 위한 임시 랜덤 데이터입니다! 추후 백엔드에서 받아오도록 수정이 필요합니다.
         const safeStats = {
           ...stats,
           wordCount: stats.wordCount || Math.floor(Math.random() * 50) + 100, 
@@ -186,6 +217,7 @@ export default function ReportManage() {
 
   const handleDownloadImage = async () => {
     if (!reportRef.current || !selectedStudent) return;
+    setIsDownloading(true);
     try {
       const canvas = await html2canvas(reportRef.current, { scale: 2, backgroundColor: '#ffffff' });
       const imageUrl = canvas.toDataURL("image/png");
@@ -193,30 +225,81 @@ export default function ReportManage() {
       link.href = imageUrl;
       link.download = `${selectedStudent.name}_주간성적표.png`; 
       link.click();
-      alert(`✅ ${selectedStudent.name} 학생의 성적표가 다운로드 되었습니다!`);
+      
+      // 저장 성공 시각 피드백
+      setDownloadSuccess(true);
+      setTimeout(() => setDownloadSuccess(false), 2000); // 2초 후 원상복구
+
     } catch (error) {
       console.error("이미지 저장 실패", error);
       alert("이미지 저장 중 오류가 발생했습니다.");
+    } finally {
+      setIsDownloading(false);
     }
   };
 
   return (
     <div style={{ padding: '40px', backgroundColor: '#f4f6f8', minHeight: '100vh', fontFamily: 'Pretendard, sans-serif' }}>
       
-      <div style={{ maxWidth: '1200px', margin: '0 auto 20px auto', display: 'flex', gap: '20px', alignItems: 'center' }}>
-        <h3 style={{ margin: 0 }}>👩‍🎓 학생 선택:</h3>
-        <select 
-          value={selectedStudent?.id || ''} 
-          onChange={(e) => setSelectedStudent(students.find(s => s.id === e.target.value) || null)}
-          style={{ padding: '10px', fontSize: '16px', borderRadius: '8px', border: '1px solid #ccc' }}
-        >
-          {students.map(student => (
-            <option key={student.id} value={student.id}>{student.name} ({student.grade})</option>
-          ))}
-        </select>
-        <span style={{ color: '#666', fontSize: '14px' }}>* 학생을 선택하면 자동으로 리포트가 완성됩니다.</span>
+      {/* 💡 상단 컨트롤 패널 강화 */}
+      <div style={{ maxWidth: '1200px', margin: '0 auto 20px auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+        
+        <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+          <h3 style={{ margin: 0, fontSize: '18px' }}>👩‍🎓 리포트 발송 대상:</h3>
+          
+          {/* 학년 선택 */}
+          <select 
+            value={selectedGrade} 
+            onChange={(e) => setSelectedGrade(e.target.value)}
+            style={{ padding: '10px 15px', fontSize: '15px', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', fontWeight: 'bold', outline: 'none' }}
+          >
+            {uniqueGrades.map(grade => (
+              <option key={grade} value={grade}>{grade}</option>
+            ))}
+          </select>
+
+          {/* 학생 선택 */}
+          <select 
+            value={selectedStudent?.id || ''} 
+            onChange={(e) => setSelectedStudent(filteredStudents.find(s => s.id === e.target.value) || null)}
+            style={{ padding: '10px 15px', fontSize: '15px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none' }}
+          >
+            {filteredStudents.length === 0 ? (
+              <option value="">학생 없음</option>
+            ) : (
+              filteredStudents.map(student => (
+                <option key={student.id} value={student.id}>{student.name} ({student.grade})</option>
+              ))
+            )}
+          </select>
+        </div>
+
+        {/* 💡 이전/다음 학생 퀵 네비게이션 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button 
+            onClick={handlePrevStudent} 
+            disabled={currentIndex <= 0}
+            style={{ padding: '10px 15px', borderRadius: '8px', border: '1px solid #d1d5db', backgroundColor: currentIndex <= 0 ? '#f3f4f6' : 'white', color: currentIndex <= 0 ? '#9ca3af' : '#374151', fontWeight: 'bold', cursor: currentIndex <= 0 ? 'not-allowed' : 'pointer' }}
+          >
+            ◀ 이전 학생
+          </button>
+          
+          <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#6b7280', minWidth: '60px', textAlign: 'center' }}>
+            {filteredStudents.length > 0 ? `${currentIndex + 1} / ${filteredStudents.length}` : '0 / 0'}
+          </span>
+
+          <button 
+            onClick={handleNextStudent} 
+            disabled={currentIndex === -1 || currentIndex >= filteredStudents.length - 1}
+            style={{ padding: '10px 15px', borderRadius: '8px', border: '1px solid #d1d5db', backgroundColor: currentIndex === -1 || currentIndex >= filteredStudents.length - 1 ? '#f3f4f6' : 'white', color: currentIndex === -1 || currentIndex >= filteredStudents.length - 1 ? '#9ca3af' : '#374151', fontWeight: 'bold', cursor: currentIndex === -1 || currentIndex >= filteredStudents.length - 1 ? 'not-allowed' : 'pointer' }}
+          >
+            다음 학생 ▶
+          </button>
+        </div>
+
       </div>
 
+      {/* 리포트 본문 */}
       <div ref={reportRef} style={{ maxWidth: '1200px', margin: '0 auto', backgroundColor: 'white', border: '1px solid #ccc', padding: '40px', boxShadow: '0 0 10px rgba(0,0,0,0.05)' }}>
         
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '2px solid #222', paddingBottom: '10px', marginBottom: '30px' }}>
@@ -224,12 +307,21 @@ export default function ReportManage() {
             <h1 style={{ margin: 0, fontSize: '24px', fontWeight: '900' }}>Weekly Report</h1>
             <span style={{ fontSize: '15px', color: '#64748b', fontWeight: 'bold' }}>{getWeeklyRange()}</span>
           </div>
+          
+          {/* 💡 저장 버튼 피드백 적용 */}
           <button 
             data-html2canvas-ignore="true"
             onClick={handleDownloadImage}
-            style={{ padding: '10px 20px', backgroundColor: '#fee500', color: '#111', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px' }}
+            disabled={isDownloading || !selectedStudent}
+            style={{ 
+              padding: '10px 20px', 
+              backgroundColor: downloadSuccess ? '#10b981' : '#fee500', 
+              color: downloadSuccess ? 'white' : '#111', 
+              border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px',
+              transition: 'all 0.3s ease'
+            }}
           >
-            📸 카톡 전송용 이미지 저장
+            {isDownloading ? '⏳ 생성 중...' : downloadSuccess ? '✅ 저장 완료!' : '📸 카톡 전송용 이미지 저장'}
           </button>
         </div>
 
@@ -248,7 +340,7 @@ export default function ReportManage() {
           </div>
         </div>
 
-        {/* 2. 이번 주 누적 학습량 & 오답 극복 지표 (위아래 2줄 정렬 반영) */}
+        {/* 2. 이번 주 누적 학습량 & 오답 극복 지표 */}
         <div style={{ marginBottom: '35px' }}>
           <h2 style={{ fontSize: '14px', color: '#555', borderBottom: '1px solid #eee', paddingBottom: '5px' }}>2. Learning Volume & Attitude (학습량 및 태도)</h2>
           <div style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
