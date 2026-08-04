@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { CONFIG } from '../config';
+import { supabase } from '../lib/supabase'; // 💡 수파베이스 연동 추가
 import html2canvas from 'html2canvas';
 import {
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer,
@@ -62,15 +63,30 @@ export default function ReportManage() {
   useEffect(() => {
     const fetchStudents = async () => {
       try {
-        const response = await fetch(CONFIG.WEB_APP_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ type: "getStudents" })
-        });
-        const parsedStudents = await response.json();
-        if (!parsedStudents.error && parsedStudents.length > 0) {
-          setStudents(parsedStudents);
-          setSelectedStudent(parsedStudents[0]);
+        // 💡 수파베이스에서 학생 명단 가져오기로 변경
+        const { data, error } = await supabase
+          .from('students')
+          .select('*')
+          .order('name', { ascending: true });
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          const formattedStudents = data.map(row => ({
+            id: row.student_id,
+            name: row.name || '이름없음',
+            currentBook: row.currentBook || '-',
+            grade: row.grade || '-',
+            progress: ''
+          }));
+          
+          // 테스트용 'body' 계정 필터링
+          const validStudents = formattedStudents.filter(s => !s.name.includes('body'));
+
+          setStudents(validStudents);
+          if (validStudents.length > 0) {
+            setSelectedStudent(validStudents[0]);
+          }
         }
       } catch (error) {
         console.error("학생 명단 로드 실패", error);
@@ -228,7 +244,6 @@ export default function ReportManage() {
               <div style={{ display: 'flex' }}><span style={{ width: '60px', color: '#666', fontWeight: 'bold' }}>이름:</span> <b>{selectedStudent?.name || '-'}</b></div>
               <div style={{ display: 'flex' }}><span style={{ width: '60px', color: '#666', fontWeight: 'bold' }}>과정:</span> <span>{selectedStudent?.grade || '-'}</span></div>
               <div style={{ display: 'flex' }}><span style={{ width: '60px', color: '#666', fontWeight: 'bold' }}>교재:</span> <span>{selectedStudent?.currentBook || '-'}</span></div>
-              {/* 💡 요청하신 '진도' 부분은 삭제했습니다. */}
             </div>
           </div>
         </div>
