@@ -33,10 +33,8 @@ export default function ReportManage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   
-  // 💡 학년 필터링용 State 추가
   const [selectedGrade, setSelectedGrade] = useState<string>('전체');
   
-  // 💡 다운로드 상태 시각화 State
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
 
@@ -75,7 +73,7 @@ export default function ReportManage() {
           .from('students')
           .select('*')
           .order('grade', { ascending: true })
-          .order('name', { ascending: true }); // 💡 학년별, 이름별 정렬 추가
+          .order('name', { ascending: true }); 
 
         if (error) throw error;
 
@@ -102,14 +100,12 @@ export default function ReportManage() {
     fetchStudents();
   }, []);
 
-  // 💡 학년 목록 추출 및 필터링 로직
   const uniqueGrades = ['전체', ...Array.from(new Set(students.map(s => s.grade))).filter(Boolean)];
   
   const filteredStudents = selectedGrade === '전체' 
     ? students 
     : students.filter(s => s.grade === selectedGrade);
 
-  // 학년 필터가 바뀔 때, 해당 학년의 첫 번째 학생을 자동 선택
   useEffect(() => {
     if (filteredStudents.length > 0 && (!selectedStudent || selectedStudent.grade !== selectedGrade) && selectedGrade !== '전체') {
       setSelectedStudent(filteredStudents[0]);
@@ -118,7 +114,6 @@ export default function ReportManage() {
 
   const currentIndex = filteredStudents.findIndex(s => s.id === selectedStudent?.id);
 
-  // 이전/다음 학생 이동 함수
   const handlePrevStudent = () => {
     if (currentIndex > 0) setSelectedStudent(filteredStudents[currentIndex - 1]);
   };
@@ -143,15 +138,19 @@ export default function ReportManage() {
         });
         const stats: StudentStats = await response.json();
         
+        // 💡 [핵심 강화] 랜덤 데이터(Math.random)를 완전히 제거하고 0으로 처리합니다!
         const safeStats = {
-          ...stats,
-          wordCount: stats.wordCount || Math.floor(Math.random() * 50) + 100, 
-          sentenceCount: stats.sentenceCount || Math.floor(Math.random() * 30) + 20, 
-          retestCount: stats.retestCount !== undefined ? stats.retestCount : Math.floor(Math.random() * 5),
-          prevWord: stats.prevWord || Math.max(0, stats.word - (Math.floor(Math.random() * 15) - 5)),
-          prevSentence: stats.prevSentence || Math.max(0, stats.sentence - (Math.floor(Math.random() * 15) - 5)),
-          prevAi: stats.prevAi || Math.max(0, stats.ai - (Math.floor(Math.random() * 15) - 5)),
-          prevGrammar: stats.prevGrammar || Math.max(0, stats.grammar - (Math.floor(Math.random() * 15) - 5)),
+          word: stats.word ?? 0,
+          sentence: stats.sentence ?? 0,
+          ai: stats.ai ?? 0,
+          grammar: stats.grammar ?? 0,
+          retestCount: stats.retestCount ?? 0,
+          wordCount: stats.wordCount ?? 0, 
+          sentenceCount: stats.sentenceCount ?? 0, 
+          prevWord: stats.prevWord ?? 0,
+          prevSentence: stats.prevSentence ?? 0,
+          prevAi: stats.prevAi ?? 0,
+          prevGrammar: stats.prevGrammar ?? 0,
         };
         
         setRealStats(safeStats);
@@ -166,6 +165,18 @@ export default function ReportManage() {
     if (!selectedStudent) return;
     
     const avg = (realStats.word + realStats.sentence + realStats.ai + realStats.grammar) / 4;
+    const totalVolume = (realStats.wordCount || 0) + (realStats.sentenceCount || 0);
+    
+    let autoComment = `${selectedStudent.name} 학생의 이번 주 학습 리포트입니다.\n\n`;
+
+    // 💡 [핵심 강화] 학습량이 전혀 없는(결석한) 주간일 경우의 특별 코멘트 로직
+    if (totalVolume === 0 && avg === 0) {
+      autoComment += `이번 주는 아쉽게도 등원 및 학습 기록이 없습니다. 다음 주에는 건강하고 밝은 모습으로 다시 만나 즐겁게 학습을 이어나갈 수 있기를 바랍니다. 😌\n`;
+      setComment(autoComment);
+      setNextGoal(`🎯 다음 주 목표: 활기찬 모습으로 등원하여 밀린 진도 복구하기`);
+      return; // 결석생은 아래 코멘트 로직을 건너뜁니다.
+    }
+
     const statsArray = [
       { name: '단어', score: realStats.word },
       { name: '문장', score: realStats.sentence },
@@ -177,7 +188,6 @@ export default function ReportManage() {
     const bestSubject = statsArray[0];
     const needsWorkSubject = statsArray[3];
 
-    let autoComment = `${selectedStudent.name} 학생의 이번 주 학습 리포트입니다.\n\n`;
     if (avg >= 90) {
       autoComment += `이번 주도 결석 없이 성실하게 학습을 완료했으며, 전반적인 성취도가 매우 우수합니다! 🌟\n`;
     } else if (avg >= 75) {
@@ -209,6 +219,8 @@ export default function ReportManage() {
   ];
 
   const renderTrendBadge = (current: number, prev: number = 0) => {
+    if (current === 0 && prev === 0) return <span style={{ color: '#64748b', fontSize: '13px', fontWeight: 'bold', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>- 기록 없음</span>;
+    
     const diff = current - prev;
     if (diff > 0) return <span style={{ color: '#16a34a', fontSize: '13px', fontWeight: '900', backgroundColor: '#dcfce7', padding: '2px 6px', borderRadius: '4px' }}>▲ {diff}</span>;
     if (diff < 0) return <span style={{ color: '#ef4444', fontSize: '13px', fontWeight: '900', backgroundColor: '#fee2e2', padding: '2px 6px', borderRadius: '4px' }}>▼ {Math.abs(diff)}</span>;
@@ -226,9 +238,8 @@ export default function ReportManage() {
       link.download = `${selectedStudent.name}_주간성적표.png`; 
       link.click();
       
-      // 저장 성공 시각 피드백
       setDownloadSuccess(true);
-      setTimeout(() => setDownloadSuccess(false), 2000); // 2초 후 원상복구
+      setTimeout(() => setDownloadSuccess(false), 2000); 
 
     } catch (error) {
       console.error("이미지 저장 실패", error);
@@ -241,13 +252,11 @@ export default function ReportManage() {
   return (
     <div style={{ padding: '40px', backgroundColor: '#f4f6f8', minHeight: '100vh', fontFamily: 'Pretendard, sans-serif' }}>
       
-      {/* 💡 상단 컨트롤 패널 강화 */}
       <div style={{ maxWidth: '1200px', margin: '0 auto 20px auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
         
         <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
           <h3 style={{ margin: 0, fontSize: '18px' }}>👩‍🎓 리포트 발송 대상:</h3>
           
-          {/* 학년 선택 */}
           <select 
             value={selectedGrade} 
             onChange={(e) => setSelectedGrade(e.target.value)}
@@ -258,7 +267,6 @@ export default function ReportManage() {
             ))}
           </select>
 
-          {/* 학생 선택 */}
           <select 
             value={selectedStudent?.id || ''} 
             onChange={(e) => setSelectedStudent(filteredStudents.find(s => s.id === e.target.value) || null)}
@@ -274,7 +282,6 @@ export default function ReportManage() {
           </select>
         </div>
 
-        {/* 💡 이전/다음 학생 퀵 네비게이션 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button 
             onClick={handlePrevStudent} 
@@ -299,7 +306,6 @@ export default function ReportManage() {
 
       </div>
 
-      {/* 리포트 본문 */}
       <div ref={reportRef} style={{ maxWidth: '1200px', margin: '0 auto', backgroundColor: 'white', border: '1px solid #ccc', padding: '40px', boxShadow: '0 0 10px rgba(0,0,0,0.05)' }}>
         
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '2px solid #222', paddingBottom: '10px', marginBottom: '30px' }}>
@@ -308,7 +314,6 @@ export default function ReportManage() {
             <span style={{ fontSize: '15px', color: '#64748b', fontWeight: 'bold' }}>{getWeeklyRange()}</span>
           </div>
           
-          {/* 💡 저장 버튼 피드백 적용 */}
           <button 
             data-html2canvas-ignore="true"
             onClick={handleDownloadImage}
@@ -325,7 +330,6 @@ export default function ReportManage() {
           </button>
         </div>
 
-        {/* 1. Student Information */}
         <div style={{ marginBottom: '35px' }}>
           <h2 style={{ fontSize: '14px', color: '#555', borderBottom: '1px solid #eee', paddingBottom: '5px' }}>1. Student Information</h2>
           <div style={{ display: 'flex', gap: '30px', marginTop: '20px' }}>
@@ -340,12 +344,10 @@ export default function ReportManage() {
           </div>
         </div>
 
-        {/* 2. 이번 주 누적 학습량 & 오답 극복 지표 */}
         <div style={{ marginBottom: '35px' }}>
           <h2 style={{ fontSize: '14px', color: '#555', borderBottom: '1px solid #eee', paddingBottom: '5px' }}>2. Learning Volume & Attitude (학습량 및 태도)</h2>
           <div style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
             
-            {/* 단어 마스터 박스 */}
             <div style={{ flex: 1, backgroundColor: '#f0f9ff', padding: '25px 20px', borderRadius: '12px', border: '1px solid #bae6fd', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
               <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#0369a1' }}>📚 단어 마스터</span>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
@@ -353,7 +355,6 @@ export default function ReportManage() {
               </div>
             </div>
 
-            {/* 체화된 문장 박스 */}
             <div style={{ flex: 1, backgroundColor: '#f0fdf4', padding: '25px 20px', borderRadius: '12px', border: '1px solid #bbf7d0', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
               <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#15803d' }}>🗣️ 체화된 문장</span>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
@@ -361,11 +362,12 @@ export default function ReportManage() {
               </div>
             </div>
 
-            {/* 오답 극복 박스 */}
             <div style={{ flex: 1, backgroundColor: '#fff7ed', padding: '25px 20px', borderRadius: '12px', border: '1px solid #fed7aa', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
               <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#c2410c' }}>🔥 오답 극복 (도전)</span>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-                {realStats.retestCount > 0 ? (
+                {realStats.wordCount === 0 && realStats.sentenceCount === 0 ? (
+                  <span style={{ fontSize: '22px', fontWeight: '900', color: '#9ca3af' }}>기록 없음 💤</span>
+                ) : realStats.retestCount > 0 ? (
                   <><span style={{ fontSize: '32px', fontWeight: '900', color: '#ea580c' }}>{realStats.retestCount}</span><span style={{ fontSize: '16px', color: '#c2410c', fontWeight: 'bold' }}>회 성공</span></>
                 ) : (
                   <span style={{ fontSize: '22px', fontWeight: '900', color: '#ea580c' }}>원샷 원킬! 🎯</span>
@@ -376,7 +378,6 @@ export default function ReportManage() {
           </div>
         </div>
 
-        {/* 3. 막대 차트 */}
         <div style={{ marginBottom: '35px' }}>
           <h2 style={{ fontSize: '14px', color: '#555', borderBottom: '1px solid #eee', paddingBottom: '5px' }}>3. Achievement (영역별 성취도)</h2>
           <div style={{ width: '100%', height: '220px', marginTop: '15px' }}>
@@ -392,7 +393,6 @@ export default function ReportManage() {
           </div>
         </div>
 
-        {/* 4. 방사형 차트 + 성장 추세선 */}
         <div style={{ marginBottom: '35px' }}>
           <h2 style={{ fontSize: '14px', color: '#555', borderBottom: '1px solid #eee', paddingBottom: '5px' }}>4. Overall Balance (학습 밸런스 및 성장)</h2>
           <div style={{ display: 'flex', marginTop: '15px', border: '1px solid #ddd', borderRadius: '8px', overflow: 'hidden' }}>
@@ -428,7 +428,6 @@ export default function ReportManage() {
           </div>
         </div>
 
-        {/* 5. Teacher's Comment & Next Goal */}
         <div>
           <h2 style={{ fontSize: '14px', color: '#555', borderBottom: '1px solid #eee', paddingBottom: '5px' }}>5. Teacher's Feedback</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '15px' }}>
