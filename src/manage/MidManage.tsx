@@ -10,7 +10,7 @@ interface Student {
   wordDone: string;       
   verbDone: string;       
   missedDays: string; 
-  missedCount: number; // 💡 결석 일수 카운트 추가
+  missedCount: number; 
 }
 
 export default function MidManage() {
@@ -20,7 +20,6 @@ export default function MidManage() {
   
   const [selectedGrade, setSelectedGrade] = useState<string>('전체');
 
-  // 💡 날짜 필터링 상태 추가
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
   const [editBook, setEditBook] = useState('');
@@ -32,7 +31,6 @@ export default function MidManage() {
   const [manageGrade, setManageGrade] = useState('');
   const [isManaging, setIsManaging] = useState(false);
 
-  // 💡 날짜 이동 및 포맷팅 함수
   const changeDate = (days: number) => {
     const newDate = new Date(selectedDate);
     newDate.setDate(newDate.getDate() + days);
@@ -42,6 +40,17 @@ export default function MidManage() {
   const getFormattedDate = (date: Date) => {
     const kstOffset = 9 * 60 * 60 * 1000;
     return new Date(date.getTime() + kstOffset).toISOString().split('T')[0];
+  };
+
+  // 💡 [핵심 버그 수정] 수파베이스의 UTC 시간 표기를 무시하고 한국 시간 검색용 텍스트를 생성하는 함수
+  const getFakeUTCString = (date: Date) => {
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const hh = String(date.getHours()).padStart(2, '0');
+    const mi = String(date.getMinutes()).padStart(2, '0');
+    const ss = String(date.getSeconds()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}+00:00`;
   };
 
   const isToday = getFormattedDate(selectedDate) === getFormattedDate(new Date());
@@ -58,15 +67,12 @@ export default function MidManage() {
 
       if (studentError) throw studentError;
 
-      // 💡 선택한 날짜 기준 자정 및 끝나는 시간 구하기 (KST 기준)
-      const kstOffset = 9 * 60 * 60 * 1000;
-      const kstSelectedDate = new Date(selectedDate.getTime() + kstOffset);
-      const kstDateStr = kstSelectedDate.toISOString().split('T')[0]; 
+      const startOfSelectedDay = new Date(selectedDate);
+      startOfSelectedDay.setHours(0, 0, 0, 0);
       
-      const startOfSelectedDayUTC = new Date(`${kstDateStr}T00:00:00+09:00`).getTime();
-      const endOfSelectedDayUTC = new Date(`${kstDateStr}T23:59:59.999+09:00`).getTime();
+      const endOfSelectedDay = new Date(selectedDate);
+      endOfSelectedDay.setHours(23, 59, 59, 999);
 
-      // 💡 선택된 날짜 이전 5일(평일) 구하기 (과거 시점에서도 정확한 결석 추적 가능)
       const pastWeekdays: Date[] = [];
       let tempDate = new Date(selectedDate);
       tempDate.setDate(tempDate.getDate() - 1); 
@@ -79,14 +85,18 @@ export default function MidManage() {
         tempDate.setDate(tempDate.getDate() - 1);
       }
       
-      const oldestDateStr = getFormattedDate(pastWeekdays[pastWeekdays.length - 1]);
-      const oldestDateUTC = new Date(`${oldestDateStr}T00:00:00+09:00`).toISOString();
+      const oldestDate = new Date(pastWeekdays[pastWeekdays.length - 1]);
+      oldestDate.setHours(0, 0, 0, 0);
+
+      // 💡 9시간 밀림 현상 방어를 위해 자체 조작된 검색 기간 적용
+      const gteString = getFakeUTCString(oldestDate);
+      const lteString = getFakeUTCString(endOfSelectedDay);
 
       const { data: logsData, error: logError } = await supabase
         .from('learning_logs')
         .select('student_id, task_type, status, book_info, created_at')
-        .gte('created_at', oldestDateUTC) // 가장 오래된 5일 전 평일부터 데이터 가져오기
-        .lte('created_at', new Date(endOfSelectedDayUTC).toISOString()) // 선택된 날짜까지만!
+        .gte('created_at', gteString) 
+        .lte('created_at', lteString) 
         .eq('status', '완료');
 
       if (logError) throw logError;
@@ -95,22 +105,26 @@ export default function MidManage() {
       const completedDaysMap = new Map<string, Set<string>>();
 
       (logsData || []).forEach(log => {
-        const logTime = new Date(log.created_at); 
+        // 💡 [핵심 버그 수정] DB에 KST 시간이 UTC로 잘못 저장되어 있는 현상 완벽 방어!
+        // Z(UTC표기)를 떼어내고, 문자열 자체를 강제로 한국 시간(로컬)으로 덮어씌워서 해석합니다.
+        const localTimeString = log.created_at.substring(0, 19); 
+        const [yyyy, mm, dd] = localTimeString.split('T')[0].split('-').map(Number);
+        const [hh, mi, ss] = localTimeString.split('T')[1].split(':').map(Number);
+        
+        // 이렇게 생성된 logTime은 완벽하게 한국 시간 기준이 됩니다.
+        const logTime = new Date(yyyy, mm - 1, dd, hh, mi, ss); 
         const logTimestamp = logTime.getTime();
         
-        const kstLogTime = new Date(logTimestamp + kstOffset);
-        const dateStr = kstLogTime.toISOString().split('T')[0];
-
-        const isLogOnSelectedDay = logTimestamp >= startOfSelectedDayUTC && logTimestamp <= endOfSelectedDayUTC;
+        const isLogOnSelectedDay = logTimestamp >= startOfSelectedDay.getTime() && logTimestamp <= endOfSelectedDay.getTime();
 
         if (isLogOnSelectedDay) {
           if (!selectedDayDoneMap.has(log.student_id)) selectedDayDoneMap.set(log.student_id, { word: '', verb: '' });
           const record = selectedDayDoneMap.get(log.student_id)!;
 
           if (log.task_type.includes('단어') || log.task_type.includes('워드타파')) {
-            const hours = String(kstLogTime.getUTCHours()).padStart(2, '0');
-            const minutes = String(kstLogTime.getUTCMinutes()).padStart(2, '0');
-            const timeStr = `${kstLogTime.getUTCMonth() + 1}/${kstLogTime.getUTCDate()} ${hours}:${minutes}`;
+            const hours = String(logTime.getHours()).padStart(2, '0');
+            const minutes = String(logTime.getMinutes()).padStart(2, '0');
+            const timeStr = `${logTime.getMonth() + 1}/${logTime.getDate()} ${hours}:${minutes}`;
             record.word = `✅ 단어(${timeStr})`;
           }
           if (log.task_type.includes('동사')) {
@@ -121,6 +135,8 @@ export default function MidManage() {
         if (!completedDaysMap.has(log.student_id)) {
           completedDaysMap.set(log.student_id, new Set());
         }
+        
+        const dateStr = getFormattedDate(logTime);
         completedDaysMap.get(log.student_id)!.add(dateStr);
       });
 
@@ -147,7 +163,7 @@ export default function MidManage() {
           wordDone: doneStatus.word,
           verbDone: doneStatus.verb,
           missedDays: missedDates.length > 0 ? missedDates.join(', ') : '',
-          missedCount: missedDates.length // 💡 결석 횟수 저장
+          missedCount: missedDates.length 
         };
       });
 
@@ -160,7 +176,6 @@ export default function MidManage() {
     }
   };
 
-  // 💡 선택된 날짜가 바뀔 때마다 데이터를 새로 로드합니다.
   useEffect(() => {
     fetchMiddleLMSData();
   }, [selectedDate]);
@@ -289,7 +304,6 @@ export default function MidManage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#1f2937', margin: 0 }}>🦅 중등부 관제탑</h2>
           
-          {/* 💡 날짜 이동 컨트롤러 추가 */}
           <div style={{ display: 'flex', alignItems: 'center', backgroundColor: '#f3f4f6', borderRadius: '8px', padding: '4px', border: '1px solid #e5e7eb' }}>
             <button onClick={() => changeDate(-1)} style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', padding: '4px 8px', fontSize: '14px', color: '#4b5563', fontWeight: 'bold' }}>◀</button>
             <span style={{ fontSize: '14px', fontWeight: '900', color: isToday ? '#2563eb' : '#374151', padding: '0 8px', minWidth: '110px', textAlign: 'center' }}>
@@ -347,7 +361,6 @@ export default function MidManage() {
               <th style={{ border: '1px solid #cbd5e1', padding: '10px 4px', textAlign: 'center', whiteSpace: 'nowrap', width: '4%' }}>번호</th>
               <th style={{ border: '1px solid #cbd5e1', padding: '10px 4px', textAlign: 'center', whiteSpace: 'nowrap', width: '5%' }}>학년</th>
               <th style={{ border: '1px solid #cbd5e1', padding: '10px 4px', textAlign: 'center', whiteSpace: 'nowrap', width: '8%' }}>이름</th>
-              {/* 💡 헤더 텍스트 동적 반영 */}
               <th style={{ border: '1px solid #cbd5e1', padding: '10px 4px', textAlign: 'center', whiteSpace: 'nowrap', width: '32%' }}>{getFormattedDate(selectedDate)} 학습 현황</th>
               <th style={{ border: '1px solid #cbd5e1', padding: '10px 4px', textAlign: 'center', whiteSpace: 'nowrap', width: '16%' }}>최근 5일 결석(미수행)</th>
               <th style={{ border: '1px solid #cbd5e1', padding: '10px 4px', textAlign: 'center', whiteSpace: 'nowrap', width: '27%' }}>학습 진도 설정</th>
@@ -389,7 +402,6 @@ export default function MidManage() {
                     {student.missedDays ? (
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                         <span style={{ color: '#ef4444' }}>{student.missedDays}</span>
-                        {/* 💡 3일 이상 결석 시 경고 배지 표시 */}
                         {student.missedCount >= 3 && (
                           <span style={{ fontSize: '11px', backgroundColor: '#fee2e2', color: '#b91c1c', padding: '2px 6px', borderRadius: '4px' }}>🚨 집중 관리 필요</span>
                         )}
@@ -451,7 +463,6 @@ export default function MidManage() {
         </table>
       </div>
 
-      {/* 모달 유지 */}
       {manageStudent && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 50 }}>
           <div style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', padding: '24px', borderRadius: '16px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', width: '24rem', position: 'relative', margin: '0 16px' }}>
