@@ -10,6 +10,7 @@ interface Student {
   wordDone: string;       
   verbDone: string;       
   missedDays: string; 
+  missedCount: number; // 💡 결석 일수 카운트 추가
 }
 
 export default function MidManage() {
@@ -19,6 +20,9 @@ export default function MidManage() {
   
   const [selectedGrade, setSelectedGrade] = useState<string>('전체');
 
+  // 💡 날짜 필터링 상태 추가
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+
   const [editBook, setEditBook] = useState('');
   const [editProgress, setEditProgress] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -27,6 +31,20 @@ export default function MidManage() {
   const [manageName, setManageName] = useState('');
   const [manageGrade, setManageGrade] = useState('');
   const [isManaging, setIsManaging] = useState(false);
+
+  // 💡 날짜 이동 및 포맷팅 함수
+  const changeDate = (days: number) => {
+    const newDate = new Date(selectedDate);
+    newDate.setDate(newDate.getDate() + days);
+    setSelectedDate(newDate);
+  };
+
+  const getFormattedDate = (date: Date) => {
+    const kstOffset = 9 * 60 * 60 * 1000;
+    return new Date(date.getTime() + kstOffset).toISOString().split('T')[0];
+  };
+
+  const isToday = getFormattedDate(selectedDate) === getFormattedDate(new Date());
 
   const fetchMiddleLMSData = async () => {
     try {
@@ -40,16 +58,19 @@ export default function MidManage() {
 
       if (studentError) throw studentError;
 
-      // 💡 오늘 자정(KST 기준) 구하기
-      const today = new Date();
-      today.setHours(0, 0, 0, 0); 
-      const startOfToday = today.toISOString();
+      // 💡 선택한 날짜 기준 자정 및 끝나는 시간 구하기 (KST 기준)
+      const kstOffset = 9 * 60 * 60 * 1000;
+      const kstSelectedDate = new Date(selectedDate.getTime() + kstOffset);
+      const kstDateStr = kstSelectedDate.toISOString().split('T')[0]; 
+      
+      const startOfSelectedDayUTC = new Date(`${kstDateStr}T00:00:00+09:00`).getTime();
+      const endOfSelectedDayUTC = new Date(`${kstDateStr}T23:59:59.999+09:00`).getTime();
 
+      // 💡 선택된 날짜 이전 5일(평일) 구하기 (과거 시점에서도 정확한 결석 추적 가능)
       const pastWeekdays: Date[] = [];
-      let tempDate = new Date(today);
+      let tempDate = new Date(selectedDate);
       tempDate.setDate(tempDate.getDate() - 1); 
 
-      // 주말 제외 5일 평일 구하기
       while (pastWeekdays.length < 5) {
         const dayOfWeek = tempDate.getDay();
         if (dayOfWeek !== 0 && dayOfWeek !== 6) { 
@@ -57,38 +78,39 @@ export default function MidManage() {
         }
         tempDate.setDate(tempDate.getDate() - 1);
       }
-      const oldestDate = pastWeekdays[pastWeekdays.length - 1].toISOString();
+      
+      const oldestDateStr = getFormattedDate(pastWeekdays[pastWeekdays.length - 1]);
+      const oldestDateUTC = new Date(`${oldestDateStr}T00:00:00+09:00`).toISOString();
 
       const { data: logsData, error: logError } = await supabase
         .from('learning_logs')
         .select('student_id, task_type, status, book_info, created_at')
-        .gte('created_at', oldestDate) 
+        .gte('created_at', oldestDateUTC) // 가장 오래된 5일 전 평일부터 데이터 가져오기
+        .lte('created_at', new Date(endOfSelectedDayUTC).toISOString()) // 선택된 날짜까지만!
         .eq('status', '완료');
 
       if (logError) throw logError;
 
-      const todayDoneMap = new Map<string, { word: string; verb: string }>();
+      const selectedDayDoneMap = new Map<string, { word: string; verb: string }>();
       const completedDaysMap = new Map<string, Set<string>>();
 
       (logsData || []).forEach(log => {
-        // 💡 [버그 해결] 브라우저가 자동으로 KST 로 바꿔주므로 +9시간 중복 더하기 제거!
         const logTime = new Date(log.created_at); 
+        const logTimestamp = logTime.getTime();
         
-        const yyyy = logTime.getFullYear();
-        const mm = String(logTime.getMonth() + 1).padStart(2, '0');
-        const dd = String(logTime.getDate()).padStart(2, '0');
-        const dateStr = `${yyyy}-${mm}-${dd}`; 
+        const kstLogTime = new Date(logTimestamp + kstOffset);
+        const dateStr = kstLogTime.toISOString().split('T')[0];
 
-        const isToday = logTime.getTime() >= today.getTime();
+        const isLogOnSelectedDay = logTimestamp >= startOfSelectedDayUTC && logTimestamp <= endOfSelectedDayUTC;
 
-        if (isToday) {
-          if (!todayDoneMap.has(log.student_id)) todayDoneMap.set(log.student_id, { word: '', verb: '' });
-          const record = todayDoneMap.get(log.student_id)!;
+        if (isLogOnSelectedDay) {
+          if (!selectedDayDoneMap.has(log.student_id)) selectedDayDoneMap.set(log.student_id, { word: '', verb: '' });
+          const record = selectedDayDoneMap.get(log.student_id)!;
 
           if (log.task_type.includes('단어') || log.task_type.includes('워드타파')) {
-            const hours = String(logTime.getHours()).padStart(2, '0');
-            const minutes = String(logTime.getMinutes()).padStart(2, '0');
-            const timeStr = `${logTime.getMonth() + 1}/${logTime.getDate()} ${hours}:${minutes}`;
+            const hours = String(kstLogTime.getUTCHours()).padStart(2, '0');
+            const minutes = String(kstLogTime.getUTCMinutes()).padStart(2, '0');
+            const timeStr = `${kstLogTime.getUTCMonth() + 1}/${kstLogTime.getUTCDate()} ${hours}:${minutes}`;
             record.word = `✅ 단어(${timeStr})`;
           }
           if (log.task_type.includes('동사')) {
@@ -103,17 +125,13 @@ export default function MidManage() {
       });
 
       const midStudents: Student[] = (studentsData || []).map(row => {
-        const doneStatus = todayDoneMap.get(row.student_id) || { word: '', verb: '' };
+        const doneStatus = selectedDayDoneMap.get(row.student_id) || { word: '', verb: '' };
         
         const studentCompleted = completedDaysMap.get(row.student_id) || new Set();
         const missedDates: string[] = [];
         
         pastWeekdays.forEach(pwd => {
-          const yyyy = pwd.getFullYear();
-          const mm = String(pwd.getMonth() + 1).padStart(2, '0');
-          const dd = String(pwd.getDate()).padStart(2, '0');
-          const pwdStr = `${yyyy}-${mm}-${dd}`;
-          
+          const pwdStr = getFormattedDate(pwd);
           if (!studentCompleted.has(pwdStr)) {
             missedDates.push(`${pwd.getMonth() + 1}/${pwd.getDate()}`);
           }
@@ -128,7 +146,8 @@ export default function MidManage() {
           grade: row.grade || '중1',
           wordDone: doneStatus.word,
           verbDone: doneStatus.verb,
-          missedDays: missedDates.length > 0 ? missedDates.join(', ') : ''
+          missedDays: missedDates.length > 0 ? missedDates.join(', ') : '',
+          missedCount: missedDates.length // 💡 결석 횟수 저장
         };
       });
 
@@ -141,9 +160,10 @@ export default function MidManage() {
     }
   };
 
+  // 💡 선택된 날짜가 바뀔 때마다 데이터를 새로 로드합니다.
   useEffect(() => {
     fetchMiddleLMSData();
-  }, []);
+  }, [selectedDate]);
 
   const handleSelectStudent = (student: Student) => {
     if (selectedStudent?.id === student.id) {
@@ -263,12 +283,21 @@ export default function MidManage() {
   const uniqueGrades = ['전체', '중1', '중2', '중3'];
 
   return (
-    // 💡 화면 넓히기 마법: width: 95vw 와 marginLeft 를 사용하여 부모 레이아웃 무시하고 확장
     <div style={{ backgroundColor: 'white', color: '#1f2937', padding: '24px', borderRadius: '12px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', width: '95vw', marginLeft: 'calc(-47.5vw + 50%)', boxSizing: 'border-box', fontFamily: 'Pretendard, sans-serif' }}>
       
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#1f2937', margin: 0 }}>🦅 중등부 관제탑</h2>
+          
+          {/* 💡 날짜 이동 컨트롤러 추가 */}
+          <div style={{ display: 'flex', alignItems: 'center', backgroundColor: '#f3f4f6', borderRadius: '8px', padding: '4px', border: '1px solid #e5e7eb' }}>
+            <button onClick={() => changeDate(-1)} style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', padding: '4px 8px', fontSize: '14px', color: '#4b5563', fontWeight: 'bold' }}>◀</button>
+            <span style={{ fontSize: '14px', fontWeight: '900', color: isToday ? '#2563eb' : '#374151', padding: '0 8px', minWidth: '110px', textAlign: 'center' }}>
+              {getFormattedDate(selectedDate)} {isToday && '(오늘)'}
+            </span>
+            <button onClick={() => changeDate(1)} disabled={isToday} style={{ border: 'none', backgroundColor: 'transparent', cursor: isToday ? 'not-allowed' : 'pointer', padding: '4px 8px', fontSize: '14px', color: isToday ? '#d1d5db' : '#4b5563', fontWeight: 'bold' }}>▶</button>
+          </div>
+
           <button 
             onClick={fetchMiddleLMSData} 
             style={{ 
@@ -318,8 +347,9 @@ export default function MidManage() {
               <th style={{ border: '1px solid #cbd5e1', padding: '10px 4px', textAlign: 'center', whiteSpace: 'nowrap', width: '4%' }}>번호</th>
               <th style={{ border: '1px solid #cbd5e1', padding: '10px 4px', textAlign: 'center', whiteSpace: 'nowrap', width: '5%' }}>학년</th>
               <th style={{ border: '1px solid #cbd5e1', padding: '10px 4px', textAlign: 'center', whiteSpace: 'nowrap', width: '8%' }}>이름</th>
-              <th style={{ border: '1px solid #cbd5e1', padding: '10px 4px', textAlign: 'center', whiteSpace: 'nowrap', width: '32%' }}>오늘 학습 현황</th>
-              <th style={{ border: '1px solid #cbd5e1', padding: '10px 4px', textAlign: 'center', whiteSpace: 'nowrap', width: '16%' }}>최근 결석 (평일)</th>
+              {/* 💡 헤더 텍스트 동적 반영 */}
+              <th style={{ border: '1px solid #cbd5e1', padding: '10px 4px', textAlign: 'center', whiteSpace: 'nowrap', width: '32%' }}>{getFormattedDate(selectedDate)} 학습 현황</th>
+              <th style={{ border: '1px solid #cbd5e1', padding: '10px 4px', textAlign: 'center', whiteSpace: 'nowrap', width: '16%' }}>최근 5일 결석(미수행)</th>
               <th style={{ border: '1px solid #cbd5e1', padding: '10px 4px', textAlign: 'center', whiteSpace: 'nowrap', width: '27%' }}>학습 진도 설정</th>
               <th style={{ border: '1px solid #cbd5e1', padding: '10px 4px', textAlign: 'center', whiteSpace: 'nowrap', width: '8%' }}>액션</th>
             </tr>
@@ -357,7 +387,13 @@ export default function MidManage() {
 
                   <td style={{ border: '1px solid #e2e8f0', padding: '8px 4px', textAlign: 'center', fontWeight: 'bold', fontSize: '13px' }}>
                     {student.missedDays ? (
-                      <span style={{ color: '#ef4444' }}>{student.missedDays}</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ color: '#ef4444' }}>{student.missedDays}</span>
+                        {/* 💡 3일 이상 결석 시 경고 배지 표시 */}
+                        {student.missedCount >= 3 && (
+                          <span style={{ fontSize: '11px', backgroundColor: '#fee2e2', color: '#b91c1c', padding: '2px 6px', borderRadius: '4px' }}>🚨 집중 관리 필요</span>
+                        )}
+                      </div>
                     ) : (
                       <span style={{ color: '#10b981' }}>-</span>
                     )}
