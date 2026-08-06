@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 
-// 제미나이가 생성해 줄 문제의 완벽한 규격
 interface Question {
   kor: string;
   eng: string;
@@ -17,30 +16,26 @@ interface MidGrammarProps {
 }
 
 export default function MidGrammar({ student, onBack }: MidGrammarProps) {
-  // 🎯 화면 상태 관리
   const [appPhase, setAppPhase] = useState<'SETUP' | 'LOADING' | 'QUIZ' | 'RESULT'>('SETUP');
   
-  // 🎯 설정 상태
   const [topic, setTopic] = useState("");
   const [qCount, setQCount] = useState<number>(5);
   const [level, setLevel] = useState<'초급' | '중급' | '고급' | '심화'>('초급');
 
-  // 🎯 학습 상태
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [blankInputs, setBlankInputs] = useState<string[]>([]);
   const [fullInput, setFullInput] = useState("");
   
-  // 🎯 피드백 및 데이터화 상태
   const [feedback, setFeedback] = useState("");
-  const [feedbackStatus, setFeedbackStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [feedbackStatus, setFeedbackStatus] = useState<'idle' | 'success' | 'error' | 'analyzing'>('idle');
   const [isErrorState, setIsErrorState] = useState(false);
   const [wrongCounts, setWrongCounts] = useState<number[]>([]);
+  
+  // 💡 실시간 맞춤형 오답 해설을 저장할 State 추가
+  const [dynamicExplanation, setDynamicExplanation] = useState<string>("");
 
-  // --------------------------------------------------------
-  // 💡 1. 제미나이(Gemini) API 문제 생성 요청 (gemini-pro 적용 완료 ✅)
-  // --------------------------------------------------------
   const handleGenerate = async () => {
     if (!topic.trim()) {
       alert("풀고 싶은 문법 개념을 입력해 주세요! (예: 현재분사, 5형식)");
@@ -50,38 +45,37 @@ export default function MidGrammar({ student, onBack }: MidGrammarProps) {
     setAppPhase('LOADING');
 
     try {
-      // 1. 공백 제거(.trim())를 추가하여 API 키 오류 원천 차단
       const rawApiKey = import.meta.env.VITE_GEMINI_API_KEY;
       const API_KEY = rawApiKey ? rawApiKey.trim() : "";
       
       if (!API_KEY) {
-        alert("API 키를 찾을 수 없습니다. Vercel 환경 변수를 확인해 주세요.");
+        alert("API 키를 찾을 수 없습니다.");
         setAppPhase('SETUP');
         return;
       }
 
-      // 2. 모델명을 가장 안정적인 gemini-pro로 변경
-      const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=" + API_KEY;
+      // 💡 빠르고 똑똑한 1.5-flash 모델 적용
+      const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + API_KEY;
 
       const systemPrompt = `너는 중학교 영어 선생님이야.
       사용자가 요청하는 주제, 난이도, 문제 개수에 맞춰서 영어 문법 문제를 만들어줘.
       
       🚨 [매우 중요한 출제 규칙 - 반드시 지킬 것!] 🚨
-      1. 다양성: 매번 똑같은 문제가 나오지 않도록 항상 완전히 새로운 문장과 단어를 사용할 것.
-      2. 누락 금지: 빈칸 문제(step1_q, step2_q)를 만들 때 원래 문장(eng)에 있던 단어를 절대 마음대로 삭제하거나 누락시키지 말 것! 빈칸(_____)으로 가려진 단어 외의 나머지 단어들은 문장 속에 반드시 그대로 남아있어야 해.
+      1. 다양성과 흥미: 중학생들이 공감할 수 있는 '학교생활, 게임, 아이돌 팬덤, 유튜브, 친구 관계' 등의 재미있는 상황을 배경으로 문장을 만들어줘!
+      2. 누락 금지: 빈칸 문제(step1_q, step2_q)를 만들 때 원래 문장(eng)에 있던 단어를 절대 마음대로 삭제하거나 누락시키지 말 것.
       3. 정답 일치: 빈칸(_____)의 개수와 쉼표로 구분된 정답(step2_a)의 개수는 무조건 정확히 일치해야 해.
       
-      반드시 아래의 JSON 배열 형식으로만 대답해. 마크다운 기호(\`\`\`json 등) 없이 오직 순수한 JSON 배열만 출력할 것.
+      반드시 아래의 JSON 배열 형식으로만 대답해. 마크다운 기호 없이 오직 순수한 JSON 배열만 출력할 것.
       
       [
         {
-          "kor": "나는 TV를 보면서 피자를 먹었다.",
-          "eng": "I ate pizza watching TV.",
-          "explanation": "동시동작을 나타내는 분사구문입니다. watch에 ing를 붙여 현재분사로 만듭니다.",
-          "step1_q": "I ate pizza _____ TV.",
-          "step1_a": "watching",
-          "step2_q": "I ate _____ _____ TV.",
-          "step2_a": "pizza, watching"
+          "kor": "나는 새로 나온 게임을 하면서 피자를 먹었다.",
+          "eng": "I ate pizza playing the new game.",
+          "explanation": "동시동작 분사구문 기본 해설 (오답 시에는 실시간 맞춤 해설이 제공됨)",
+          "step1_q": "I ate pizza _____ the new game.",
+          "step1_a": "playing",
+          "step2_q": "I ate _____ _____ the new game.",
+          "step2_a": "pizza, playing"
         }
       ]
       
@@ -97,28 +91,22 @@ export default function MidGrammar({ student, onBack }: MidGrammarProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: systemPrompt }] }],
-          generationConfig: { 
-            temperature: 0.9 // 🔥 이 숫자가 높을수록 매번 다르고 창의적인 문제가 나옵니다! (기본값 보통 0.2~0.4)
-          }
+          generationConfig: { temperature: 0.8 }
         })
       });
 
-      // 🚨 3. 404 등 에러 발생 시 여기서 멈추고 진짜 이유를 잡아냅니다.
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error("구글 API 에러 원본:", errorData);
-        throw new Error(`Google API 오류 (${response.status}): ${errorData.error?.message || '주소나 키가 잘못되었습니다.'}`);
+        throw new Error(`Google API 오류 (${response.status})`);
       }
 
       const data = await response.json();
       
-      // 데이터가 텅 비어서 오는 경우 방어
       if (!data.candidates || data.candidates.length === 0) {
         throw new Error("제미나이가 응답을 생성하지 못했습니다.");
       }
       
-      // 4. 제미나이 응답 처리
-      const generatedText = data.candidates[0].content.parts[0].text;
+      let generatedText = data.candidates[0].content.parts[0].text;
+      generatedText = generatedText.replace(/```json/g, '').replace(/```/g, '').trim();
       const parsedQuestions = JSON.parse(generatedText);
       
       setQuestions(parsedQuestions);
@@ -128,16 +116,12 @@ export default function MidGrammar({ student, onBack }: MidGrammarProps) {
       setAppPhase('QUIZ');
 
     } catch (error: any) {
-      console.error("AI 문제 생성 실패 상세 로그:", error);
-      // 알림창에 진짜 에러 원인을 띄워줍니다.
+      console.error("AI 문제 생성 실패:", error);
       alert(`문제 생성 실패!\n이유: ${error.message}`);
       setAppPhase('SETUP');
     }
   };
 
-  // --------------------------------------------------------
-  // 💡 2. 데이터베이스 전송 (학습 종료 시)
-  // --------------------------------------------------------
   const finishStudy = () => {
     const totalWrongs = wrongCounts.reduce((a, b) => a + b, 0);
     const score = Math.max(0, 100 - (totalWrongs * 5));
@@ -158,80 +142,120 @@ export default function MidGrammar({ student, onBack }: MidGrammarProps) {
     setAppPhase('RESULT');
   };
 
-  // --------------------------------------------------------
-  // 💡 3. 학습 및 채점 로직
-  // --------------------------------------------------------
   useEffect(() => {
     setFeedback("");
     setFeedbackStatus('idle');
     setIsErrorState(false);
+    setDynamicExplanation("");
     setBlankInputs([]);
     setFullInput("");
   }, [currentIndex, currentStep]);
 
-  const handleIncorrect = () => {
-    setFeedbackStatus('error');
+  // 💡 [핵심 기능] 실시간 맞춤형 오답 분석 API 호출 함수
+  const fetchDynamicFeedback = async (wrongInput: string, correctAnswer: string) => {
+    setFeedbackStatus('analyzing');
+    setFeedback("어디가 틀렸는지 AI 선생님이 꼼꼼하게 분석 중입니다... 🧐");
+    setDynamicExplanation("");
+    
+    try {
+      const API_KEY = import.meta.env.VITE_GEMINI_API_KEY?.trim();
+      const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + API_KEY;
+
+      const prompt = `너는 친절한 중학교 영어 선생님이야. 학생이 문법 문제를 틀렸어.
+      - 원래 목표 문장: "${questions[currentIndex].eng}"
+      - 정답: "${correctAnswer}"
+      - 학생이 제출한 오답: "${wrongInput}"
+
+      이 학생이 왜 이런 오답을 적었는지 문법적 원인을 분석하고, 어떻게 고쳐야 하는지 중학생 눈높이에 맞춰서 2~3줄로 따뜻하고 친절하게 설명해 줘. 정답만 툭 던지지 말고 이해할 수 있게 도와줘.`;
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.7 } })
+      });
+
+      const data = await response.json();
+      const aiExplanation = data.candidates[0].content.parts[0].text;
+      
+      setDynamicExplanation(aiExplanation);
+      setFeedbackStatus('error');
+      setFeedback("앗, 오답입니다! AI 선생님의 1:1 맞춤 피드백을 확인해 보세요. 👇");
+
+    } catch (error) {
+      // API 호출 실패 시 기존 고정 해설 표시
+      setDynamicExplanation(questions[currentIndex].explanation);
+      setFeedbackStatus('error');
+      setFeedback("앗, 오답입니다! 해설을 참고해서 다시 도전해 보세요.");
+    }
+  };
+
+  const handleIncorrect = (wrongInput: string, correctAnswer: string) => {
     setIsErrorState(true);
     
-    // 오답 횟수 증가
     const newWrongCounts = [...wrongCounts];
     newWrongCounts[currentIndex] += 1;
     setWrongCounts(newWrongCounts);
 
-    setFeedback("앗, 오답입니다! 다시 한번 생각해 보세요. 🤔");
+    // 실시간 피드백 요청
+    fetchDynamicFeedback(wrongInput, correctAnswer);
   };
 
   const handleSubmit = () => {
     const question = questions[currentIndex];
 
-    // 잠긴 상태에서 누르면 잠금 해제 (다시 풀기)
     if (isErrorState) {
       setIsErrorState(false);
       setFeedbackStatus('idle');
       setFeedback("");
+      setDynamicExplanation("");
       return;
     }
 
     if (currentStep === 1) {
-      const isCorrect = blankInputs[0]?.trim().toLowerCase() === question.step1_a?.trim().toLowerCase();
+      const userAnswer = blankInputs[0]?.trim();
+      const isCorrect = userAnswer?.toLowerCase() === question.step1_a?.trim().toLowerCase();
       if (isCorrect) {
-        setFeedback("좋아요! 다음 단계로 넘어갑니다.");
+        setFeedback("좋아요! 핵심 형태를 정확히 짚어냈어요. 👍");
         setFeedbackStatus('success');
-        setTimeout(() => setCurrentStep(2), 1000);
-      } else handleIncorrect();
+        setTimeout(() => setCurrentStep(2), 1200);
+      } else {
+        handleIncorrect(userAnswer || "(빈칸 제출)", question.step1_a);
+      }
 
     } else if (currentStep === 2) {
       const answers = question.step2_a?.split(',').map(a => a.trim().toLowerCase()) || [];
+      const userAnswerStr = blankInputs.join(', ');
       const isAllCorrect = blankInputs.every((input, i) => input?.trim().toLowerCase() === answers[i]);
+      
       if (isAllCorrect && blankInputs.length === answers.length) {
-        setFeedback("완벽해요! 이제 문장 전체를 써보세요.");
+        setFeedback("완벽해요! 문장 구조가 머릿속에 잡혔군요. ✨");
         setFeedbackStatus('success');
         setTimeout(() => setCurrentStep(3), 1200);
-      } else handleIncorrect();
+      } else {
+        handleIncorrect(userAnswerStr || "(일부 빈칸 제출)", question.step2_a);
+      }
 
     } else if (currentStep === 3) {
       const cleanEng = question.eng.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
       const cleanInput = fullInput.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+      
       if (cleanEng === cleanInput) {
-        setFeedback("정답입니다! 🚀");
+        setFeedback("정답입니다! 완벽하게 영작해냈어요! 🚀");
         setFeedbackStatus('success');
         setTimeout(() => {
           if (currentIndex + 1 >= questions.length) {
-            finishStudy(); // 마지막 문제면 완료 처리
+            finishStudy(); 
           } else {
             setCurrentIndex(prev => prev + 1);
             setCurrentStep(1);
           }
         }, 1500);
-      } else handleIncorrect();
+      } else {
+        handleIncorrect(fullInput || "(빈 문장 제출)", question.eng);
+      }
     }
   };
 
-  // --------------------------------------------------------
-  // 📺 화면 렌더링
-  // --------------------------------------------------------
-
-  // 1. 빈칸 렌더링 함수
   const renderQuestionWithBlanks = (qString?: string) => {
     if (!qString) return null;
     const parts = qString.split('_____');
@@ -244,14 +268,14 @@ export default function MidGrammar({ student, onBack }: MidGrammarProps) {
               <input
                 type="text"
                 value={blankInputs[index] || ""}
-                disabled={isErrorState || feedbackStatus === 'success'}
+                disabled={isErrorState || feedbackStatus === 'success' || feedbackStatus === 'analyzing'}
                 onChange={(e) => {
                   const newInputs = [...blankInputs];
                   newInputs[index] = e.target.value;
                   setBlankInputs(newInputs);
                 }}
                 style={{ width: '100px', border: 'none', borderBottom: `3px solid ${isErrorState ? '#ff3b30' : '#007aff'}`, backgroundColor: isErrorState ? '#ffeceb' : '#f0f8ff', color: '#007aff', fontWeight: '800', fontSize: '20px', textAlign: 'center', outline: 'none', padding: '4px 8px', borderRadius: '6px 6px 0 0', opacity: isErrorState ? 0.7 : 1 }}
-                autoFocus={index === 0 && !isErrorState}
+                autoFocus={index === 0 && !isErrorState && feedbackStatus !== 'analyzing'}
                 onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
               />
             )}
@@ -261,7 +285,6 @@ export default function MidGrammar({ student, onBack }: MidGrammarProps) {
     );
   };
 
-  // 화면 분기 처리
   if (appPhase === 'SETUP') {
     return (
       <div style={{ backgroundColor: '#f9f9f9', minHeight: '100vh', padding: '20px', fontFamily: 'Pretendard, sans-serif', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -331,7 +354,6 @@ export default function MidGrammar({ student, onBack }: MidGrammarProps) {
     );
   }
 
-  // QUIZ 화면 렌더링
   const question = questions[currentIndex];
   if (!question) return null;
 
@@ -362,33 +384,37 @@ export default function MidGrammar({ student, onBack }: MidGrammarProps) {
             {currentStep === 2 && renderQuestionWithBlanks(question.step2_q)}
             {currentStep === 3 && (
               <input
-                type="text" value={fullInput} disabled={isErrorState || feedbackStatus === 'success'}
+                type="text" value={fullInput} disabled={isErrorState || feedbackStatus === 'success' || feedbackStatus === 'analyzing'}
                 onChange={(e) => setFullInput(e.target.value)}
                 placeholder="전체 영어 문장을 완성하세요."
                 style={{ width: '100%', padding: '18px 20px', fontSize: '18px', fontWeight: '600', color: '#333', backgroundColor: isErrorState ? '#ffeceb' : '#f9f9f9', border: `2px solid ${isErrorState ? '#ff3b30' : '#e5e5ea'}`, borderRadius: '16px', outline: 'none', textAlign: 'center', opacity: isErrorState ? 0.8 : 1 }}
-                autoFocus={!isErrorState} onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                autoFocus={!isErrorState && feedbackStatus !== 'analyzing'} onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
               />
             )}
           </div>
 
-          <div style={{ height: '24px', marginBottom: isErrorState ? '12px' : '24px', width: '100%', textAlign: 'center' }}>
+          <div style={{ height: '24px', marginBottom: isErrorState || feedbackStatus === 'analyzing' ? '12px' : '24px', width: '100%', textAlign: 'center' }}>
             {feedback && (
-              <span style={{ color: feedbackStatus === 'success' ? '#34c759' : '#ff3b30', fontWeight: '700', fontSize: '15px' }}>{feedback}</span>
+              <span style={{ color: feedbackStatus === 'success' ? '#34c759' : (feedbackStatus === 'analyzing' ? '#ff9500' : '#ff3b30'), fontWeight: '700', fontSize: '15px' }}>{feedback}</span>
             )}
           </div>
 
-          {isErrorState && (
+          {isErrorState && dynamicExplanation && (
             <div style={{ backgroundColor: '#fff0f0', padding: '16px', borderRadius: '16px', width: '100%', boxSizing: 'border-box', marginBottom: '24px', border: '1px solid #ffcdd2', animation: 'fadeIn 0.3s ease-in-out' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
                 <span style={{ fontSize: '18px' }}>💡</span>
-                <span style={{ color: '#d32f2f', fontWeight: '800', fontSize: '15px' }}>AI 오답 노트</span>
+                <span style={{ color: '#d32f2f', fontWeight: '800', fontSize: '15px' }}>AI 1:1 맞춤 피드백</span>
               </div>
-              <p style={{ margin: 0, fontSize: '15px', color: '#444', lineHeight: '1.5', wordBreak: 'keep-all' }}>{question.explanation}</p>
+              <p style={{ margin: 0, fontSize: '15px', color: '#444', lineHeight: '1.6', wordBreak: 'keep-all' }}>{dynamicExplanation}</p>
             </div>
           )}
 
-          <button onClick={handleSubmit} style={{ width: '100%', backgroundColor: feedbackStatus === 'success' ? '#34c759' : (isErrorState ? '#ff3b30' : '#007aff'), color: 'white', border: 'none', padding: '18px', borderRadius: '16px', fontSize: '18px', fontWeight: '800', cursor: 'pointer', boxShadow: feedbackStatus === 'success' ? '0 4px 12px rgba(52,199,89,0.3)' : (isErrorState ? '0 4px 12px rgba(255,59,48,0.3)' : '0 4px 12px rgba(0,122,255,0.3)'), marginTop: 'auto' }}>
-            {feedbackStatus === 'success' ? '통과!' : (isErrorState ? '↻ 다시 풀기' : '정답 확인하기')}
+          <button 
+            onClick={handleSubmit} 
+            disabled={feedbackStatus === 'analyzing'}
+            style={{ width: '100%', backgroundColor: feedbackStatus === 'success' ? '#34c759' : (isErrorState ? '#ff3b30' : (feedbackStatus === 'analyzing' ? '#e5e5ea' : '#007aff')), color: feedbackStatus === 'analyzing' ? '#8e8e93' : 'white', border: 'none', padding: '18px', borderRadius: '16px', fontSize: '18px', fontWeight: '800', cursor: feedbackStatus === 'analyzing' ? 'not-allowed' : 'pointer', boxShadow: feedbackStatus === 'success' ? '0 4px 12px rgba(52,199,89,0.3)' : (isErrorState ? '0 4px 12px rgba(255,59,48,0.3)' : (feedbackStatus === 'analyzing' ? 'none' : '0 4px 12px rgba(0,122,255,0.3)')), marginTop: 'auto', transition: 'all 0.2s ease' }}
+          >
+            {feedbackStatus === 'success' ? '통과!' : (isErrorState ? '↻ 다시 풀기' : (feedbackStatus === 'analyzing' ? 'AI 분석 중...' : '정답 확인하기'))}
           </button>
         </div>
       </div>
