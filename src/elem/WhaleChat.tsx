@@ -225,18 +225,23 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
         const newUserMsg = { role: "user", parts: [{ text: userText }] };
         const currentHistory = [...apiHistory, newUserMsg];
         
-        const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || CONFIG.GEMINI.API_KEY;
+        // 💡 API 키 유효성 검사 강화
+        const API_KEY = (import.meta.env.VITE_GEMINI_API_KEY || CONFIG?.GEMINI?.API_KEY || "").trim();
+        if (!API_KEY) {
+          throw new Error("API 키가 누락되었습니다. 환경변수를 확인해 주세요.");
+        }
+
         const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + API_KEY;
         
         let aiReply = "";
         let attempt = 0;
-        const maxAttempts = 3; // 💡 3번까지 재시도 설정
+        const maxAttempts = 3; 
 
-        // 💡 [핵심 강화] 통신 지연 대비: 최대 3회 재시도 및 10초 타임아웃 
         while (attempt < maxAttempts) {
           try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10초 넘어가면 강제 취소
+            // 💡 [핵심 수정] 타임아웃을 10초(10000)에서 30초(30000)로 대폭 연장
+            const timeoutId = setTimeout(() => controller.abort(), 30000); 
 
             const response = await fetch(url, {
               method: "POST",
@@ -245,29 +250,28 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
                 systemInstruction: { parts: [{ text: systemPrompt }] },
                 contents: currentHistory
               }),
-              signal: controller.signal // 타임아웃 컨트롤러 연결
+              signal: controller.signal 
             });
             
             clearTimeout(timeoutId);
 
             const data = await response.json();
-            if (data.error) throw new Error(data.error.message || "Gemini API 통신 에러");
+            if (data.error) throw new Error(data.error.message || "Gemini API 서버 에러");
 
             aiReply = data.candidates?.[0]?.content?.parts?.[0]?.text;
             
             if (!aiReply) {
-              throw new Error("AI가 빈 응답을 반환했습니다.");
+              throw new Error("AI가 빈 응답을 반환했습니다. (필터링 또는 모델 에러)");
             }
             
-            break; // 💡 성공적으로 응답을 받으면 반복문(재시도) 탈출
+            break; 
           } catch (err: any) {
             attempt++;
             console.warn(`API 호출 실패 (시도 ${attempt}/${maxAttempts}):`, err);
             
             if (attempt >= maxAttempts) {
-              throw err; // 3번 모두 실패하면 최종 에러 발생
+              throw err; 
             }
-            // 💡 실패 시 1.5초 대기 후 재시도 (API 서버 부하 방지)
             await new Promise(res => setTimeout(res, 1500));
           }
         }
@@ -289,9 +293,17 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
           }, 1500);
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("AI 응답 오류 (최종 실패):", err);
-      setMessages(prev => [...prev, { sender: 'system', text: `앗, 고래 선생님과 통신이 잠시 끊겼어요. 다시 한 번 말해줄래요? (오류: 통신 지연)` }]);
+      // 💡 [핵심 수정] 진짜 에러 메시지를 화면에 띄워줍니다.
+      const realErrorMessage = err.name === 'AbortError' || err.message?.includes('aborted') 
+        ? "시간 초과 (인터넷 환경이 불안정하거나 구글 서버가 지연되고 있습니다.)" 
+        : err.message;
+
+      setMessages(prev => [...prev, { 
+        sender: 'system', 
+        text: `앗, 고래 선생님과 통신이 잠시 끊겼어요.\n(오류 원인: ${realErrorMessage})` 
+      }]);
     } finally {
       setIsAIThinking(false);
     }
