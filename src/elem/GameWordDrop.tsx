@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
+import { CONFIG } from '../config'; // 💡 랭킹 연동을 위해 CONFIG 추가
 
 interface GameWordDropProps {
   student: any;
@@ -13,15 +14,14 @@ interface WordData {
 
 interface FallingWord {
   id: number;
-  text: string;     // 화면에 보여질 글자
-  answer: string;   // 유저가 쳐야 할 정답
-  x: number;        // X 좌표 (0~90%)
-  y: number;        // Y 좌표
-  speed: number;    // 떨어지는 속도
+  text: string;     
+  answer: string;   
+  x: number;        
+  y: number;        
+  speed: number;    
   color: string;
 }
 
-// KST 날짜 구하기 (밀림 현상 완벽 방어)
 const getFakeUTCString = (date: Date) => {
   const yyyy = date.getFullYear();
   const mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -36,18 +36,15 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
   const [appPhase, setAppPhase] = useState<'SETUP' | 'PLAYING' | 'GAME_OVER'>('SETUP');
   const [isLoading, setIsLoading] = useState(false);
 
-  // 🎯 설정 상태
   const [books, setBooks] = useState<string[]>([]);
   const [selectedBook, setSelectedBook] = useState('');
   const [mode, setMode] = useState<'ENG_TO_KOR' | 'KOR_TO_ENG'>('ENG_TO_KOR');
   const [playCount, setPlayCount] = useState<number>(0);
   
-  // 🎯 인게임 상태 (화면 렌더링용)
   const [renderTick, setRenderTick] = useState(0); 
   const [inputValue, setInputValue] = useState("");
   const [finalScore, setFinalScore] = useState(0);
 
-  // ⚡ 게임 물리엔진 및 상태 (useRef로 관리해야 끊김없이 부드러움)
   const gameRef = useRef({
     wordsPool: [] as WordData[],
     fallingWords: [] as FallingWord[],
@@ -56,16 +53,13 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     combo: 0,
     wordIdCounter: 0,
     speedMultiplier: 1,
-    spawnRate: 2000,
+    spawnRate: 3500, // 💡 단어 나오는 간격 증가 (더 여유롭게)
     lastSpawnTime: 0,
     isGameOver: false
   });
 
   const requestRef = useRef<number>(0);
 
-  // --------------------------------------------------
-  // 1. 교재 목록 및 오늘 플레이 횟수 가져오기
-  // --------------------------------------------------
   useEffect(() => {
     const fetchBooks = async () => {
       const { data } = await supabase.from('words').select('book');
@@ -103,11 +97,8 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
       setPlayCount(data?.length || 0);
     };
     fetchPlayCount();
-  }, [selectedBook, appPhase]); // 게임 끝나고 셋업으로 올 때 다시 체크
+  }, [selectedBook, appPhase]);
 
-  // --------------------------------------------------
-  // 2. 게임 시작
-  // --------------------------------------------------
   const handleStart = async () => {
     if (!selectedBook) return alert("교재를 선택해 주세요!");
     if (playCount >= 3) return alert("이 교재는 오늘 3번 모두 도전했어요! 내일 다시 도전하거나 다른 교재를 선택해 주세요 🚀");
@@ -122,7 +113,6 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
       if (error) throw error;
       if (!data || data.length === 0) throw new Error("단어 데이터가 없습니다.");
 
-      // 게임 초기화
       gameRef.current = {
         wordsPool: data,
         fallingWords: [],
@@ -131,7 +121,7 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
         combo: 0,
         wordIdCounter: 0,
         speedMultiplier: 1,
-        spawnRate: 2500, // 처음엔 2.5초마다 하나씩
+        spawnRate: 3500, 
         lastSpawnTime: Date.now(),
         isGameOver: false
       };
@@ -139,7 +129,6 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
       setInputValue("");
       setAppPhase('PLAYING');
 
-      // 게임 루프 시작
       requestRef.current = requestAnimationFrame(gameLoop);
 
     } catch (error) {
@@ -149,47 +138,41 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     }
   };
 
-  // --------------------------------------------------
-  // 3. 인게임 물리 엔진 (단어 떨어지기)
-  // --------------------------------------------------
   const gameLoop = () => {
     const state = gameRef.current;
     if (state.isGameOver) return;
 
     const now = Date.now();
 
-    // 단어 소환 (Spawn)
     if (now - state.lastSpawnTime > state.spawnRate) {
       spawnWord();
       state.lastSpawnTime = now;
     }
 
-    // 단어 이동 (Move) 및 바닥 충돌 판정
     let lifeLost = false;
     for (let i = state.fallingWords.length - 1; i >= 0; i--) {
       const fw = state.fallingWords[i];
       fw.y += fw.speed * state.speedMultiplier;
 
-      // 바닥(Y=400 기준)에 닿으면? -> 생명 깎고 단어 제거
-      if (fw.y > 400) {
+      // 💡 바닥 판정 (y값이 82 이상이면 Danger Zone에 닿은 것으로 판정)
+      if (fw.y > 82) {
         state.fallingWords.splice(i, 1);
-        state.combo = 0; // 콤보 끊김 😭
+        state.combo = 0; 
         lifeLost = true;
       }
     }
 
     if (lifeLost) {
       state.lives -= 1;
+      setInputValue(""); // 💡 단어가 땅에 떨어지면 입력창을 싹 비워줍니다!
+      
       if (state.lives <= 0) {
         endGame();
         return;
       }
     }
 
-    // 화면 갱신 트리거
     setRenderTick(prev => prev + 1);
-
-    // 다음 프레임 예약
     requestRef.current = requestAnimationFrame(gameLoop);
   };
 
@@ -197,9 +180,7 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     const state = gameRef.current;
     const randomWord = state.wordsPool[Math.floor(Math.random() * state.wordsPool.length)];
     
-    // 원장님 기획: 영어보고 한글치기 vs 한글보고 영어치기
     const textToShow = mode === 'ENG_TO_KOR' ? randomWord.eng : randomWord.kor;
-    // 💡 정답 판정을 위해 괄호 내용 제거 및 소문자 변환 (예: "사과(과일)" -> "사과")
     let answerToType = mode === 'ENG_TO_KOR' ? randomWord.kor : randomWord.eng;
     answerToType = answerToType.replace(/\(.*?\)/g, '').trim().toLowerCase();
 
@@ -210,22 +191,18 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
       id: state.wordIdCounter++,
       text: textToShow,
       answer: answerToType,
-      x: Math.random() * 80 + 10, // 10% ~ 90% 사이 랜덤 위치
-      y: -30, // 화면 위에서 시작
-      speed: Math.random() * 0.5 + 0.8, // 랜덤 떨어지는 속도
+      x: Math.random() * 80 + 10, 
+      y: -5, // 화면 위쪽에서 시작
+      speed: Math.random() * 0.05 + 0.08, // 💡 초등부에 맞춰 떨어지는 속도 5배 하향! (아주 천천히 떨어짐)
       color: randomColor
     });
 
-    // 💡 레벨업 시스템: 시간이 지날수록 더 빨리 단어가 나옴 (난이도 증가)
-    if (state.spawnRate > 800) {
-      state.spawnRate -= 20; 
+    if (state.spawnRate > 1500) {
+      state.spawnRate -= 30; 
       state.speedMultiplier += 0.01;
     }
   };
 
-  // --------------------------------------------------
-  // 4. 단어 타이핑 (즉시 판정)
-  // --------------------------------------------------
   const handleType = (e: React.ChangeEvent<HTMLInputElement>) => {
     const state = gameRef.current;
     if (state.isGameOver) return;
@@ -233,18 +210,13 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     const val = e.target.value;
     setInputValue(val);
 
-    // 💡 엔터 누를 필요 없이 입력 값이 정답과 일치하면 즉시 파괴!
     const matchIndex = state.fallingWords.findIndex(w => w.answer === val.trim().toLowerCase());
     
     if (matchIndex > -1) {
-      // 명중! 💥
       state.fallingWords.splice(matchIndex, 1);
-      setInputValue("");
+      setInputValue(""); // 💡 정답을 맞춰도 입력창을 비워줍니다!
       
-      // 💡 원장님 특별 기획: 영어 쓰기 모드가 점수가 2배 높음!
       const baseScore = mode === 'KOR_TO_ENG' ? 20 : 10;
-      
-      // 콤보 보너스: 콤보당 추가 점수
       const comboBonus = state.combo * 2; 
       
       state.score += (baseScore + comboBonus);
@@ -252,9 +224,6 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     }
   };
 
-  // --------------------------------------------------
-  // 5. 게임 오버 및 DB 저장
-  // --------------------------------------------------
   const endGame = async () => {
     const state = gameRef.current;
     state.isGameOver = true;
@@ -263,36 +232,43 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     setFinalScore(state.score);
     setAppPhase('GAME_OVER');
 
-    // 수파베이스 통합 랭킹 연동 기록 (learning_logs 에 score 저장)
+    const modeText = mode === 'ENG_TO_KOR' ? '영-한' : '한-영';
+
     try {
-      const modeText = mode === 'ENG_TO_KOR' ? '영-한' : '한-영';
+      // 💡 [버그 해결] Supabase에는 테이블에 존재하는 안전한 값만 저장하여 400 에러를 없앴습니다.
       await supabase.from('learning_logs').insert([{
         student_id: student.id,
-        student_name: student.name,
-        grade: student.grade,
         task_type: `타자게임(${modeText})`,
         book_info: selectedBook,
-        status: '완료',
-        score: state.score // 💡 랭킹 반영 핵심
+        status: '완료'
       }]);
+
+      // 💡 점수 랭킹 연동을 위해 구글 스프레드시트(GAS)에도 안전하게 기록을 쏩니다.
+      await fetch(CONFIG.WEB_APP_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({
+          type: "saveLog",
+          studentId: student.id,
+          studentName: student.name,
+          taskType: `타자게임(${modeText})`,
+          status: "완료",
+          score: state.score.toString(),
+          bookInfo: selectedBook
+        }),
+      });
+
     } catch (err) {
       console.error("결과 저장 실패", err);
     }
   };
 
-  // Cleanup
   useEffect(() => {
     return () => {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
     };
   }, []);
 
-
-  // ==========================================
-  // 화면 렌더링 영역
-  // ==========================================
-
-  // 1. 초기 셋업 화면
   if (appPhase === 'SETUP') {
     return (
       <div style={{ backgroundColor: '#f0f4f8', minHeight: '100vh', padding: '20px', fontFamily: 'Pretendard, sans-serif', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -340,7 +316,6 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     );
   }
 
-  // 2. 게임 오버 화면
   if (appPhase === 'GAME_OVER') {
     return (
       <div style={{ backgroundColor: '#1e293b', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', fontFamily: 'Pretendard, sans-serif', textAlign: 'center', padding: '20px' }}>
@@ -363,15 +338,12 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     );
   }
 
-  // 3. 인게임 (PLAYING) 화면
   const st = gameRef.current;
   return (
     <div style={{ backgroundColor: '#0f172a', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', fontFamily: 'Pretendard, sans-serif' }}>
       
-      {/* 스마트폰 비율의 게임 화면 설정 */}
       <div style={{ width: '100%', maxWidth: '480px', height: '100vh', maxHeight: '800px', backgroundColor: '#1e293b', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 0 30px rgba(0,0,0,0.5)' }}>
         
-        {/* 상단 UI (점수, 생명, 콤보) */}
         <div style={{ padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', zIndex: 10 }}>
           <div>
             <div style={{ fontSize: '14px', color: '#94a3b8', fontWeight: 'bold', marginBottom: '4px' }}>SCORE</div>
@@ -392,7 +364,6 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
           </div>
         </div>
 
-        {/* 게임 플레이 영역 (단어 떨어지는 곳) */}
         <div style={{ flex: 1, position: 'relative' }}>
           {st.fallingWords.map(word => (
             <div 
@@ -400,7 +371,7 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
               style={{
                 position: 'absolute',
                 left: `${word.x}%`,
-                top: `${word.y}px`,
+                top: `${word.y}%`, // 💡 위치 단위를 퍼센트로 관리하여 화면 크기에 맞게 부드럽게 떨어집니다.
                 transform: 'translateX(-50%)',
                 backgroundColor: word.color,
                 color: 'white',
@@ -416,11 +387,22 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
             </div>
           ))}
           
-          {/* 바닥 경계선 */}
-          <div style={{ position: 'absolute', bottom: 0, width: '100%', height: '4px', backgroundColor: '#ef4444', opacity: 0.5, boxShadow: '0 0 10px #ef4444' }} />
+          {/* 💡 [명확한 바닥선 추가] DANGER ZONE */}
+          <div style={{ 
+            position: 'absolute', 
+            top: '85%', // 85% 지점이 바닥 
+            width: '100%', 
+            height: '100%', 
+            background: 'linear-gradient(to bottom, rgba(239, 68, 68, 0.4), rgba(239, 68, 68, 0.8))', 
+            borderTop: '3px dashed #f87171',
+            display: 'flex',
+            justifyContent: 'center',
+            paddingTop: '8px'
+          }}>
+            <span style={{ color: '#fca5a5', fontWeight: '900', fontSize: '14px', letterSpacing: '2px' }}>DANGER ZONE</span>
+          </div>
         </div>
 
-        {/* 하단 입력창 */}
         <div style={{ padding: '20px', backgroundColor: '#0f172a', zIndex: 10 }}>
           <input
             type="text"
