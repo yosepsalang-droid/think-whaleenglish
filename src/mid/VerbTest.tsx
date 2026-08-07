@@ -33,6 +33,7 @@ export default function VerbTest({ onBack, studentId = "ST_TEST", studentName = 
 
   const [inputs, setInputs] = useState({ base: '', past: '', pp: '' });
   const [feedback, setFeedback] = useState<{ isCorrect: boolean; msg: string } | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false); // 💡 엔터 연타 방지용 상태
 
   const baseRef = useRef<HTMLInputElement>(null);
   const pastRef = useRef<HTMLInputElement>(null);
@@ -40,7 +41,6 @@ export default function VerbTest({ onBack, studentId = "ST_TEST", studentName = 
 
   const currentWord = currentWordList[currentIndex];
 
-  // ⭐️ 수파베이스에서 3단 동사 데이터 실시간 로드
   useEffect(() => {
     const fetchVerbsFromSupabase = async () => {
       try {
@@ -128,6 +128,7 @@ export default function VerbTest({ onBack, studentId = "ST_TEST", studentName = 
     setInputs({ base: '', past: '', pp: '' });
     setFeedback(null);
     setAttempts(0);
+    setIsSubmitting(false); // 잠금 해제
     setTimeout(() => { if (baseRef.current) baseRef.current.focus(); }, 50);
   };
 
@@ -164,7 +165,9 @@ export default function VerbTest({ onBack, studentId = "ST_TEST", studentName = 
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentWord) return;
+    if (!currentWord || isSubmitting) return; // 💡 연타 방지! 이미 채점 중이면 무시
+    
+    setIsSubmitting(true); // 채점 시작 (버튼 잠금)
     const newAttempts = attempts + 1;
     setAttempts(newAttempts);
 
@@ -186,7 +189,15 @@ export default function VerbTest({ onBack, studentId = "ST_TEST", studentName = 
         if (!isBaseCorrect) wrongParts.push("원형");
         if (!isPastCorrect) wrongParts.push("과거형");
         if (!isPpCorrect) wrongParts.push("과거분사");
-        setFeedback({ isCorrect: false, msg: `${wrongParts.join(", ")} 스펠링이 틀렸어요. (${newAttempts}/3)` });
+        
+        setFeedback({ isCorrect: false, msg: `${wrongParts.join(", ")} 스펠링이 틀렸어요. 다시 적어보세요! (${newAttempts}/3)` });
+        
+        // 💡 틀렸을 때 입력창 비워주기 (오답 지우기 귀찮음 해결)
+        setTimeout(() => {
+          setInputs({ base: '', past: '', pp: '' });
+          setIsSubmitting(false); // 다시 적을 수 있게 잠금 해제
+          if (baseRef.current) baseRef.current.focus();
+        }, 1500);
       }
     }
   };
@@ -204,13 +215,14 @@ export default function VerbTest({ onBack, studentId = "ST_TEST", studentName = 
   useEffect(() => {
     if (step === 'RESULT' && studentId) {
       const sendVerbLogToSupabase = async () => {
-        const bookTitle = `불규칙동사 (Day ${startDay}~${endDay})`;
+        // 💡 [관제탑 연동 핵심 수정] task_type을 '동사'로, book_info를 날짜로 오해하지 않게 'Day 1~5' 로 심플하게 변경
+        const bookTitle = `Day ${startDay}~${endDay}`;
         try {
           await supabase.from('learning_logs').insert([{
             student_id: studentId,
             student_name: studentName,
-            task_type: '불규칙동사',
-            book_info: bookTitle,
+            task_type: '동사', // "불규칙동사"에서 "동사"로 변경하여 관제탑이 인식하도록 수정
+            book_info: bookTitle, 
             score: score,
             status: '완료',
             attempt: 1,
@@ -316,11 +328,14 @@ export default function VerbTest({ onBack, studentId = "ST_TEST", studentName = 
           </div>
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={{ display: 'flex', gap: '8px' }}>
-              <input ref={baseRef} name="base" placeholder="원형" value={inputs.base} onChange={handleInputChange} onKeyDown={(e) => handleKeyDown(e, pastRef)} style={inputStyle} />
-              <input ref={pastRef} name="past" placeholder="과거형" value={inputs.past} onChange={handleInputChange} onKeyDown={(e) => handleKeyDown(e, ppRef)} style={inputStyle} />
-              <input ref={ppRef} name="pp" placeholder="과거분사" value={inputs.pp} onChange={handleInputChange} onKeyDown={(e) => handleKeyDown(e, null)} style={inputStyle} />
+              <input ref={baseRef} name="base" placeholder="원형" value={inputs.base} disabled={isSubmitting} onChange={handleInputChange} onKeyDown={(e) => handleKeyDown(e, pastRef)} style={{...inputStyle, opacity: isSubmitting ? 0.7 : 1}} />
+              <input ref={pastRef} name="past" placeholder="과거형" value={inputs.past} disabled={isSubmitting} onChange={handleInputChange} onKeyDown={(e) => handleKeyDown(e, ppRef)} style={{...inputStyle, opacity: isSubmitting ? 0.7 : 1}} />
+              <input ref={ppRef} name="pp" placeholder="과거분사" value={inputs.pp} disabled={isSubmitting} onChange={handleInputChange} onKeyDown={(e) => handleKeyDown(e, null)} style={{...inputStyle, opacity: isSubmitting ? 0.7 : 1}} />
             </div>
-            <button type="submit" disabled={!inputs.base || !inputs.past || !inputs.pp} style={{ width: '100%', padding: '16px', fontSize: '18px', fontWeight: 'bold', color: 'white', backgroundColor: '#007aff', border: 'none', borderRadius: '12px', cursor: 'pointer' }}>정답 확인</button>
+            {/* 💡 채점 중일 때는 버튼 잠금 처리! */}
+            <button type="submit" disabled={!inputs.base || !inputs.past || !inputs.pp || isSubmitting} style={{ width: '100%', padding: '16px', fontSize: '18px', fontWeight: 'bold', color: 'white', backgroundColor: isSubmitting ? '#a0c4ff' : '#007aff', border: 'none', borderRadius: '12px', cursor: isSubmitting ? 'not-allowed' : 'pointer' }}>
+              {isSubmitting ? '채점 중...' : '정답 확인'}
+            </button>
           </form>
           {feedback && (
             <div style={{ marginTop: '15px', padding: '15px', borderRadius: '8px', fontWeight: 'bold', textAlign: 'center', backgroundColor: feedback.isCorrect ? '#d4edda' : '#f8d7da', color: feedback.isCorrect ? '#155724' : '#721c24' }}>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { CONFIG } from '../config'; // 💡 랭킹 연동을 위해 CONFIG 추가
+import { CONFIG } from '../config'; 
 
 interface GameWordDropProps {
   student: any;
@@ -15,7 +15,7 @@ interface WordData {
 interface FallingWord {
   id: number;
   text: string;     
-  answer: string;   
+  acceptableAnswers: string[]; // 💡 정답을 1개가 아닌 여러 개(배열)로 유연하게 저장
   x: number;        
   y: number;        
   speed: number;    
@@ -30,6 +30,30 @@ const getFakeUTCString = (date: Date) => {
   const mi = String(date.getMinutes()).padStart(2, '0');
   const ss = String(date.getSeconds()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}+00:00`;
+};
+
+// 💡 [핵심 기능] 융통성 있는 정답 생성기
+const parseAcceptableAnswers = (text: string, mode: 'ENG_TO_KOR' | 'KOR_TO_ENG') => {
+  if (mode === 'KOR_TO_ENG') {
+    // 영어 칠 때는 띄어쓰기와 대소문자만 무시
+    return [text.toLowerCase().replace(/[^a-z0-9]/g, '')];
+  } else {
+    // 한글 칠 때는 아주 관대하게 판정!
+    // 1. 괄호 내용 완전 무시 (예: "(맛있는) 사과" -> "사과")
+    let noBracket = text.replace(/\(.*?\)|\[.*?\]/g, '');
+    
+    // 2. 쉼표나 슬래시로 뜻이 여러 개면 다 쪼갬 (예: "사과, 능금" -> ["사과", "능금"])
+    let splitAnswers = noBracket.split(/[,/]/); 
+    
+    // 3. 띄어쓰기, 특수문자(~ . ? 등) 싹 다 지우고 글자만 추출
+    let cleaned = splitAnswers.map(ans => ans.replace(/[^가-힣a-zA-Z0-9]/g, '')).filter(ans => ans.length > 0);
+    
+    // 만약 괄호 지웠더니 다 지워졌다면(예: "(과일)") 괄호 무시하고 글자만 추출
+    if (cleaned.length === 0) {
+        cleaned = [text.replace(/[^가-힣a-zA-Z0-9]/g, '')];
+    }
+    return cleaned;
+  }
 };
 
 export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
@@ -53,7 +77,7 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     combo: 0,
     wordIdCounter: 0,
     speedMultiplier: 1,
-    spawnRate: 3500, // 💡 단어 나오는 간격 증가 (더 여유롭게)
+    spawnRate: 3500, 
     lastSpawnTime: 0,
     isGameOver: false
   });
@@ -154,7 +178,7 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
       const fw = state.fallingWords[i];
       fw.y += fw.speed * state.speedMultiplier;
 
-      // 💡 바닥 판정 (y값이 82 이상이면 Danger Zone에 닿은 것으로 판정)
+      // 💡 바닥 판정 (y값이 82% 이상이면 DANGER ZONE 닿음)
       if (fw.y > 82) {
         state.fallingWords.splice(i, 1);
         state.combo = 0; 
@@ -164,7 +188,7 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
 
     if (lifeLost) {
       state.lives -= 1;
-      setInputValue(""); // 💡 단어가 땅에 떨어지면 입력창을 싹 비워줍니다!
+      setInputValue(""); // 💡 땅에 떨어지면 치고 있던 오답도 싹 지워짐!
       
       if (state.lives <= 0) {
         endGame();
@@ -181,8 +205,10 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     const randomWord = state.wordsPool[Math.floor(Math.random() * state.wordsPool.length)];
     
     const textToShow = mode === 'ENG_TO_KOR' ? randomWord.eng : randomWord.kor;
-    let answerToType = mode === 'ENG_TO_KOR' ? randomWord.kor : randomWord.eng;
-    answerToType = answerToType.replace(/\(.*?\)/g, '').trim().toLowerCase();
+    const rawAnswer = mode === 'ENG_TO_KOR' ? randomWord.kor : randomWord.eng;
+    
+    // 💡 융통성 있는 정답 배열 생성
+    const acceptableAnswers = parseAcceptableAnswers(rawAnswer, mode);
 
     const colors = ['#f87171', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#a855f7'];
     const randomColor = colors[Math.floor(Math.random() * colors.length)];
@@ -190,10 +216,10 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     state.fallingWords.push({
       id: state.wordIdCounter++,
       text: textToShow,
-      answer: answerToType,
+      acceptableAnswers: acceptableAnswers,
       x: Math.random() * 80 + 10, 
-      y: -5, // 화면 위쪽에서 시작
-      speed: Math.random() * 0.05 + 0.08, // 💡 초등부에 맞춰 떨어지는 속도 5배 하향! (아주 천천히 떨어짐)
+      y: -5, 
+      speed: Math.random() * 0.05 + 0.08, // 초등부 맞춤 느린 속도
       color: randomColor
     });
 
@@ -210,11 +236,31 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     const val = e.target.value;
     setInputValue(val);
 
-    const matchIndex = state.fallingWords.findIndex(w => w.answer === val.trim().toLowerCase());
+    // 💡 유저가 친 글자도 띄어쓰기와 특수문자를 다 지워버립니다.
+    const cleanInput = mode === 'KOR_TO_ENG' 
+        ? val.toLowerCase().replace(/[^a-z0-9]/g, '') 
+        : val.replace(/[^가-힣a-zA-Z0-9]/g, '');
+
+    // 💡 정답 판정 엔진
+    const matchIndex = state.fallingWords.findIndex(w => 
+      w.acceptableAnswers.some(ans => {
+        // 1. 완전히 똑같이 친 경우 무조건 통과
+        if (ans === cleanInput) return true;
+        
+        // 2. [초강력 기능] "핵심 단어"만 쳐도 통과! 
+        // 예: 정답이 "매우화가난" 인데 아이가 "화가난"(2글자 이상) 치면 통과!
+        // 예: 정답이 "을먹다" 인데 아이가 "먹다" 치면 통과!
+        if (mode === 'ENG_TO_KOR' && cleanInput.length >= 2 && ans.endsWith(cleanInput)) {
+          return true;
+        }
+        
+        return false;
+      })
+    );
     
     if (matchIndex > -1) {
       state.fallingWords.splice(matchIndex, 1);
-      setInputValue(""); // 💡 정답을 맞춰도 입력창을 비워줍니다!
+      setInputValue(""); // 💡 맞추면 다음 단어를 위해 즉시 싹 비워짐!
       
       const baseScore = mode === 'KOR_TO_ENG' ? 20 : 10;
       const comboBonus = state.combo * 2; 
@@ -235,7 +281,6 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     const modeText = mode === 'ENG_TO_KOR' ? '영-한' : '한-영';
 
     try {
-      // 💡 [버그 해결] Supabase에는 테이블에 존재하는 안전한 값만 저장하여 400 에러를 없앴습니다.
       await supabase.from('learning_logs').insert([{
         student_id: student.id,
         task_type: `타자게임(${modeText})`,
@@ -243,7 +288,6 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
         status: '완료'
       }]);
 
-      // 💡 점수 랭킹 연동을 위해 구글 스프레드시트(GAS)에도 안전하게 기록을 쏩니다.
       await fetch(CONFIG.WEB_APP_URL, {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -257,7 +301,6 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
           bookInfo: selectedBook
         }),
       });
-
     } catch (err) {
       console.error("결과 저장 실패", err);
     }
@@ -273,10 +316,16 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     return (
       <div style={{ backgroundColor: '#f0f4f8', minHeight: '100vh', padding: '20px', fontFamily: 'Pretendard, sans-serif', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <div style={{ width: '100%', maxWidth: '450px', background: 'white', borderRadius: '24px', padding: '32px 24px', boxShadow: '0 8px 24px rgba(0,0,0,0.06)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
             <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#8e8e93', fontSize: '16px', fontWeight: '700', cursor: 'pointer' }}>← 뒤로</button>
             <h2 style={{ fontSize: '22px', fontWeight: '900', margin: 0, color: '#1e293b' }}>🎮 Word Drop</h2>
             <div style={{ width: '40px' }}></div>
+          </div>
+
+          <div style={{ backgroundColor: '#fff7ed', border: '1px solid #fdba74', padding: '12px 16px', borderRadius: '12px', marginBottom: '24px' }}>
+            <p style={{ margin: 0, fontSize: '13px', color: '#c2410c', fontWeight: 'bold', lineHeight: '1.5' }}>
+              💡 <b>꿀팁:</b> 한글 뜻을 칠 때 띄어쓰기나 괄호 안의 말은 무시해도 돼요! "~을 먹다"면 그냥 "먹다"만 써도 정답 인정!
+            </p>
           </div>
           
           <div style={{ marginBottom: '24px' }}>
@@ -371,7 +420,7 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
               style={{
                 position: 'absolute',
                 left: `${word.x}%`,
-                top: `${word.y}%`, // 💡 위치 단위를 퍼센트로 관리하여 화면 크기에 맞게 부드럽게 떨어집니다.
+                top: `${word.y}%`, 
                 transform: 'translateX(-50%)',
                 backgroundColor: word.color,
                 color: 'white',
@@ -387,10 +436,10 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
             </div>
           ))}
           
-          {/* 💡 [명확한 바닥선 추가] DANGER ZONE */}
+          {/* 💡 [명확한 바닥선 시각화] */}
           <div style={{ 
             position: 'absolute', 
-            top: '85%', // 85% 지점이 바닥 
+            top: '85%', 
             width: '100%', 
             height: '100%', 
             background: 'linear-gradient(to bottom, rgba(239, 68, 68, 0.4), rgba(239, 68, 68, 0.8))', 
@@ -409,7 +458,7 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
             value={inputValue}
             onChange={handleType}
             autoFocus
-            placeholder="단어를 빠르게 타이핑하세요!"
+            placeholder={mode === 'ENG_TO_KOR' ? "띄어쓰기 무시! 단어만 치세요" : "영어 스펠링을 치세요"}
             style={{
               width: '100%',
               padding: '20px',
