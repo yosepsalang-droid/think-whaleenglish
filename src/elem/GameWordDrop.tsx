@@ -61,7 +61,7 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     isGameOver: false
   });
 
-  const requestRef = useRef<number>();
+  const requestRef = useRef<number>(0);
 
   // --------------------------------------------------
   // 1. 교재 목록 및 오늘 플레이 횟수 가져오기

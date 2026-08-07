@@ -9,13 +9,14 @@ import Sentence from './elem/Sentence';
 import WhaleChat from './elem/WhaleChat';
 import Grammar from './elem/Grammar';
 import WordMaster from './elem/WordMaster';
-import Ranking from './elem/Ranking'; // ⭐️ 랭킹전 추가!
+import Ranking from './elem/Ranking'; 
+import GameWordDrop from './elem/GameWordDrop'; // ⭐️ 게임 컴포넌트 불러오기!
 
 // 📘 중등부 학습 컴포넌트
 import MidHome from './mid/MidHome';
 import Voca from './mid/Voca';
 import MidSen from './mid/MidSen';
-import VerbTest from './mid/VerbTest'; // 초등부에서도 공용으로 사용됩니다.
+import VerbTest from './mid/VerbTest'; 
 
 // 👑 원장님 관제탑
 import Lms from './manage/Lms'; 
@@ -154,7 +155,6 @@ export default function App() {
     if (loggedInStudent && studentMode === 'elementary') {
       return (
         <div>
-          {/* ⭐️ ElementaryHome에 student 객체와 onNavigate 권한을 완벽하게 넘겨줍니다 */}
           {currentMenu === 'home' && (
             <ElementaryHome 
               student={loggedInStudent} 
@@ -164,7 +164,6 @@ export default function App() {
             />
           )}
           
-          {/* ⭐️ 하위 메뉴 컴포넌트 연결 완료 */}
           {currentMenu === 'word' && <Word onBack={() => setCurrentMenu('home')} studentId={loggedInStudent.id} studentName={loggedInStudent.name} currentBook={loggedInStudent.currentBook} />}
           {currentMenu === 'sentence' && <Sentence onBack={() => setCurrentMenu('home')} studentId={loggedInStudent.id} studentName={loggedInStudent.name} currentBook={loggedInStudent.currentBook} />}
           {currentMenu === 'verbTest' && <VerbTest onBack={() => setCurrentMenu('home')} studentId={loggedInStudent.id} studentName={loggedInStudent.name} />}
@@ -174,7 +173,9 @@ export default function App() {
           {currentMenu === 'grammar' && <Grammar student={loggedInStudent} onBack={() => setCurrentMenu('home')} totalScore={integratedRank.totalScore} myRank={integratedRank.myRank} rankings={{ thisMonth: integratedRank.thisMonth, lastMonth: integratedRank.lastMonth }} loadingRank={integratedRank.loading} onGameComplete={handleGameComplete} />}
           {currentMenu === 'wordMaster' && <WordMaster studentName={loggedInStudent.name} grade={loggedInStudent.grade} onBack={() => setCurrentMenu('home')} totalScore={integratedRank.totalScore} myRank={integratedRank.myRank} loadingRank={integratedRank.loading} onGameComplete={handleGameComplete} />}
           
-          {/* ⭐️ 여기서 에러를 유발하던 title, data, isLoading을 깔끔하게 제거했습니다! */}
+          {/* ⭐️ Word Drop 게임 화면 연결 완료! */}
+          {currentMenu === 'gameWordDrop' && <GameWordDrop student={loggedInStudent} onBack={() => setCurrentMenu('home')} />}
+          
           {currentMenu === 'ranking' && <Ranking onBack={() => setCurrentMenu('home')} />}
         </div>
       );

@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-// ⭐️ 구글 시트 주소(CONFIG)는 이제 안 씁니다! 수파베이스를 불러옵니다.
 import { supabase } from '../lib/supabase'; 
 
 interface Student {
@@ -22,30 +21,23 @@ export default function Home({ student, onNavigate, onLogout, onUpdateStudent, o
   const [isUpdating, setIsUpdating] = useState(false);
 
   const bookList = [
-    // 240 레벨 (1~6권)
     '240_1', '240_2', '240_3', '240_4', '240_5', '240_6',
-    // 520 레벨 (1~6권)
     '520_1', '520_2', '520_3', '520_4', '520_5', '520_6',
-    // 860 레벨 (1~6권)
     '860_1', '860_2', '860_3', '860_4', '860_5', '860_6',
-    // 1240 레벨 (1~6권)
     '1240_1', '1240_2', '1240_3', '1240_4', '1240_5', '1240_6',
-    // 1680 레벨 (1~6권)
     '1680_1', '1680_2', '1680_3', '1680_4', '1680_5', '1680_6'
   ];
 
-  // 💡 구글 시트 대신 '수파베이스'로 교재 정보를 업데이트하는 새로운 함수!
   const handleBookChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newBook = e.target.value;
     if (!newBook || newBook === student.currentBook) return;
 
     setIsUpdating(true);
     try {
-      // 🚀 수파베이스의 students 테이블에서, 현재 학생의 아이디를 찾아 교재(currentBook)를 바꿉니다.
       const { error } = await supabase
         .from('students')
         .update({ currentBook: newBook })
-        .eq('student_id', student.id); // App.tsx에서 받아온 데이터베이스의 컬럼명과 일치시킵니다.
+        .eq('student_id', student.id);
 
       if (error) {
         console.error("수파베이스 저장 에러:", error);
@@ -53,7 +45,6 @@ export default function Home({ student, onNavigate, onLogout, onUpdateStudent, o
         return;
       }
 
-      // 에러가 없다면 성공적으로 저장된 것입니다! 화면에도 즉시 반영합니다.
       onUpdateStudent({ ...student, currentBook: newBook });
       alert("✅ 수파베이스에 교재가 정상적으로 변경되었습니다!");
 
@@ -64,18 +55,19 @@ export default function Home({ student, onNavigate, onLogout, onUpdateStudent, o
     }
   };
 
+  // 💡 메뉴 목록에 Word Drop 게임 추가 완료!
   const menus = [
     { id: 'word', title: '📝 단어 Test', desc: '오늘의 필수 어휘 마스터하기', color: '#4ea8de' },
     { id: 'sentence', title: '🧩 문장 배열 게임', desc: '어순 감각을 키우는 덩어리 학습', color: '#56cfe1' },
     { id: 'chat', title: '🤖 AI 고래 대화', desc: '오늘 배운 문장으로 AI와 톡하기', color: '#72efdd' },
     { id: 'grammar', title: '⚡ 스피드 문법', desc: '도전! 실시간 문법 랭킹전', color: '#64dfdf' },
     { id: 'wordMaster', title: '⌨️ Word Master', desc: '스피드 타자로 단어 완벽 마스터!', color: '#48cae4' },
+    { id: 'gameWordDrop', title: '☄️ Word Drop', desc: '단어비가 내린다! 타자 방어 게임', color: '#00b4d8' },
   ];
 
   return (
     <div style={{ fontFamily: 'sans-serif', padding: '15px', maxWidth: '500px', margin: '0 auto' }}>
       
-      {/* 상단 프로필 헤더 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '12px', border: '1px solid #eee' }}>
         <div>
           <span style={{ fontSize: '14px', color: '#007aff', fontWeight: 'bold' }}>{student.grade} 🐋</span>
@@ -93,7 +85,6 @@ export default function Home({ student, onNavigate, onLogout, onUpdateStudent, o
         </div>
       </div>
 
-      {/* 현재 진도 카드 */}
       <div style={{ background: 'linear-gradient(135deg, #007aff, #0056b3)', color: 'white', padding: '20px', borderRadius: '15px', marginBottom: '25px' }}>
         <p style={{ margin: '0 0 5px 0', opacity: '0.9', fontSize: '13px' }}>TODAY'S MISSION 📖</p>
         
@@ -121,7 +112,6 @@ export default function Home({ student, onNavigate, onLogout, onUpdateStudent, o
         </div>
       </div>
 
-      {/* 메인 메뉴 영역 */}
       <h4 style={{ color: '#666', marginBottom: '15px' }}>오늘의 학습 메뉴</h4>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
         {menus.map((menu) => (
