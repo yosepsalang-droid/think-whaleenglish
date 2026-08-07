@@ -62,7 +62,7 @@ export default function ElementaryHome({ student, onNavigate, onLogout, onBackTo
           <button onClick={() => setCurrentView('game')} style={{ padding: '24px', background: 'linear-gradient(135deg, #ff9500, #c67100)', color: 'white', border: 'none', borderRadius: '20px', textAlign: 'left', cursor: 'pointer', boxShadow: '0 8px 20px rgba(255,149,0,0.25)' }}>
             <div style={{ fontSize: '28px', marginBottom: '8px' }}>🎮</div>
             <div style={{ fontSize: '20px', fontWeight: '800', marginBottom: '4px' }}>3. 영어 게임 & 챌린지</div>
-            <div style={{ fontSize: '14px', opacity: 0.85 }}>스피드 문법, Word Master, 랭킹전</div>
+            <div style={{ fontSize: '14px', opacity: 0.85 }}>스피드 문법, Word Master, Word Drop, 랭킹전</div>
           </button>
         </div>
       </div>
@@ -100,7 +100,7 @@ export default function ElementaryHome({ student, onNavigate, onLogout, onBackTo
     );
   }
 
-  // ⭐️ 3. 영어 게임 하위 메뉴 (Grammar, WordMaster, Ranking 연결)
+  // ⭐️ 3. 영어 게임 하위 메뉴 (Grammar, WordMaster, GameWordDrop, Ranking 연결)
   if (currentView === 'game') {
     return (
       <div style={{ padding: '24px', maxWidth: '500px', margin: '0 auto', fontFamily: 'Pretendard, sans-serif' }}>
@@ -110,6 +110,10 @@ export default function ElementaryHome({ student, onNavigate, onLogout, onBackTo
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <button onClick={() => onNavigate('grammar')} style={subButtonStyle}>⚡ 스피드 문법</button>
           <button onClick={() => onNavigate('wordMaster')} style={subButtonStyle}>⌨️ Word Master</button>
+          
+          {/* 💡 새로운 Word Drop 게임 버튼 추가 완료! */}
+          <button onClick={() => onNavigate('gameWordDrop')} style={subButtonStyle}>☄️ Word Drop</button>
+          
           <button onClick={() => onNavigate('ranking')} style={subButtonStyle}>🏆 랭킹전 확인하기</button>
         </div>
       </div>
