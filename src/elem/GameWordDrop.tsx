@@ -23,6 +23,15 @@ interface FallingWord {
   color: string;
 }
 
+// 💡 교재 자동 넘어가기를 위한 전체 시리즈 순서 정의
+const BOOK_SEQUENCE = [
+  '240_1', '240_2', '240_3', '240_4', '240_5', '240_6',
+  '520_1', '520_2', '520_3', '520_4', '520_5', '520_6',
+  '860_1', '860_2', '860_3', '860_4', '860_5', '860_6',
+  '1240_1', '1240_2', '1240_3', '1240_4', '1240_5', '1240_6',
+  '1680_1', '1680_2', '1680_3', '1680_4', '1680_5', '1680_6'
+];
+
 const getFakeUTCString = (date: Date) => {
   const yyyy = date.getFullYear();
   const mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -49,7 +58,8 @@ const parseAcceptableAnswers = (text: string, mode: 'FIND_KOR' | 'FIND_ENG') => 
 };
 
 export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
-  const [appPhase, setAppPhase] = useState<'SETUP' | 'PLAYING' | 'GAME_OVER'>('SETUP');
+  // 💡 BOOK_CLEAR(교재 마스터) 상태 추가
+  const [appPhase, setAppPhase] = useState<'SETUP' | 'PLAYING' | 'GAME_OVER' | 'BOOK_CLEAR'>('SETUP');
   const [isLoading, setIsLoading] = useState(false);
 
   const [books, setBooks] = useState<string[]>([]);
@@ -61,8 +71,14 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
   const [inputValue, setInputValue] = useState("");
   const [finalScore, setFinalScore] = useState(0);
 
+  const [hitFlash, setHitFlash] = useState<'none' | 'success' | 'fail'>('none');
+
+  const inputRef = useRef<HTMLInputElement>(null); 
+  const clearLockRef = useRef(false); 
+
   const gameRef = useRef({
     wordsPool: [] as WordData[],
+    unusedTargets: [] as WordData[], // 💡 중복 출제 방지를 위한 남은 단어 목록
     fallingWords: [] as FallingWord[],
     currentTarget: null as WordData | null, 
     lives: 3,
@@ -76,9 +92,6 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
 
   const requestRef = useRef<number>(0);
   
-  // 💡 [핵심 추가] 한글 마지막 글자 튀어오름(잔상) 방지를 위한 잠금 장치
-  const clearLockRef = useRef(false);
-
   useEffect(() => {
     const fetchBooks = async () => {
       const { data } = await supabase.from('words').select('book');
@@ -132,8 +145,12 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
       if (error) throw error;
       if (!data || data.length === 0) throw new Error("단어 데이터가 없습니다.");
 
+      // 💡 랜덤으로 섞어서 남은 단어 목록(unusedTargets)에 채워넣기
+      const shuffledWords = [...data].sort(() => Math.random() - 0.5);
+
       gameRef.current = {
         wordsPool: data,
+        unusedTargets: shuffledWords,
         fallingWords: [],
         currentTarget: null,
         lives: 3,
@@ -147,7 +164,7 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
 
       setInputValue("");
       setAppPhase('PLAYING');
-      clearLockRef.current = false; // 시작 시 잠금 해제
+      clearLockRef.current = false; 
 
       requestRef.current = requestAnimationFrame(gameLoop);
 
@@ -161,9 +178,14 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
   const spawnWave = () => {
     const state = gameRef.current;
     
-    const targetWord = state.wordsPool[Math.floor(Math.random() * state.wordsPool.length)];
+    // 💡 남은 단어가 하나도 없으면 에러가 날 수 있으니 방어
+    if (state.unusedTargets.length === 0) return;
+
+    // 1. 진짜 정답 뽑기 (중복 없이 pop)
+    const targetWord = state.unusedTargets.pop()!;
     state.currentTarget = targetWord;
 
+    // 2. 가짜 미끼 2개 뽑기 (전체 풀에서 정답과 겹치지 않게)
     const distractors: WordData[] = [];
     while (distractors.length < 2) {
       const d = state.wordsPool[Math.floor(Math.random() * state.wordsPool.length)];
@@ -175,7 +197,9 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     const waveItems = [targetWord, ...distractors];
     waveItems.sort(() => Math.random() - 0.5);
 
-    const colors = ['#f87171', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#a855f7'];
+    const colors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+    // 💡 화면 밖 이탈 방지를 위한 고정된 3개 라인 (좌, 중, 우)
+    const basePositions = [18, 50, 82]; 
 
     state.fallingWords = waveItems.map((item, index) => {
       const isCorrect = item.eng === targetWord.eng;
@@ -187,14 +211,32 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
         text: textToShow,
         acceptableAnswers: parseAcceptableAnswers(answerToType, mode),
         isCorrect: isCorrect,
-        x: 15 + (index * 35) + (Math.random() * 5 - 2.5), 
-        y: -10 - (Math.random() * 10), 
-        speed: Math.random() * 0.03 + 0.08, 
+        // 각 라인에서 아주 미세하게만 흔들리도록 설정 (이탈 절대 불가)
+        x: basePositions[index] + (Math.random() * 4 - 2), 
+        y: -10 - (Math.random() * 5), 
+        speed: Math.random() * 0.025 + 0.04, 
         color: colors[index % colors.length]
       };
     });
 
-    state.speedMultiplier += 0.015;
+    state.speedMultiplier += 0.005;
+  };
+
+  const triggerHitFlash = (type: 'success' | 'fail') => {
+    setHitFlash(type);
+    setTimeout(() => setHitFlash('none'), 300);
+  };
+
+  const forceClearInput = () => {
+    clearLockRef.current = true; 
+    setInputValue(""); 
+    if (inputRef.current) inputRef.current.value = ""; 
+    
+    setTimeout(() => {
+      if (inputRef.current) inputRef.current.value = "";
+      setInputValue("");
+      clearLockRef.current = false;
+    }, 150); 
   };
 
   const gameLoop = () => {
@@ -202,6 +244,11 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     if (state.isGameOver) return;
 
     if (state.needNewWave) {
+      // 💡 [핵심] 출제할 남은 단어가 없으면 교재 클리어!
+      if (state.unusedTargets.length === 0) {
+        endGame(true); // true = STAGE CLEAR
+        return;
+      }
       spawnWave();
       state.needNewWave = false;
     }
@@ -226,17 +273,11 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
 
     if (lifeLost) {
       state.lives -= 1;
-      
-      // 땅에 떨어졌을 때도 잔상 방지 잠금 실행
-      clearLockRef.current = true;
-      setInputValue(""); 
-      setTimeout(() => {
-        clearLockRef.current = false;
-        setInputValue("");
-      }, 50);
+      triggerHitFlash('fail');
+      forceClearInput(); 
 
       if (state.lives <= 0) {
-        endGame();
+        endGame(false); // false = GAME OVER
         return;
       }
     }
@@ -249,9 +290,8 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     const state = gameRef.current;
     if (state.isGameOver) return;
 
-    // 💡 잔상 방지 락(Lock)이 걸려있으면 컴퓨터가 뱉어내는 찌꺼기 글자를 튕겨냄
     if (clearLockRef.current) {
-      e.target.value = ""; // 강제 비움
+      e.target.value = "";
       return;
     }
 
@@ -274,18 +314,9 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
       const hitWord = state.fallingWords[matchIndex];
 
       if (hitWord.isCorrect) {
-        // 🎯 정답
         state.fallingWords = []; 
-        
-        // 💡 [잔상 방지 로직] 정답을 맞춘 즉시 0.05초간 입력을 잠가버림
-        clearLockRef.current = true;
-        setInputValue(""); 
-        e.target.value = ""; 
-
-        setTimeout(() => {
-          clearLockRef.current = false;
-          setInputValue(""); // 0.05초 뒤에 한 번 더 확실하게 청소
-        }, 50);
+        forceClearInput(); 
+        triggerHitFlash('success'); 
         
         const baseScore = mode === 'FIND_ENG' ? 20 : 10;
         const comboBonus = state.combo * 2; 
@@ -294,30 +325,23 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
         state.combo += 1;
         state.needNewWave = true; 
       } else {
-        // 👻 미끼 오답
         state.fallingWords.splice(matchIndex, 1); 
-        
-        clearLockRef.current = true;
-        setInputValue(""); 
-        e.target.value = "";
-
-        setTimeout(() => {
-          clearLockRef.current = false;
-          setInputValue("");
-        }, 50);
-
+        forceClearInput();
+        triggerHitFlash('fail'); 
         state.combo = 0; 
       }
     }
   };
 
-  const endGame = async () => {
+  // 💡 종료 함수에 isClear (전체 마스터 여부) 파라미터 추가
+  const endGame = async (isClear = false) => {
     const state = gameRef.current;
     state.isGameOver = true;
     if (requestRef.current) cancelAnimationFrame(requestRef.current);
     
     setFinalScore(state.score);
-    setAppPhase('GAME_OVER');
+    // 전부 다 맞췄으면 BOOK_CLEAR 화면으로, 아니면 GAME_OVER 화면으로!
+    setAppPhase(isClear ? 'BOOK_CLEAR' : 'GAME_OVER');
 
     const modeText = mode === 'FIND_KOR' ? '뜻찾기' : '스펠링찾기';
 
@@ -353,19 +377,32 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     };
   }, []);
 
+  // 💡 다음 교재 계산 로직
+  const currentIndex = BOOK_SEQUENCE.indexOf(selectedBook);
+  const nextBook = currentIndex !== -1 && currentIndex + 1 < BOOK_SEQUENCE.length 
+      ? BOOK_SEQUENCE[currentIndex + 1] 
+      : null;
+
+  const handleNextBook = () => {
+    if (nextBook) {
+      setSelectedBook(nextBook);
+      setAppPhase('SETUP'); // 셋업 화면으로 보내면 useEffect가 자동으로 남은 횟수 3번인지 체크해 줍니다!
+    }
+  };
+
   if (appPhase === 'SETUP') {
     return (
       <div style={{ backgroundColor: '#f0f4f8', minHeight: '100vh', padding: '20px', fontFamily: 'Pretendard, sans-serif', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <div style={{ width: '100%', maxWidth: '450px', background: 'white', borderRadius: '24px', padding: '32px 24px', boxShadow: '0 8px 24px rgba(0,0,0,0.06)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
             <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#8e8e93', fontSize: '16px', fontWeight: '700', cursor: 'pointer' }}>← 뒤로</button>
-            <h2 style={{ fontSize: '22px', fontWeight: '900', margin: 0, color: '#1e293b' }}>🎮 Word Drop V2</h2>
+            <h2 style={{ fontSize: '22px', fontWeight: '900', margin: 0, color: '#1e293b' }}>☄️ Word Drop V3</h2>
             <div style={{ width: '40px' }}></div>
           </div>
 
           <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', padding: '12px 16px', borderRadius: '12px', marginBottom: '24px' }}>
             <p style={{ margin: 0, fontSize: '13px', color: '#15803d', fontWeight: 'bold', lineHeight: '1.5' }}>
-              💡 <b>게임 룰:</b> 제시된 단어를 보고, 떨어지는 3개의 보기 중 <b>진짜 정답</b>만 골라서 타자를 쳐주세요! (가짜 단어를 치면 콤보가 끊겨요)
+              💡 <b>게임 룰:</b> 제시된 단어를 보고, 떨어지는 3개의 우주석 중 <b>진짜 정답</b>만 골라서 타자를 쳐주세요! (가짜를 치면 콤보가 끊겨요)
             </p>
           </div>
           
@@ -380,12 +417,12 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
           <div style={{ marginBottom: '32px' }}>
             <label style={{ fontSize: '15px', fontWeight: '800', color: '#475569', display: 'block', marginBottom: '8px' }}>2. 챌린지 모드 선택</label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <button onClick={() => setMode('FIND_KOR')} style={{ padding: '16px', borderRadius: '12px', fontWeight: '800', fontSize: '15px', border: `2px solid ${mode === 'FIND_KOR' ? '#3b82f6' : '#e2e8f0'}`, backgroundColor: mode === 'FIND_KOR' ? '#eff6ff' : 'white', color: mode === 'FIND_KOR' ? '#2563eb' : '#64748b', cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}>
-                <span>🟢 영어 제시어 ➡️ <b>한글 뜻 치기</b></span>
+              <button onClick={() => setMode('FIND_KOR')} style={{ padding: '16px', borderRadius: '12px', fontWeight: '800', fontSize: '15px', border: `2px solid ${mode === 'FIND_KOR' ? '#3b82f6' : '#e2e8f0'}`, backgroundColor: mode === 'FIND_KOR' ? '#eff6ff' : 'white', color: mode === 'FIND_KOR' ? '#2563eb' : '#64748b', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', transition: 'all 0.2s' }}>
+                <span>🟢 영어 제시어 ➡️ <b>한글 뜻 찾기</b></span>
                 <span style={{ fontSize: '13px', color: mode === 'FIND_KOR' ? '#3b82f6' : '#9ca3af' }}>기본 10점</span>
               </button>
-              <button onClick={() => setMode('FIND_ENG')} style={{ padding: '16px', borderRadius: '12px', fontWeight: '800', fontSize: '15px', border: `2px solid ${mode === 'FIND_ENG' ? '#ef4444' : '#e2e8f0'}`, backgroundColor: mode === 'FIND_ENG' ? '#fef2f2' : 'white', color: mode === 'FIND_ENG' ? '#dc2626' : '#64748b', cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}>
-                <span>🔥 한글 제시어 ➡️ <b>영어 스펠링 치기</b></span>
+              <button onClick={() => setMode('FIND_ENG')} style={{ padding: '16px', borderRadius: '12px', fontWeight: '800', fontSize: '15px', border: `2px solid ${mode === 'FIND_ENG' ? '#ef4444' : '#e2e8f0'}`, backgroundColor: mode === 'FIND_ENG' ? '#fef2f2' : 'white', color: mode === 'FIND_ENG' ? '#dc2626' : '#64748b', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', transition: 'all 0.2s' }}>
+                <span>🔥 한글 제시어 ➡️ <b>영어 스펠링 찾기</b></span>
                 <span style={{ fontSize: '13px', fontWeight: '900', color: '#ef4444' }}>어려움 (점수 2배)</span>
               </button>
             </div>
@@ -393,14 +430,46 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
 
           {selectedBook && (
             <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '12px', marginBottom: '24px', textAlign: 'center' }}>
-              <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#475569' }}>오늘 <b>[{selectedBook}]</b> 도전 기회: </span>
+              <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#475569' }}>오늘 <b>[{selectedBook}]</b> 우주 방어전 기회: </span>
               <span style={{ fontSize: '18px', fontWeight: '900', color: playCount >= 3 ? '#ef4444' : '#10b981' }}>{3 - playCount} / 3</span>
             </div>
           )}
 
-          <button onClick={handleStart} disabled={isLoading || (!!selectedBook && playCount >= 3)} style={{ width: '100%', backgroundColor: (!!selectedBook && playCount >= 3) ? '#cbd5e1' : '#3b82f6', color: 'white', border: 'none', padding: '18px', borderRadius: '16px', fontSize: '18px', fontWeight: '900', cursor: (!!selectedBook && playCount >= 3) ? 'not-allowed' : 'pointer', boxShadow: (!!selectedBook && playCount >= 3) ? 'none' : '0 6px 16px rgba(59,130,246,0.3)' }}>
-            {isLoading ? '로딩 중...' : (playCount >= 3 ? '오늘 기회 소진 😭' : '게임 시작 🚀')}
+          <button onClick={handleStart} disabled={isLoading || (!!selectedBook && playCount >= 3)} style={{ width: '100%', backgroundColor: (!!selectedBook && playCount >= 3) ? '#cbd5e1' : '#3b82f6', color: 'white', border: 'none', padding: '18px', borderRadius: '16px', fontSize: '18px', fontWeight: '900', cursor: (!!selectedBook && playCount >= 3) ? 'not-allowed' : 'pointer', boxShadow: (!!selectedBook && playCount >= 3) ? 'none' : '0 6px 16px rgba(59,130,246,0.3)', transition: 'all 0.2s' }}>
+            {isLoading ? '로딩 중...' : (playCount >= 3 ? '오늘 기회 소진 😭' : '방어전 시작 🚀')}
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 💡 새롭게 추가된 [교재 마스터] 화면
+  if (appPhase === 'BOOK_CLEAR') {
+    return (
+      <div style={{ backgroundColor: '#0f172a', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', fontFamily: 'Pretendard, sans-serif', textAlign: 'center', padding: '20px' }}>
+        <div style={{ background: 'linear-gradient(to bottom, #1e293b, #0f172a)', padding: '40px 30px', borderRadius: '24px', boxShadow: '0 20px 40px rgba(0,0,0,0.5)', maxWidth: '400px', width: '100%', border: '1px solid #3b82f6' }}>
+          <div style={{ fontSize: '60px', marginBottom: '16px' }}>🏆</div>
+          <h2 style={{ fontSize: '28px', fontWeight: '900', marginBottom: '8px', color: '#f8fafc' }}>STAGE CLEAR!</h2>
+          <p style={{ color: '#94a3b8', marginBottom: '32px', fontSize: '16px', fontWeight: 'bold' }}>[{selectedBook}] 교재의 모든 단어를 마스터했습니다!</p>
+          
+          <div style={{ backgroundColor: 'rgba(59, 130, 246, 0.2)', padding: '24px', borderRadius: '16px', border: '2px solid #3b82f6', marginBottom: '32px' }}>
+            <div style={{ fontSize: '14px', color: '#93c5fd', fontWeight: 'bold', marginBottom: '4px' }}>최종 획득 점수</div>
+            <div style={{ fontSize: '42px', fontWeight: '900', color: '#60a5fa' }}>{finalScore} <span style={{ fontSize: '20px' }}>점</span></div>
+            <div style={{ fontSize: '12px', color: '#93c5fd', marginTop: '8px', fontWeight: 'bold' }}>완벽한 우주 방어 성공! 랭킹에 등록되었습니다 🚀</div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {nextBook ? (
+              <button onClick={handleNextBook} style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '16px', borderRadius: '16px', fontWeight: '800', fontSize: '16px', width: '100%', cursor: 'pointer', boxShadow: '0 4px 12px rgba(16,185,129,0.3)' }}>
+                다음 교재 ({nextBook}) 도전하기
+              </button>
+            ) : (
+              <div style={{ color: '#fbbf24', fontWeight: 'bold', marginBottom: '10px' }}>마지막 교재까지 모두 수료했습니다! 🎉</div>
+            )}
+            <button onClick={onBack} style={{ backgroundColor: '#334155', color: 'white', border: 'none', padding: '16px', borderRadius: '16px', fontWeight: '800', fontSize: '16px', width: '100%', cursor: 'pointer' }}>
+              메뉴로 나가기
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -408,20 +477,20 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
 
   if (appPhase === 'GAME_OVER') {
     return (
-      <div style={{ backgroundColor: '#1e293b', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', fontFamily: 'Pretendard, sans-serif', textAlign: 'center', padding: '20px' }}>
-        <div style={{ background: 'white', padding: '40px 30px', borderRadius: '24px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)', maxWidth: '400px', width: '100%' }}>
+      <div style={{ backgroundColor: '#0f172a', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', fontFamily: 'Pretendard, sans-serif', textAlign: 'center', padding: '20px' }}>
+        <div style={{ background: 'linear-gradient(to bottom, #1e293b, #0f172a)', padding: '40px 30px', borderRadius: '24px', boxShadow: '0 20px 40px rgba(0,0,0,0.5)', maxWidth: '400px', width: '100%', border: '1px solid #334155' }}>
           <div style={{ fontSize: '60px', marginBottom: '16px' }}>💥</div>
-          <h2 style={{ fontSize: '28px', fontWeight: '900', marginBottom: '8px', color: '#0f172a' }}>GAME OVER</h2>
-          <p style={{ color: '#64748b', marginBottom: '32px', fontSize: '16px', fontWeight: 'bold' }}>정답을 바닥에 떨어뜨렸습니다!</p>
+          <h2 style={{ fontSize: '28px', fontWeight: '900', marginBottom: '8px', color: '#f8fafc' }}>방어 실패!</h2>
+          <p style={{ color: '#94a3b8', marginBottom: '32px', fontSize: '16px', fontWeight: 'bold' }}>정답 우주석이 기지에 충돌했습니다!</p>
           
-          <div style={{ backgroundColor: '#f0fdf4', padding: '24px', borderRadius: '16px', border: '2px solid #bbf7d0', marginBottom: '32px' }}>
-            <div style={{ fontSize: '14px', color: '#15803d', fontWeight: 'bold', marginBottom: '4px' }}>최종 획득 점수</div>
-            <div style={{ fontSize: '42px', fontWeight: '900', color: '#16a34a' }}>{finalScore} <span style={{ fontSize: '20px' }}>점</span></div>
-            <div style={{ fontSize: '12px', color: '#16a34a', marginTop: '8px', fontWeight: 'bold' }}>이 점수는 랭킹에 합산되었습니다 👑</div>
+          <div style={{ backgroundColor: 'rgba(21, 128, 61, 0.2)', padding: '24px', borderRadius: '16px', border: '2px solid #22c55e', marginBottom: '32px' }}>
+            <div style={{ fontSize: '14px', color: '#4ade80', fontWeight: 'bold', marginBottom: '4px' }}>최종 획득 점수</div>
+            <div style={{ fontSize: '42px', fontWeight: '900', color: '#22c55e' }}>{finalScore} <span style={{ fontSize: '20px' }}>점</span></div>
+            <div style={{ fontSize: '12px', color: '#4ade80', marginTop: '8px', fontWeight: 'bold' }}>이 점수는 랭킹에 합산되었습니다 👑</div>
           </div>
 
           <button onClick={() => setAppPhase('SETUP')} style={{ backgroundColor: '#3b82f6', color: 'white', border: 'none', padding: '16px', borderRadius: '16px', fontWeight: '800', fontSize: '16px', width: '100%', cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
-            다시 도전하기
+            메뉴로 돌아가기
           </button>
         </div>
       </div>
@@ -429,25 +498,32 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
   }
 
   const st = gameRef.current;
+  
+  const getBackgroundColor = () => {
+    if (hitFlash === 'success') return 'rgba(34, 197, 94, 0.2)';
+    if (hitFlash === 'fail') return 'rgba(239, 68, 68, 0.2)';
+    return '#1e293b'; 
+  };
+
   return (
-    <div style={{ backgroundColor: '#0f172a', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', fontFamily: 'Pretendard, sans-serif' }}>
+    <div style={{ backgroundColor: '#020617', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', fontFamily: 'Pretendard, sans-serif' }}>
       
-      <div style={{ width: '100%', maxWidth: '480px', height: '100vh', maxHeight: '800px', backgroundColor: '#1e293b', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 0 30px rgba(0,0,0,0.5)' }}>
+      <div style={{ width: '100%', maxWidth: '480px', height: '100vh', maxHeight: '800px', backgroundColor: getBackgroundColor(), backgroundImage: 'radial-gradient(circle at 50% 10%, #1e293b 0%, #0f172a 80%)', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 0 30px rgba(0,0,0,0.8)', transition: 'background-color 0.1s' }}>
         
         <div style={{ padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', zIndex: 10 }}>
           <div>
             <div style={{ fontSize: '14px', color: '#94a3b8', fontWeight: 'bold', marginBottom: '4px' }}>SCORE</div>
-            <div style={{ fontSize: '28px', fontWeight: '900', color: '#fbbf24' }}>{st.score}</div>
+            <div style={{ fontSize: '28px', fontWeight: '900', color: '#fbbf24', textShadow: '0 2px 10px rgba(251, 191, 36, 0.5)' }}>{st.score}</div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: '14px', color: '#94a3b8', fontWeight: 'bold', marginBottom: '4px' }}>LIFE</div>
+            <div style={{ fontSize: '14px', color: '#94a3b8', fontWeight: 'bold', marginBottom: '4px' }}>SHIELD (LIFE)</div>
             <div style={{ fontSize: '24px' }}>
               {Array.from({ length: 3 }).map((_, i) => (
-                <span key={i} style={{ opacity: i < st.lives ? 1 : 0.2, margin: '0 2px' }}>❤️</span>
+                <span key={i} style={{ opacity: i < st.lives ? 1 : 0.2, margin: '0 2px', filter: i < st.lives ? 'drop-shadow(0 0 5px red)' : 'none' }}>❤️</span>
               ))}
             </div>
             {st.combo >= 2 && (
-              <div style={{ fontSize: '18px', fontWeight: '900', color: '#38bdf8', marginTop: '8px', animation: 'pulse 0.5s infinite' }}>
+              <div style={{ fontSize: '18px', fontWeight: '900', color: '#38bdf8', marginTop: '8px', animation: 'pulse 0.5s infinite', textShadow: '0 0 10px rgba(56, 189, 248, 0.8)' }}>
                 {st.combo} COMBO 🔥
               </div>
             )}
@@ -455,9 +531,9 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
         </div>
 
         <div style={{ textAlign: 'center', zIndex: 10, padding: '0 20px', marginBottom: '10px' }}>
-          <div style={{ display: 'inline-block', backgroundColor: 'rgba(255,255,255,0.95)', padding: '16px 32px', borderRadius: '20px', boxShadow: '0 8px 20px rgba(0,0,0,0.3)', border: '4px solid #3b82f6' }}>
-            <span style={{ fontSize: '14px', color: '#3b82f6', fontWeight: '900', display: 'block', marginBottom: '4px' }}>🎯 떨어지는 보기 중 정답을 찾으세요!</span>
-            <div style={{ fontSize: '36px', fontWeight: '900', color: '#0f172a' }}>
+          <div style={{ display: 'inline-block', backgroundColor: 'rgba(15, 23, 42, 0.8)', padding: '16px 32px', borderRadius: '24px', border: '2px solid #38bdf8', boxShadow: '0 0 20px rgba(56, 189, 248, 0.4)', backdropFilter: 'blur(5px)' }}>
+            <span style={{ fontSize: '13px', color: '#7dd3fc', fontWeight: '900', display: 'block', marginBottom: '6px', letterSpacing: '1px' }}>[ 목표 타겟 (TARGET) ]</span>
+            <div style={{ fontSize: '32px', fontWeight: '900', color: '#f8fafc' }}>
               {mode === 'FIND_KOR' ? st.currentTarget?.eng : st.currentTarget?.kor}
             </div>
           </div>
@@ -474,16 +550,20 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
                 transform: 'translateX(-50%)',
                 backgroundColor: word.color,
                 color: 'white',
-                padding: '10px 18px',
-                borderRadius: '12px',
+                padding: '10px 14px',
+                borderRadius: '24px', 
                 fontWeight: '900',
-                fontSize: '18px',
-                boxShadow: '0 6px 12px rgba(0,0,0,0.4)',
-                whiteSpace: 'nowrap',
-                border: '2px solid rgba(255,255,255,0.3)'
+                fontSize: '15px', // 💡 모바일 삐져나감 방지 폰트 조정
+                maxWidth: '28%', // 💡 화면 밖으로 이탈 방지!
+                whiteSpace: 'pre-wrap', // 💡 단어가 길면 예쁘게 줄바꿈됨
+                wordBreak: 'keep-all',
+                textAlign: 'center',
+                lineHeight: '1.2',
+                border: '2px solid rgba(255,255,255,0.4)',
+                boxShadow: `0 0 15px ${word.color}, 0 -15px 25px ${word.color}80`
               }}
             >
-              {word.text}
+              ☄️<br/>{word.text}
             </div>
           ))}
           
@@ -492,23 +572,25 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
             top: '85%', 
             width: '100%', 
             height: '100%', 
-            background: 'linear-gradient(to bottom, rgba(239, 68, 68, 0.4), rgba(239, 68, 68, 0.8))', 
-            borderTop: '3px dashed #f87171',
+            background: 'linear-gradient(to bottom, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.6))', 
+            borderTop: '2px solid #ef4444',
+            boxShadow: '0 -5px 20px rgba(239, 68, 68, 0.5)',
             display: 'flex',
             justifyContent: 'center',
             paddingTop: '8px'
           }}>
-            <span style={{ color: '#fca5a5', fontWeight: '900', fontSize: '14px', letterSpacing: '2px' }}>DANGER ZONE</span>
+            <span style={{ color: '#fca5a5', fontWeight: '900', fontSize: '14px', letterSpacing: '3px' }}>BASE SHIELD</span>
           </div>
         </div>
 
-        <div style={{ padding: '20px', backgroundColor: '#0f172a', zIndex: 10 }}>
+        <div style={{ padding: '20px', backgroundColor: '#020617', zIndex: 10, borderTop: '1px solid #1e293b' }}>
           <input
+            ref={inputRef}
             type="text"
             value={inputValue}
             onChange={handleType}
             autoFocus
-            placeholder={mode === 'FIND_KOR' ? "정답인 한글 뜻을 치세요" : "정답인 영어를 치세요"}
+            placeholder={mode === 'FIND_KOR' ? "정답인 뜻을 공격(입력)!" : "스펠링을 공격(입력)!"}
             style={{
               width: '100%',
               padding: '20px',
@@ -516,12 +598,13 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
               fontWeight: '900',
               textAlign: 'center',
               borderRadius: '16px',
-              border: '3px solid #3b82f6',
-              backgroundColor: '#1e293b',
-              color: 'white',
+              border: hitFlash === 'fail' ? '3px solid #ef4444' : '3px solid #3b82f6',
+              backgroundColor: '#0f172a',
+              color: '#f8fafc',
               outline: 'none',
               boxSizing: 'border-box',
-              boxShadow: '0 0 20px rgba(59,130,246,0.3)'
+              boxShadow: hitFlash === 'success' ? '0 0 30px rgba(34, 197, 94, 0.8)' : (hitFlash === 'fail' ? '0 0 30px rgba(239, 68, 68, 0.8)' : '0 0 20px rgba(59,130,246,0.3)'),
+              transition: 'all 0.1s'
             }}
           />
         </div>
