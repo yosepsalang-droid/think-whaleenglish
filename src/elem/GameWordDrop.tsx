@@ -16,7 +16,7 @@ interface FallingWord {
   id: number;
   text: string;     
   acceptableAnswers: string[]; 
-  isCorrect: boolean; // 💡 진짜 정답인지 가짜 미끼인지 판별
+  isCorrect: boolean; 
   x: number;        
   y: number;        
   speed: number;    
@@ -33,7 +33,6 @@ const getFakeUTCString = (date: Date) => {
   return `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}+00:00`;
 };
 
-// 💡 한글 유연한 정답 판별기
 const parseAcceptableAnswers = (text: string, mode: 'FIND_KOR' | 'FIND_ENG') => {
   if (mode === 'FIND_ENG') {
     return [text.toLowerCase().replace(/[^a-z0-9]/g, '')];
@@ -65,17 +64,20 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
   const gameRef = useRef({
     wordsPool: [] as WordData[],
     fallingWords: [] as FallingWord[],
-    currentTarget: null as WordData | null, // 💡 화면에 고정될 제시어
+    currentTarget: null as WordData | null, 
     lives: 3,
     score: 0,
     combo: 0,
     wordIdCounter: 0,
     speedMultiplier: 1,
-    needNewWave: true, // 💡 새로운 문제를 출제해야 하는지 여부
+    needNewWave: true, 
     isGameOver: false
   });
 
   const requestRef = useRef<number>(0);
+  
+  // 💡 [핵심 추가] 한글 마지막 글자 튀어오름(잔상) 방지를 위한 잠금 장치
+  const clearLockRef = useRef(false);
 
   useEffect(() => {
     const fetchBooks = async () => {
@@ -145,6 +147,7 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
 
       setInputValue("");
       setAppPhase('PLAYING');
+      clearLockRef.current = false; // 시작 시 잠금 해제
 
       requestRef.current = requestAnimationFrame(gameLoop);
 
@@ -155,15 +158,12 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     }
   };
 
-  // 💡 [핵심 기능] Wave 생성기 (정답 1개 + 미끼 2개를 동시에 떨어뜨림)
   const spawnWave = () => {
     const state = gameRef.current;
     
-    // 1. 진짜 정답 뽑기
     const targetWord = state.wordsPool[Math.floor(Math.random() * state.wordsPool.length)];
     state.currentTarget = targetWord;
 
-    // 2. 가짜 미끼 2개 뽑기 (정답과 안 겹치게)
     const distractors: WordData[] = [];
     while (distractors.length < 2) {
       const d = state.wordsPool[Math.floor(Math.random() * state.wordsPool.length)];
@@ -172,31 +172,28 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
       }
     }
 
-    // 3. 정답과 미끼를 섞기
     const waveItems = [targetWord, ...distractors];
     waveItems.sort(() => Math.random() - 0.5);
 
     const colors = ['#f87171', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#a855f7'];
 
-    // 4. 화면 위에서 동시에 떨어뜨리기 준비
     state.fallingWords = waveItems.map((item, index) => {
       const isCorrect = item.eng === targetWord.eng;
       const textToShow = mode === 'FIND_KOR' ? item.kor : item.eng;
-      const answerToType = mode === 'FIND_KOR' ? item.kor : item.eng; // 타자 쳐야 할 글자
+      const answerToType = mode === 'FIND_KOR' ? item.kor : item.eng; 
 
       return {
         id: state.wordIdCounter++,
         text: textToShow,
         acceptableAnswers: parseAcceptableAnswers(answerToType, mode),
         isCorrect: isCorrect,
-        x: 15 + (index * 35) + (Math.random() * 5 - 2.5), // 겹치지 않게 15%, 50%, 85% 근처로 분산
-        y: -10 - (Math.random() * 10), // 거의 동시에 출발
-        speed: Math.random() * 0.03 + 0.08, // 떨어지는 속도
+        x: 15 + (index * 35) + (Math.random() * 5 - 2.5), 
+        y: -10 - (Math.random() * 10), 
+        speed: Math.random() * 0.03 + 0.08, 
         color: colors[index % colors.length]
       };
     });
 
-    // 레벨업: 맞출수록 속도 미세 증가
     state.speedMultiplier += 0.015;
   };
 
@@ -214,17 +211,14 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
       const fw = state.fallingWords[i];
       fw.y += fw.speed * state.speedMultiplier;
 
-      // 바닥 판정 (y값이 82% 이상이면 DANGER ZONE)
       if (fw.y > 82) {
         if (fw.isCorrect) {
-          // 💡 정답이 바닥에 닿으면 생명 감소!
           lifeLost = true;
-          state.fallingWords = []; // 떨어지던 거 다 지우고
-          state.needNewWave = true; // 새 문제 준비
-          state.combo = 0; // 콤보 초기화
-          break; // 어차피 새 웨이브 시작이므로 반복문 탈출
+          state.fallingWords = []; 
+          state.needNewWave = true; 
+          state.combo = 0; 
+          break; 
         } else {
-          // 💡 미끼가 바닥에 닿으면 그냥 조용히 사라짐 (페널티 없음)
           state.fallingWords.splice(i, 1);
         }
       }
@@ -232,7 +226,15 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
 
     if (lifeLost) {
       state.lives -= 1;
+      
+      // 땅에 떨어졌을 때도 잔상 방지 잠금 실행
+      clearLockRef.current = true;
       setInputValue(""); 
+      setTimeout(() => {
+        clearLockRef.current = false;
+        setInputValue("");
+      }, 50);
+
       if (state.lives <= 0) {
         endGame();
         return;
@@ -246,6 +248,12 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
   const handleType = (e: React.ChangeEvent<HTMLInputElement>) => {
     const state = gameRef.current;
     if (state.isGameOver) return;
+
+    // 💡 잔상 방지 락(Lock)이 걸려있으면 컴퓨터가 뱉어내는 찌꺼기 글자를 튕겨냄
+    if (clearLockRef.current) {
+      e.target.value = ""; // 강제 비움
+      return;
+    }
 
     const val = e.target.value;
     setInputValue(val);
@@ -266,21 +274,39 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
       const hitWord = state.fallingWords[matchIndex];
 
       if (hitWord.isCorrect) {
-        // 🎯 정답을 맞춘 경우!
-        state.fallingWords = []; // 남은 미끼들 다 지우기
+        // 🎯 정답
+        state.fallingWords = []; 
+        
+        // 💡 [잔상 방지 로직] 정답을 맞춘 즉시 0.05초간 입력을 잠가버림
+        clearLockRef.current = true;
         setInputValue(""); 
+        e.target.value = ""; 
+
+        setTimeout(() => {
+          clearLockRef.current = false;
+          setInputValue(""); // 0.05초 뒤에 한 번 더 확실하게 청소
+        }, 50);
         
         const baseScore = mode === 'FIND_ENG' ? 20 : 10;
         const comboBonus = state.combo * 2; 
         
         state.score += (baseScore + comboBonus);
         state.combo += 1;
-        state.needNewWave = true; // 다음 문제 호출
+        state.needNewWave = true; 
       } else {
-        // 👻 미끼(가짜 오답)를 맞춘 경우!
-        state.fallingWords.splice(matchIndex, 1); // 미끼 파괴
+        // 👻 미끼 오답
+        state.fallingWords.splice(matchIndex, 1); 
+        
+        clearLockRef.current = true;
         setInputValue(""); 
-        state.combo = 0; // 콤보 초기화 페널티
+        e.target.value = "";
+
+        setTimeout(() => {
+          clearLockRef.current = false;
+          setInputValue("");
+        }, 50);
+
+        state.combo = 0; 
       }
     }
   };
@@ -408,7 +434,6 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
       
       <div style={{ width: '100%', maxWidth: '480px', height: '100vh', maxHeight: '800px', backgroundColor: '#1e293b', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 0 30px rgba(0,0,0,0.5)' }}>
         
-        {/* 상단 UI (점수, 생명) */}
         <div style={{ padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', zIndex: 10 }}>
           <div>
             <div style={{ fontSize: '14px', color: '#94a3b8', fontWeight: 'bold', marginBottom: '4px' }}>SCORE</div>
@@ -429,7 +454,6 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
           </div>
         </div>
 
-        {/* 💡 [핵심 UI] 찾아야 할 제시어 보드 */}
         <div style={{ textAlign: 'center', zIndex: 10, padding: '0 20px', marginBottom: '10px' }}>
           <div style={{ display: 'inline-block', backgroundColor: 'rgba(255,255,255,0.95)', padding: '16px 32px', borderRadius: '20px', boxShadow: '0 8px 20px rgba(0,0,0,0.3)', border: '4px solid #3b82f6' }}>
             <span style={{ fontSize: '14px', color: '#3b82f6', fontWeight: '900', display: 'block', marginBottom: '4px' }}>🎯 떨어지는 보기 중 정답을 찾으세요!</span>
