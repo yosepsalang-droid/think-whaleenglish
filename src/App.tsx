@@ -12,7 +12,7 @@ import WordMaster from './elem/WordMaster';
 import Ranking from './elem/Ranking'; 
 import GameWordDrop from './elem/GameWordDrop'; // ⭐️ 게임 컴포넌트 불러오기!
 
-// 📘 중등부 학습 컴포넌트
+// 📘 중·고등부 학습 컴포넌트
 import MidHome from './mid/MidHome';
 import Voca from './mid/Voca';
 import MidSen from './mid/MidSen';
@@ -144,8 +144,20 @@ export default function App() {
       return <Lms onBack={() => { setIsLoggedIn(false); setIsAdmin(false); setId(''); }} />;
     }
 
+    // 💡 중·고등부 학습 모드
     if (loggedInStudent && studentMode === 'middle') {
-      if (currentMenu === 'voca') return <Voca studentId={loggedInStudent.id} studentName={loggedInStudent.name} currentBook={loggedInStudent.currentBook} onBack={() => setCurrentMenu('midHome')} />;
+      // 🚀 핵심 수정 부분: 학년에 '고'가 들어가면 'words_high'를, 아니면 'words_mid'를 전달!
+      if (currentMenu === 'voca') {
+        return (
+          <Voca 
+            studentId={loggedInStudent.id} 
+            studentName={loggedInStudent.name} 
+            currentBook={loggedInStudent.currentBook} 
+            onBack={() => setCurrentMenu('midHome')} 
+            tableName={loggedInStudent.grade?.includes('고') ? 'words_high' : 'words_mid'} 
+          />
+        );
+      }
       if (currentMenu === 'midSen') return <MidSen onBack={() => setCurrentMenu('midHome')} />;
       if (currentMenu === 'verbTest') return <VerbTest onBack={() => setCurrentMenu('midHome')} studentId={loggedInStudent.id} studentName={loggedInStudent.name} />;
       
@@ -173,7 +185,6 @@ export default function App() {
           {currentMenu === 'grammar' && <Grammar student={loggedInStudent} onBack={() => setCurrentMenu('home')} totalScore={integratedRank.totalScore} myRank={integratedRank.myRank} rankings={{ thisMonth: integratedRank.thisMonth, lastMonth: integratedRank.lastMonth }} loadingRank={integratedRank.loading} onGameComplete={handleGameComplete} />}
           {currentMenu === 'wordMaster' && <WordMaster studentName={loggedInStudent.name} grade={loggedInStudent.grade} onBack={() => setCurrentMenu('home')} totalScore={integratedRank.totalScore} myRank={integratedRank.myRank} loadingRank={integratedRank.loading} onGameComplete={handleGameComplete} />}
           
-          {/* ⭐️ Word Drop 게임 화면 연결 완료! */}
           {currentMenu === 'gameWordDrop' && <GameWordDrop student={loggedInStudent} onBack={() => setCurrentMenu('home')} onGameComplete={handleGameComplete} />}
           
           {currentMenu === 'ranking' && <Ranking onBack={() => setCurrentMenu('home')} />}
@@ -195,9 +206,10 @@ export default function App() {
               <span style={{ fontSize: '22px', fontWeight: '800', wordBreak: 'keep-all', lineHeight: '1.3' }}>초등부<br/>입장</span>
             </button>
             
+            {/* 💡 센스 추가: 고등학생도 자연스럽게 누를 수 있도록 이름 변경! */}
             <button onClick={() => handleModeSelect('middle')} style={{ flex: 1, aspectRatio: '1 / 1', backgroundColor: '#007aff', color: 'white', border: 'none', borderRadius: '24px', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '16px', boxShadow: '0 6px 16px rgba(0, 122, 255, 0.3)', transition: 'all 0.2s ease-in-out' }} onMouseOver={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 122, 255, 0.4)'; }} onMouseOut={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(0, 122, 255, 0.3)'; }}>
               <span style={{ fontSize: '56px', lineHeight: '1' }}>📘</span>
-              <span style={{ fontSize: '22px', fontWeight: '800', wordBreak: 'keep-all', lineHeight: '1.3' }}>중등부<br/>입장</span>
+              <span style={{ fontSize: '22px', fontWeight: '800', wordBreak: 'keep-all', lineHeight: '1.3' }}>중·고등부<br/>입장</span>
             </button>
           </div>
         </div>

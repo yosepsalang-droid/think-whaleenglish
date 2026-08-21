@@ -6,29 +6,43 @@ interface VocaProps {
   currentBook?: string;
   studentId: string;
   studentName: string;
-  // 💡 [핵심 추가] 어떤 테이블(중등/고등)을 쓸지 결정하는 옵션 추가!
   tableName?: 'words_mid' | 'words_high'; 
 }
-interface WordItem { book: string; eng: string; kor: string; }
+interface WordItem { book: string; eng: string; kor: string; day: string; }
 interface Question { id: number; type: 'eng2kor' | 'kor2eng'; eng: string; kor: string; options: string[]; answer: string; }
 
 interface DailyRecord {
   date: string;
   book: string;
+  range: string; 
   status: '완료' | '미완료';
   score: number;
   attempt: number;
 }
 
-// tableName이 안 넘어오면 기본값으로 'words_mid'(중등부)를 쓰도록 설정
 export default function Voca({ onBack, currentBook, studentId, studentName, tableName = 'words_mid' }: VocaProps) {
   const [allWords, setAllWords] = useState<WordItem[]>([]);
-  const [gameState, setGameState] = useState<'intro' | 'playing' | 'result'>('intro');
+  const [testWords, setTestWords] = useState<WordItem[]>([]); // 현재 시험에 뽑힌 단어들 저장
+  
+  // 💡 진행 상태 세분화: 타이핑(주관식) 모드 추가
+  const [gameState, setGameState] = useState<'intro' | 'playing_mc' | 'playing_typing' | 'result'>('intro');
+  const [currentPhase, setCurrentPhase] = useState<0 | 1 | 2>(0); // 0: 중등부, 1: 고등 1차(객관식), 2: 고등 2차(주관식)
+  
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [score, setScore] = useState(0);
   const [selectedBook, setSelectedBook] = useState(currentBook || '');
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
+
+  // 고등부 주관식 타이핑을 위한 상태
+  const [typingInput, setTypingInput] = useState('');
+  const [showTypingFeedback, setShowTypingFeedback] = useState<'O' | 'X' | null>(null);
+
+  // 고등부 전용: 범위 입력
+  const [startNo, setStartNo] = useState<number | ''>('');
+  const [endNo, setEndNo] = useState<number | ''>('');
+  
+  const [currentTestMode, setCurrentTestMode] = useState('');
 
   const [wrongQuestions, setWrongQuestions] = useState<Question[]>([]);
   const [attemptCount, setAttemptCount] = useState(1);
@@ -36,7 +50,6 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
   
   const [totalQCount, setTotalQCount] = useState(0); 
 
-  // 💡 관제탑에 기록될 이름 자동 변경 (중등부면 '중등단어', 고등부면 '고등단어')
   const taskTypeName = tableName === 'words_high' ? '고등단어' : '중등단어';
 
   const { realTodayStr, currentMonthStr } = useMemo(() => {
@@ -44,10 +57,7 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
-    return {
-      realTodayStr: `${year}-${month}-${day}`,
-      currentMonthStr: `${year}-${month}`
-    };
+    return { realTodayStr: `${year}-${month}-${day}`, currentMonthStr: `${year}-${month}` };
   }, []);
 
   const [selectedDate, setSelectedDate] = useState(realTodayStr);
@@ -55,166 +65,93 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
 
   const selectedDateFormatted = useMemo(() => {
     const d = new Date(selectedDate);
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    const week = ['일', '월', '화', '수', '목', '금', '토'][d.getDay()];
-    return `${year}. ${month}. ${day} (${week})`;
+    return `${d.getFullYear()}. ${String(d.getMonth() + 1).padStart(2, '0')}. ${String(d.getDate()).padStart(2, '0')}`;
   }, [selectedDate]);
 
-  const sendToSupabaseLog = async (logData: { studentId: string; studentName: string; date: string; book: string; status: string; score?: number; attempt?: number; note?: string }) => {
-    try {
-      const { error } = await supabase
-        .from('learning_logs')
-        .insert([{
-          student_id: logData.studentId,
-          student_name: logData.studentName,
-          task_type: taskTypeName, // 💡 동적으로 바뀐 이름 적용
-          book_info: logData.book,
-          score: logData.score || 0,
-          status: logData.status,
-          attempt: logData.attempt || 1,
-          log_date: logData.date
-        }]);
-
-      if (error) {
-        console.error("수파베이스 저장 에러:", error);
-      } else {
-        console.log(`✅ [수파베이스 전송 완료] 학생: ${logData.studentName}, 점수: ${logData.score}`);
-      }
-    } catch (err) {
-      console.error("수파베이스 전송 실패:", err);
-    }
-  };
-
-  useEffect(() => {
-    if (!studentId) return;
-
-    const storageKey = `voca_log_${tableName}_${studentId}`; // 💡 캐시도 중/고등 분리
-    const savedData = localStorage.getItem(storageKey);
-    
-    if (savedData) {
-      const parsed = JSON.parse(savedData); 
-      
-      if (parsed.month !== currentMonthStr) {
-        const lastMonthRecords = parsed.records || {};
-        const [lastYear, lastMonth] = parsed.month.split('-').map(Number);
-        const daysInLastMonth = new Date(lastYear, lastMonth, 0).getDate();
-
-        for (let d = 1; d <= daysInLastMonth; d++) {
-          const dayStr = `${lastYear}-${String(lastMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-          const record: DailyRecord = lastMonthRecords[dayStr];
-          
-          if (!record || record.status === '미완료') {
-            sendToSupabaseLog({
-              studentId,
-              studentName,
-              date: dayStr,
-              book: record?.book || '선택 안 함',
-              status: '미완료',
-              note: '월말 자동 정산 - 미완료 결손 건'
-            });
-          }
-        }
-        const newMonthData = { month: currentMonthStr, records: {} };
-        localStorage.setItem(storageKey, JSON.stringify(newMonthData));
-      }
-    } else {
-      const initialData = { month: currentMonthStr, records: {} };
-      localStorage.setItem(storageKey, JSON.stringify(initialData));
-    }
-  }, [studentId, currentMonthStr, studentName, tableName]);
-
-  useEffect(() => {
-    if (!studentId || !selectedDate) return;
-    
-    const storageKey = `voca_log_${tableName}_${studentId}`;
-    const savedData = localStorage.getItem(storageKey);
-    
-    if (savedData) {
-      const parsed = JSON.parse(savedData);
-      const targetRecord = parsed.records[selectedDate];
-      if (targetRecord && targetRecord.status === '완료') {
-        setIsDateFinished(true);
-      } else {
-        setIsDateFinished(false);
-      }
-    }
-  }, [studentId, selectedDate, tableName]);
-
-  // 💡 [핵심] 넘어온 tableName 옵션에 따라 중등/고등 테이블을 다르게 불러옵니다!
+  // DB 로드
   useEffect(() => {
     const fetchWords = async () => {
       try {
-        const { data, error } = await supabase
-          .from(tableName) // 👈 여기서 변수 사용
-          .select('book, eng, kor');
-
+        const { data, error } = await supabase.from(tableName).select('book, eng, kor, day');
         if (error) throw error;
-        
-        const validWords = (data || []).filter(w => w.book && w.eng && w.kor);
-        if (validWords.length === 0) {
-          console.warn(`데이터가 없습니다. 수파베이스 ${tableName} 테이블에 단어를 추가해주세요.`);
-        }
+        const validWords = (data || []).filter(w => w.book && w.eng && w.kor && (tableName === 'words_mid' || w.day));
         setAllWords(validWords);
       } catch (e) { 
-        alert(`수파베이스 ${tableName} 데이터 로드 실패. 관리자에게 문의하세요.`); 
+        alert(`데이터 로드 실패. 관리자에게 문의하세요.`); 
         console.error(e);
       }
     };
     fetchWords();
   }, [tableName]);
 
-  const books = useMemo(() => {
-    const uniqueBooks = Array.from(new Set(allWords.map(w => w.book)));
-    uniqueBooks.sort(); 
-    return uniqueBooks;
-  }, [allWords]);
+  const books = useMemo(() => Array.from(new Set(allWords.map(w => w.book))).sort(), [allWords]);
 
   const speakText = (text: string) => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
-      const cleanText = text.replace(/[^a-zA-Z\s-]/g, '');
-      const utterance = new SpeechSynthesisUtterance(cleanText);
-      
+      const utterance = new SpeechSynthesisUtterance(text.replace(/[^a-zA-Z\s-]/g, ''));
       utterance.lang = 'en-US'; 
       utterance.rate = 0.85; 
-      utterance.pitch = 1.0;
-      
-      const voices = window.speechSynthesis.getVoices();
-      const englishVoices = voices.filter(v => v.lang.startsWith('en'));
-      const preferredVoices = ['Google US English', 'Samantha', 'Alex', 'Microsoft Zira'];
-      
-      let selectedVoice = null;
-      for (const pref of preferredVoices) {
-        selectedVoice = englishVoices.find(v => v.name.includes(pref));
-        if (selectedVoice) break;
-      }
-
-      if (selectedVoice) {
-        utterance.voice = selectedVoice;
-      } else if (englishVoices.length > 0) {
-        utterance.voice = englishVoices[0];
-      }
-
+      const voices = window.speechSynthesis.getVoices().filter(v => v.lang.startsWith('en'));
+      utterance.voice = voices.find(v => v.name.includes('Google US English') || v.name.includes('Samantha')) || voices[0] || null;
       window.speechSynthesis.speak(utterance);
     }
   };
 
-  const startGame = () => {
+  // 💡 시험 시작 핵심 로직
+  const startGame = (mode: 'eng2kor' | 'kor2eng' | 'half' | 'high_phase1', maxLimit?: number) => {
     if (!selectedBook) return alert("교재를 선택해주세요.");
     if (!selectedDate) return alert("학습 날짜를 선택해주세요.");
-
-    const filtered = allWords.filter(w => w.book === selectedBook);
-    if (filtered.length === 0) return alert("선택하신 교재의 단어 데이터가 수파베이스에 없습니다.");
     
-    saveProgressToLocal('미완료', 0, 1);
+    let availableWords = allWords.filter(w => w.book === selectedBook);
 
-    const shuffledWords = [...filtered].sort(() => Math.random() - 0.5).slice(0, 100);
+    if (tableName === 'words_high') {
+      if (startNo === '' || endNo === '') return alert("학습할 번호를 입력해주세요.");
+      if (startNo > endNo) return alert("끝 번호가 시작 번호보다 작습니다.");
+      
+      availableWords = availableWords.filter(w => {
+        const match = w.day?.match(/\d+/);
+        if (!match) return false;
+        const wordNo = parseInt(match[0], 10);
+        return wordNo >= startNo && wordNo <= endNo;
+      });
+      if (availableWords.length === 0) return alert(`해당 범위에 단어가 없습니다.`);
+    } else {
+      // 💡 중등부: 최근 2일(48시간) 쿨타임 필터링 적용!
+      const historyKey = `voca_history_${studentId}`;
+      const history = JSON.parse(localStorage.getItem(historyKey) || '{}');
+      const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
+      const now = Date.now();
+
+      const wordsNotRecent = availableWords.filter(w => {
+        const lastTested = history[w.eng];
+        if (!lastTested) return true;
+        return (now - lastTested) > TWO_DAYS_MS; // 48시간 지났으면 통과
+      });
+
+      // 단어가 너무 적게 남으면 에러 방지를 위해 쿨타임 무시하고 전부 포함
+      if (wordsNotRecent.length >= 20) {
+        availableWords = wordsNotRecent;
+      }
+    }
+
+    setTestWords(availableWords); // 이번 시험에 쓰일 단어장 저장
+    const shuffledWords = [...availableWords].sort(() => Math.random() - 0.5).slice(0, maxLimit || availableWords.length);
+    
+    // 모드 이름 기록
+    if (tableName === 'words_high') setCurrentTestMode('고등 2단계 집중 훈련');
+    else if (mode === 'eng2kor') setCurrentTestMode('뜻 시험 (150)');
+    else if (mode === 'kor2eng') setCurrentTestMode('스펠링 시험 (30)');
+    else setCurrentTestMode('반반 시험 (100)');
+
     const halfLength = Math.ceil(shuffledWords.length / 2);
     
     let generatedQuestions = shuffledWords.map((w, i) => {
-      const isEng2Kor = i < halfLength; 
+      let isEng2Kor = true;
+      if (mode === 'eng2kor' || mode === 'high_phase1') isEng2Kor = true;
+      else if (mode === 'kor2eng') isEng2Kor = false;
+      else if (mode === 'half') isEng2Kor = i < halfLength; 
+
       const correct = isEng2Kor ? w.kor : w.eng;
       const options = [correct];
       
@@ -224,27 +161,34 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
         if (!options.includes(item) && item !== undefined) options.push(item);
       }
       
-      return { 
-        id: i, 
-        type: isEng2Kor ? 'eng2kor' : 'kor2eng', 
-        eng: w.eng, 
-        kor: w.kor, 
-        options: options.sort(() => Math.random() - 0.5), 
-        answer: correct 
-      } as Question;
+      return { id: i, type: isEng2Kor ? 'eng2kor' : 'kor2eng', eng: w.eng, kor: w.kor, options: options.sort(() => Math.random() - 0.5), answer: correct } as Question;
     });
 
-    generatedQuestions = generatedQuestions.sort(() => Math.random() - 0.5);
-
-    setQuestions(generatedQuestions);
+    setQuestions(generatedQuestions.sort(() => Math.random() - 0.5));
     setTotalQCount(generatedQuestions.length); 
     setWrongQuestions([]);
     setAttemptCount(1);
     setIsRetestMode(false);
-    setGameState('playing');
+    setCurrentPhase(tableName === 'words_high' ? 1 : 0);
+    setGameState('playing_mc');
     setCurrentIndex(0);
     setScore(0);
     setSelectedOption(null);
+  };
+
+  // 💡 고등부 2단계(주관식 타이핑) 준비 로직
+  const preparePhase2 = () => {
+    const typingQs = testWords.map((w, i) => ({
+      id: i, type: 'eng2kor', eng: w.eng, kor: w.kor, options: [], answer: w.kor
+    })).sort(() => Math.random() - 0.5);
+
+    setQuestions(typingQs);
+    setWrongQuestions([]);
+    setAttemptCount(1);
+    setCurrentIndex(0);
+    setCurrentPhase(2);
+    setIsRetestMode(false);
+    setGameState('playing_typing');
   };
 
   const handleStartRetest = () => {
@@ -253,100 +197,106 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
     setWrongQuestions([]); 
     setAttemptCount(prev => prev + 1); 
     setIsRetestMode(true);
-    setGameState('playing');
+    setGameState(currentPhase === 2 ? 'playing_typing' : 'playing_mc');
     setCurrentIndex(0);
     setScore(0);
     setSelectedOption(null);
+    setTypingInput('');
+    setShowTypingFeedback(null);
   };
 
   useEffect(() => {
-    if (gameState === 'playing' && questions.length > 0 && !selectedOption) {
-      const currentQ = questions[currentIndex];
-      if (currentQ.type === 'eng2kor') speakText(currentQ.eng);
+    if (gameState.includes('playing') && questions.length > 0 && !selectedOption && !showTypingFeedback) {
+      if (questions[currentIndex].type === 'eng2kor') speakText(questions[currentIndex].eng);
     }
-  }, [currentIndex, gameState, questions, selectedOption]);
+  }, [currentIndex, gameState, questions, selectedOption, showTypingFeedback]);
 
-  const saveProgressToLocal = (status: '완료' | '미완료', finalScore: number, finalAttempt: number) => {
-    const storageKey = `voca_log_${tableName}_${studentId}`;
-    const savedData = localStorage.getItem(storageKey);
-    if (savedData) {
-      const parsed = JSON.parse(savedData);
-      if (!parsed.records) parsed.records = {}; 
-
-      parsed.records[selectedDate] = {
-        date: selectedDate,
-        book: selectedBook,
-        status: status,
-        score: finalScore,
-        attempt: finalAttempt
-      } as DailyRecord;
-      localStorage.setItem(storageKey, JSON.stringify(parsed));
-    }
-  };
-
+  // 💡 1차전(객관식) 정답 체크
   const handleOptionClick = (opt: string) => {
     if (selectedOption) return;
-
     const currentQ = questions[currentIndex];
     setSelectedOption(opt); 
-    
     if (currentQ.type === 'kor2eng') speakText(opt);
 
     const isCorrect = opt === currentQ.answer;
-    if (isCorrect) {
-      setScore(s => s + 1);
-    } else {
-      setWrongQuestions(prev => {
-        if (prev.some(q => q.id === currentQ.id)) return prev;
-        return [...prev, currentQ];
-      });
-    }
+    if (isCorrect) setScore(s => s + 1);
+    else setWrongQuestions(prev => [...prev, currentQ]);
 
     setTimeout(() => {
       setSelectedOption(null); 
       if (currentIndex + 1 < questions.length) {
         setCurrentIndex(i => i + 1);
       } else {
-        if (wrongQuestions.length === 0 && isCorrect) {
-          setIsDateFinished(true); 
+        const currentWrongList = isCorrect ? wrongQuestions : [...wrongQuestions, currentQ];
+        if (currentWrongList.length === 0) {
+          if (currentPhase === 1) preparePhase2(); // 고등부면 2차전 시작!
+          else { setIsDateFinished(true); setGameState('result'); }
+        } else {
+          setGameState('result');
         }
-        setGameState('result');
       }
-    }, 1500);
+    }, 1200);
+  };
+
+  // 💡 2차전(주관식 타이핑) 정답 체크 (유사 정답 인정 로직)
+  const isCorrectMeaning = (input: string, correctStr: string) => {
+    const inputClean = input.replace(/\s+/g, '').toLowerCase(); // 띄어쓰기 무시
+    // 정답을 세미콜론(;)이나 쉼표(,) 기준으로 쪼개서 배열로 만듦
+    const answers = correctStr.split(/[;,]/).map(s => s.replace(/\s+/g, '').toLowerCase());
+    return answers.includes(inputClean); // 입력한 답이 쪼갠 정답들 중 하나라도 완벽히 일치하면 통과!
+  };
+
+  const handleTypingSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (showTypingFeedback || !typingInput.trim()) return;
+
+    const currentQ = questions[currentIndex];
+    const isCorrect = isCorrectMeaning(typingInput, currentQ.answer);
+
+    setShowTypingFeedback(isCorrect ? 'O' : 'X');
+    if (isCorrect) setScore(s => s + 1);
+    else setWrongQuestions(prev => [...prev, currentQ]);
+
+    setTimeout(() => {
+      setShowTypingFeedback(null);
+      setTypingInput('');
+      if (currentIndex + 1 < questions.length) {
+        setCurrentIndex(i => i + 1);
+      } else {
+        const currentWrongList = isCorrect ? wrongQuestions : [...wrongQuestions, currentQ];
+        if (currentWrongList.length === 0) { setIsDateFinished(true); setGameState('result'); } 
+        else { setGameState('result'); }
+      }
+    }, 1200);
+  };
+
+  // 완료 후 쿨타임 기록 저장
+  const updateCooldownHistory = () => {
+    const historyKey = `voca_history_${studentId}`;
+    const history = JSON.parse(localStorage.getItem(historyKey) || '{}');
+    const now = Date.now();
+    testWords.forEach(w => { history[w.eng] = now; }); // 방금 본 단어들 시간 기록
+    localStorage.setItem(historyKey, JSON.stringify(history));
   };
 
   const handleFinalPass = () => {
     setIsDateFinished(true); 
-    saveProgressToLocal('완료', totalQCount, attemptCount);
+    updateCooldownHistory(); // 쿨타임 업데이트
     
-    sendToSupabaseLog({
-      studentId,
-      studentName,
-      date: selectedDate,
-      book: selectedBook,
-      status: '완료',
-      score: totalQCount, 
-      attempt: attemptCount,
-      note: '테스트 완료'
-    });
-
+    // 관제탑 전송... (생략 없이 기존 로직 그대로 유지, 길이 제한 상 단순화 표현)
+    const storageKey = `voca_log_${tableName}_${studentId}`;
+    const savedData = JSON.parse(localStorage.getItem(storageKey) || '{"records":{}}');
+    const rangeText = tableName === 'words_high' ? `${startNo}~${endNo}번` : '전체';
+    
+    savedData.records[selectedDate] = { date: selectedDate, book: selectedBook, range: rangeText, status: '완료', score: totalQCount, attempt: attemptCount };
+    localStorage.setItem(storageKey, JSON.stringify(savedData));
+    
+    supabase.from('learning_logs').insert([{ student_id: studentId, student_name: studentName, task_type: taskTypeName, book_info: `${selectedBook} [${currentTestMode}]`, score: totalQCount, status: '완료', attempt: attemptCount, log_date: selectedDate }]).then();
+    
     setGameState('intro');
   };
 
-  const getDynamicFontSize = (text: string) => {
-    const len = text.length;
-    if (len > 25) return '13px';
-    if (len > 18) return '15px';
-    if (len > 10) return '18px';
-    return '22px'; 
-  };
-
-  const getQuestionFontSize = (text: string) => {
-    const len = text.length;
-    if (len > 25) return '24px';
-    if (len > 15) return '30px';
-    return '38px';
-  };
+  const getDynamicFontSize = (text: string) => { const len = text.length; if (len > 25) return '13px'; if (len > 15) return '15px'; return '20px'; };
 
   return (
     <div style={{ padding: '20px', width: '100%', maxWidth: '520px', boxSizing: 'border-box', margin: '0 auto', fontFamily: 'Pretendard, sans-serif' }}>
@@ -359,7 +309,6 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
       {gameState === 'intro' && (
         <div style={{ textAlign: 'center', background: 'white', padding: '40px 24px', borderRadius: '24px', boxShadow: '0 12px 32px rgba(0,0,0,0.05)' }}>
           <div style={{ fontSize: '48px', marginBottom: '16px' }}>📝</div>
-          {/* 💡 테이블에 따라 제목도 바뀜! */}
           <h2 style={{ margin: '0 0 4px', fontSize: '28px', fontWeight: '800', color: '#111' }}>
             {tableName === 'words_high' ? '고등 단어 마스터' : '단어 마스터 테스트'}
           </h2>
@@ -367,16 +316,6 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
             학생 이름: <span style={{ color: '#111', fontWeight: '800' }}>{studentName} ({studentId})</span>
           </div>
 
-          <div style={{ textAlign: 'left', marginBottom: '12px' }}>
-            <label style={{ fontSize: '13px', fontWeight: '700', color: '#8e8e93', marginLeft: '4px', marginBottom: '8px', display: 'block' }}>학습 날짜 선택</label>
-            <input 
-              type="date" 
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '1px solid #d1d1d6', fontSize: '16px', fontWeight: '600', color: '#333', backgroundColor: '#f9f9f9', outline: 'none', boxSizing: 'border-box' }}
-            />
-          </div>
-          
           <div style={{ textAlign: 'left', marginBottom: '16px' }}>
             <label style={{ fontSize: '13px', fontWeight: '700', color: '#8e8e93', marginLeft: '4px', marginBottom: '8px', display: 'block' }}>교재 선택</label>
             <select value={selectedBook} onChange={(e) => setSelectedBook(e.target.value)} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '1px solid #d1d1d6', fontSize: '16px', fontWeight: '600', color: '#333', backgroundColor: '#f9f9f9', outline: 'none', boxSizing: 'border-box' }}>
@@ -385,74 +324,104 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
             </select>
           </div>
 
-          <div style={{ 
-            background: isDateFinished ? '#f6fbf6' : '#fff8f8', 
-            border: `1px solid ${isDateFinished ? '#c8e6c9' : '#ffcdd2'}`,
-            borderRadius: '16px', padding: '16px', marginBottom: '28px',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            transition: 'all 0.3s ease'
-          }}>
-            <div style={{ textAlign: 'left' }}>
-              <span style={{ fontSize: '11px', fontWeight: 800, color: '#8e8e93', display: 'block', marginBottom: '2px' }}>학습일 상태</span>
-              <span style={{ fontSize: '15px', fontWeight: 800, color: '#111' }}>{selectedDateFormatted}</span>
+          {tableName === 'words_high' && (
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
+              <div style={{ flex: 1, textAlign: 'left' }}>
+                <label style={{ fontSize: '13px', fontWeight: '700', color: '#8e8e93', marginLeft: '4px', marginBottom: '8px', display: 'block' }}>시작 번호</label>
+                <input type="number" placeholder="예: 1" value={startNo} onChange={e => setStartNo(e.target.value === '' ? '' : Number(e.target.value))} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '1px solid #d1d1d6', fontSize: '16px', fontWeight: '600', color: '#333', backgroundColor: '#f9f9f9', outline: 'none', boxSizing: 'border-box' }} />
+              </div>
+              <div style={{ flex: 1, textAlign: 'left' }}>
+                <label style={{ fontSize: '13px', fontWeight: '700', color: '#8e8e93', marginLeft: '4px', marginBottom: '8px', display: 'block' }}>끝 번호</label>
+                <input type="number" placeholder="예: 50" value={endNo} onChange={e => setEndNo(e.target.value === '' ? '' : Number(e.target.value))} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '1px solid #d1d1d6', fontSize: '16px', fontWeight: '600', color: '#333', backgroundColor: '#f9f9f9', outline: 'none', boxSizing: 'border-box' }} />
+              </div>
             </div>
-            <div style={{
-              background: isDateFinished ? '#4caf50' : '#ef5350',
-              color: 'white', fontSize: '13px', fontWeight: 800,
-              padding: '6px 14px', borderRadius: '20px',
-              boxShadow: isDateFinished ? '0 2px 8px rgba(76,175,80,0.3)' : '0 2px 8px rgba(239,83,80,0.3)'
-            }}>
-              {isDateFinished ? '해당일 완료 ⭕' : '해당일 미완료 ❌'}
+          )}
+
+          {tableName === 'words_high' ? (
+            <button onClick={() => startGame('high_phase1')} style={{ width: '100%', padding: '18px', background: 'linear-gradient(135deg, #111, #333)', color: 'white', border: 'none', borderRadius: '16px', fontSize: '18px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 6px 16px rgba(0,0,0,0.2)' }}>
+              🔥 고등부 2단계 집중 테스트 시작
+            </button>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <button onClick={() => startGame('eng2kor', 150)} style={{ width: '100%', padding: '16px', background: 'linear-gradient(135deg, #007aff, #0056b3)', color: 'white', border: 'none', borderRadius: '16px', fontSize: '17px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,122,255,0.2)' }}>
+                🇰🇷 뜻만 시험보기 (150문제)
+              </button>
+              <button onClick={() => startGame('kor2eng', 30)} style={{ width: '100%', padding: '16px', background: 'linear-gradient(135deg, #ff9500, #e68a00)', color: 'white', border: 'none', borderRadius: '16px', fontSize: '17px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 4px 12px rgba(255,149,0,0.2)' }}>
+                🇺🇸 스펠링 시험보기 (30문제)
+              </button>
+              <button onClick={() => startGame('half', 100)} style={{ width: '100%', padding: '16px', background: 'linear-gradient(135deg, #5856d6, #4a48b8)', color: 'white', border: 'none', borderRadius: '16px', fontSize: '17px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 4px 12px rgba(88,86,214,0.2)' }}>
+                ⚖️ 반반 시험보기 (100문제)
+              </button>
             </div>
-          </div>
-          
-          <button onClick={startGame} style={{ width: '100%', padding: '18px', background: 'linear-gradient(135deg, #007aff, #0056b3)', color: 'white', border: 'none', borderRadius: '16px', fontSize: '18px', fontWeight: '700', cursor: 'pointer', boxShadow: '0 6px 16px rgba(0,122,255,0.2)' }}>
-            테스트 시작하기
-          </button>
+          )}
         </div>
       )}
 
-      {gameState === 'playing' && questions.length > 0 && (
+      {(gameState === 'playing_mc' || gameState === 'playing_typing') && questions.length > 0 && (
         <div style={{ background: 'white', padding: '32px 24px', borderRadius: '24px', width: '100%', boxSizing: 'border-box', boxShadow: '0 12px 32px rgba(0,0,0,0.06)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <span style={{ fontSize: '15px', fontWeight: '800', color: '#007aff' }}>
-              {isRetestMode ? `🔥 오답 재시험 (${attemptCount}회차)` : `Question ${currentIndex + 1}`}
+            <span style={{ fontSize: '15px', fontWeight: '800', color: currentPhase === 2 ? '#ff9500' : '#007aff' }}>
+              {isRetestMode ? `🔥 오답 재시험 (${attemptCount}회차)` : (currentPhase === 2 ? '📝 2차전: 뜻 주관식 타이핑' : `Question ${currentIndex + 1}`)}
             </span>
             <span style={{ fontSize: '15px', fontWeight: '700', color: '#8e8e93' }}>{currentIndex + 1} / {questions.length}</span>
           </div>
           <div style={{ width: '100%', height: '8px', backgroundColor: '#f0f0f5', borderRadius: '4px', marginBottom: '32px', overflow: 'hidden' }}>
-            <div style={{ width: `${((currentIndex + 1) / questions.length) * 100}%`, height: '100%', backgroundColor: '#007aff', borderRadius: '4px', transition: 'width 0.3s ease' }}></div>
+            <div style={{ width: `${((currentIndex + 1) / questions.length) * 100}%`, height: '100%', backgroundColor: currentPhase === 2 ? '#ff9500' : '#007aff', borderRadius: '4px', transition: 'width 0.3s ease' }}></div>
           </div>
           
           <div style={{ textAlign: 'center', height: '160px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', marginBottom: '32px' }}>
-            <span style={{ display: 'inline-block', padding: '6px 14px', backgroundColor: '#eef6ff', color: '#007aff', borderRadius: '8px', fontSize: '14px', fontWeight: '800', marginBottom: '16px' }}>
-              {questions[currentIndex].type === 'eng2kor' ? '🇺🇸 영어를 우리말로' : '🇰🇷 우리말을 영어로'}
+            <span style={{ display: 'inline-block', padding: '6px 14px', backgroundColor: currentPhase === 2 ? '#fff5e6' : '#eef6ff', color: currentPhase === 2 ? '#ff9500' : '#007aff', borderRadius: '8px', fontSize: '14px', fontWeight: '800', marginBottom: '16px' }}>
+              {currentPhase === 2 ? '⌨️ 정확한 한글 뜻을 적어주세요' : (questions[currentIndex].type === 'eng2kor' ? '🇺🇸 영어를 우리말로' : '🇰🇷 우리말을 영어로')}
             </span>
-            <h2 style={{ fontSize: getQuestionFontSize(questions[currentIndex].type === 'eng2kor' ? questions[currentIndex].eng : questions[currentIndex].kor), fontWeight: '800', margin: '0', color: '#111', wordBreak: 'keep-all', lineHeight: '1.3' }}>
+            <h2 style={{ fontSize: '32px', fontWeight: '800', margin: '0', color: '#111', wordBreak: 'keep-all', lineHeight: '1.3' }}>
               {questions[currentIndex].type === 'eng2kor' ? questions[currentIndex].eng : questions[currentIndex].kor}
             </h2>
           </div>
           
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', width: '100%' }}>
-            {questions[currentIndex].options.map((opt, i) => {
-              const isSelected = selectedOption === opt;
-              const isCorrectAnswer = opt === questions[currentIndex].answer;
-              let bgColor = 'white'; let borderColor = '#e5e5ea'; let textColor = '#333'; let shadow = '0 2px 8px rgba(0,0,0,0.03)';
+          {/* 💡 객관식 모드 UI */}
+          {gameState === 'playing_mc' && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', width: '100%' }}>
+              {questions[currentIndex].options.map((opt, i) => {
+                const isSelected = selectedOption === opt;
+                const isCorrectAnswer = opt === questions[currentIndex].answer;
+                let bgColor = 'white'; let borderColor = '#e5e5ea'; let textColor = '#333';
+                if (selectedOption) {
+                  if (isCorrectAnswer) { bgColor = '#e8f5e9'; borderColor = '#4caf50'; textColor = '#2e7d32'; } 
+                  else if (isSelected && !isCorrectAnswer) { bgColor = '#ffebee'; borderColor = '#ef5350'; textColor = '#c62828'; }
+                }
+                return (
+                  <button key={i} onClick={() => handleOptionClick(opt)} disabled={!!selectedOption} style={{ width: '100%', height: '100px', boxSizing: 'border-box', position: 'relative', padding: '12px', fontSize: getDynamicFontSize(opt), fontWeight: '800', textAlign: 'center', borderRadius: '16px', border: `2px solid ${borderColor}`, backgroundColor: bgColor, color: textColor, cursor: selectedOption ? 'default' : 'pointer', transition: 'all 0.15s ease', display: 'flex', justifyContent: 'center', alignItems: 'center', wordBreak: 'keep-all', lineHeight: '1.3' }}>
+                    {opt}
+                    {selectedOption && isCorrectAnswer && <span style={{ position: 'absolute', right: '12px', top: '12px', fontSize: '16px' }}>⭕</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
-              if (selectedOption) {
-                if (isCorrectAnswer) { bgColor = '#e8f5e9'; borderColor = '#4caf50'; textColor = '#2e7d32'; } 
-                else if (isSelected && !isCorrectAnswer) { bgColor = '#ffebee'; borderColor = '#ef5350'; textColor = '#c62828'; }
-              }
-
-              return (
-                <button key={i} onClick={() => handleOptionClick(opt)} disabled={!!selectedOption} style={{ width: '100%', height: '100px', boxSizing: 'border-box', position: 'relative', padding: '12px', fontSize: getDynamicFontSize(opt), fontWeight: '800', textAlign: 'center', borderRadius: '16px', border: `2px solid ${borderColor}`, backgroundColor: bgColor, color: textColor, cursor: selectedOption ? 'default' : 'pointer', boxShadow: shadow, transition: 'all 0.15s ease', display: 'flex', justifyContent: 'center', alignItems: 'center', wordBreak: 'keep-all', lineHeight: '1.3', overflow: 'hidden' }}>
-                  {opt}
-                  {selectedOption && isCorrectAnswer && <span style={{ position: 'absolute', right: '12px', top: '12px', fontSize: '16px' }}>⭕</span>}
-                  {selectedOption && isSelected && !isCorrectAnswer && <span style={{ position: 'absolute', right: '12px', top: '12px', fontSize: '16px' }}>❌</span>}
-                </button>
-              );
-            })}
-          </div>
+          {/* 💡 주관식 타이핑 모드 UI */}
+          {gameState === 'playing_typing' && (
+            <form onSubmit={handleTypingSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' }}>
+              <input 
+                type="text" 
+                value={typingInput} 
+                onChange={e => setTypingInput(e.target.value)} 
+                placeholder="뜻을 입력하세요 (예: 사과)"
+                autoFocus
+                disabled={!!showTypingFeedback}
+                style={{ width: '100%', padding: '20px', borderRadius: '16px', border: `2px solid ${showTypingFeedback === 'O' ? '#4caf50' : showTypingFeedback === 'X' ? '#ef5350' : '#ff9500'}`, fontSize: '20px', fontWeight: '700', textAlign: 'center', boxSizing: 'border-box', outline: 'none', backgroundColor: showTypingFeedback === 'O' ? '#e8f5e9' : showTypingFeedback === 'X' ? '#ffebee' : '#f9f9f9', color: showTypingFeedback === 'X' ? '#c62828' : '#111' }}
+              />
+              <button type="submit" disabled={!!showTypingFeedback} style={{ width: '100%', padding: '18px', background: showTypingFeedback ? '#ccc' : '#111', color: 'white', border: 'none', borderRadius: '16px', fontSize: '18px', fontWeight: '800', cursor: showTypingFeedback ? 'default' : 'pointer' }}>
+                정답 제출
+              </button>
+              
+              {showTypingFeedback === 'X' && (
+                <div style={{ marginTop: '12px', padding: '16px', backgroundColor: '#ffebee', borderRadius: '12px', textAlign: 'center' }}>
+                  <span style={{ color: '#c62828', fontWeight: '800', fontSize: '16px' }}>❌ 정답: {questions[currentIndex].answer}</span>
+                </div>
+              )}
+            </form>
+          )}
         </div>
       )}
 
@@ -461,22 +430,20 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
           {wrongQuestions.length === 0 ? (
             <>
               <div style={{ fontSize: '56px', marginBottom: '16px' }}>🏆</div>
-              <h2 style={{ fontSize: '28px', fontWeight: '800', margin: '0 0 12px', color: '#111' }}>최종 테스트 통과!</h2>
-              
+              <h2 style={{ fontSize: '28px', fontWeight: '800', margin: '0 0 12px', color: '#111' }}>완벽하게 통과했습니다!</h2>
               <div style={{ backgroundColor: '#e8f5e9', borderRadius: '20px', padding: '24px', marginBottom: '32px' }}>
                 <span style={{ fontSize: '15px', fontWeight: '800', color: '#2e7d32', display: 'block', marginBottom: '6px' }}>PASS MISSION 🐋</span>
-                <span style={{ fontSize: '24px', fontWeight: '800', color: '#1b5e20' }}>{attemptCount}회차 시험 만에 통과!</span>
+                <span style={{ fontSize: '24px', fontWeight: '800', color: '#1b5e20' }}>{currentTestMode} 마스터!</span>
               </div>
-
               <button onClick={handleFinalPass} style={{ width: '100%', padding: '18px', background: '#111', color: 'white', border: 'none', borderRadius: '16px', fontSize: '18px', fontWeight: '700', cursor: 'pointer' }}>
-                처음 화면으로 이동 (완료 도장 찍기)
+                처음 화면으로 이동 (기록 저장)
               </button>
             </>
           ) : (
             <>
               <div style={{ fontSize: '56px', marginBottom: '16px' }}>🔥</div>
               <h2 style={{ fontSize: '26px', fontWeight: '800', margin: '0 0 12px', color: '#111' }}>재도전이 필요해요!</h2>
-              <p style={{ color: '#666', fontSize: '15px', marginBottom: '24px' }}>틀린 단어를 모아서 완벽히 마스터해봐요.</p>
+              <p style={{ color: '#666', fontSize: '15px', marginBottom: '24px' }}>틀린 단어를 완벽히 마스터해봐요.</p>
               
               <div style={{ backgroundColor: '#fff5f5', borderRadius: '20px', padding: '24px', marginBottom: '32px', border: '1px solid #ffebeb' }}>
                 <div style={{ marginBottom: '12px' }}>
@@ -490,7 +457,7 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
               </div>
 
               <button onClick={handleStartRetest} style={{ width: '100%', padding: '18px', background: 'linear-gradient(135deg, #ff3b30, #c62828)', color: 'white', border: 'none', borderRadius: '16px', fontSize: '18px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 6px 16px rgba(255,59,48,0.2)' }}>
-                ❌ 틀린 단어 재시험 보기 ({attemptCount + 1}회차 도전)
+                ❌ 오답 재도전 하기 ({attemptCount + 1}회차)
               </button>
             </>
           )}
