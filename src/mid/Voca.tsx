@@ -1,4 +1,3 @@
-import { CONFIG } from '../config';
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase'; 
 
@@ -7,6 +6,8 @@ interface VocaProps {
   currentBook?: string;
   studentId: string;
   studentName: string;
+  // 💡 [핵심 추가] 어떤 테이블(중등/고등)을 쓸지 결정하는 옵션 추가!
+  tableName?: 'words_mid' | 'words_high'; 
 }
 interface WordItem { book: string; eng: string; kor: string; }
 interface Question { id: number; type: 'eng2kor' | 'kor2eng'; eng: string; kor: string; options: string[]; answer: string; }
@@ -19,7 +20,8 @@ interface DailyRecord {
   attempt: number;
 }
 
-export default function Voca({ onBack, currentBook, studentId, studentName }: VocaProps) {
+// tableName이 안 넘어오면 기본값으로 'words_mid'(중등부)를 쓰도록 설정
+export default function Voca({ onBack, currentBook, studentId, studentName, tableName = 'words_mid' }: VocaProps) {
   const [allWords, setAllWords] = useState<WordItem[]>([]);
   const [gameState, setGameState] = useState<'intro' | 'playing' | 'result'>('intro');
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -32,8 +34,10 @@ export default function Voca({ onBack, currentBook, studentId, studentName }: Vo
   const [attemptCount, setAttemptCount] = useState(1);
   const [isRetestMode, setIsRetestMode] = useState(false);
   
-  // ⭐️ [핵심 추가] 전체 문제 수(100문제)를 끝까지 기억하는 메모리 추가!
   const [totalQCount, setTotalQCount] = useState(0); 
+
+  // 💡 관제탑에 기록될 이름 자동 변경 (중등부면 '중등단어', 고등부면 '고등단어')
+  const taskTypeName = tableName === 'words_high' ? '고등단어' : '중등단어';
 
   const { realTodayStr, currentMonthStr } = useMemo(() => {
     const now = new Date();
@@ -65,7 +69,7 @@ export default function Voca({ onBack, currentBook, studentId, studentName }: Vo
         .insert([{
           student_id: logData.studentId,
           student_name: logData.studentName,
-          task_type: '중등단어',
+          task_type: taskTypeName, // 💡 동적으로 바뀐 이름 적용
           book_info: logData.book,
           score: logData.score || 0,
           status: logData.status,
@@ -86,7 +90,7 @@ export default function Voca({ onBack, currentBook, studentId, studentName }: Vo
   useEffect(() => {
     if (!studentId) return;
 
-    const storageKey = `voca_log_${studentId}`;
+    const storageKey = `voca_log_${tableName}_${studentId}`; // 💡 캐시도 중/고등 분리
     const savedData = localStorage.getItem(storageKey);
     
     if (savedData) {
@@ -119,12 +123,12 @@ export default function Voca({ onBack, currentBook, studentId, studentName }: Vo
       const initialData = { month: currentMonthStr, records: {} };
       localStorage.setItem(storageKey, JSON.stringify(initialData));
     }
-  }, [studentId, currentMonthStr, studentName]);
+  }, [studentId, currentMonthStr, studentName, tableName]);
 
   useEffect(() => {
     if (!studentId || !selectedDate) return;
     
-    const storageKey = `voca_log_${studentId}`;
+    const storageKey = `voca_log_${tableName}_${studentId}`;
     const savedData = localStorage.getItem(storageKey);
     
     if (savedData) {
@@ -136,34 +140,36 @@ export default function Voca({ onBack, currentBook, studentId, studentName }: Vo
         setIsDateFinished(false);
       }
     }
-  }, [studentId, selectedDate]);
+  }, [studentId, selectedDate, tableName]);
 
+  // 💡 [핵심] 넘어온 tableName 옵션에 따라 중등/고등 테이블을 다르게 불러옵니다!
   useEffect(() => {
     const fetchWords = async () => {
       try {
-        const response = await fetch(`${CONFIG.SHEETS.MID_WORD}&_nocache=${Date.now()}`);
-        const text = await response.text();
-        const rows = text.split(/\r?\n/).slice(1);
+        const { data, error } = await supabase
+          .from(tableName) // 👈 여기서 변수 사용
+          .select('book, eng, kor');
+
+        if (error) throw error;
         
-        const parsed = rows.map(row => {
-          const cells = row.split(','); 
-          const cleanText = (str: string) => str ? str.replace(/"/g, '').trim() : '';
-          return { 
-            book: cleanText(cells[0]), 
-            eng: cleanText(cells[3]), 
-            kor: cleanText(cells[4]) 
-          };
-        });
-        
-        const validWords = parsed.filter(w => w.book && w.eng && w.kor);
-        if (validWords.length === 0) alert("데이터가 없습니다. 구글 시트 공유 설정을 확인하세요.");
+        const validWords = (data || []).filter(w => w.book && w.eng && w.kor);
+        if (validWords.length === 0) {
+          console.warn(`데이터가 없습니다. 수파베이스 ${tableName} 테이블에 단어를 추가해주세요.`);
+        }
         setAllWords(validWords);
-      } catch (e) { alert("데이터 로드 실패"); }
+      } catch (e) { 
+        alert(`수파베이스 ${tableName} 데이터 로드 실패. 관리자에게 문의하세요.`); 
+        console.error(e);
+      }
     };
     fetchWords();
-  }, []);
+  }, [tableName]);
 
-  const books = useMemo(() => Array.from(new Set(allWords.map(w => w.book))), [allWords]);
+  const books = useMemo(() => {
+    const uniqueBooks = Array.from(new Set(allWords.map(w => w.book)));
+    uniqueBooks.sort(); 
+    return uniqueBooks;
+  }, [allWords]);
 
   const speakText = (text: string) => {
     if ('speechSynthesis' in window) {
@@ -200,7 +206,7 @@ export default function Voca({ onBack, currentBook, studentId, studentName }: Vo
     if (!selectedDate) return alert("학습 날짜를 선택해주세요.");
 
     const filtered = allWords.filter(w => w.book === selectedBook);
-    if (filtered.length === 0) return alert("선택하신 교재의 단어 데이터가 시트에 없습니다.");
+    if (filtered.length === 0) return alert("선택하신 교재의 단어 데이터가 수파베이스에 없습니다.");
     
     saveProgressToLocal('미완료', 0, 1);
 
@@ -231,7 +237,7 @@ export default function Voca({ onBack, currentBook, studentId, studentName }: Vo
     generatedQuestions = generatedQuestions.sort(() => Math.random() - 0.5);
 
     setQuestions(generatedQuestions);
-    setTotalQCount(generatedQuestions.length); // ⭐️ 100문제를 기억해둡니다!
+    setTotalQCount(generatedQuestions.length); 
     setWrongQuestions([]);
     setAttemptCount(1);
     setIsRetestMode(false);
@@ -261,7 +267,7 @@ export default function Voca({ onBack, currentBook, studentId, studentName }: Vo
   }, [currentIndex, gameState, questions, selectedOption]);
 
   const saveProgressToLocal = (status: '완료' | '미완료', finalScore: number, finalAttempt: number) => {
-    const storageKey = `voca_log_${studentId}`;
+    const storageKey = `voca_log_${tableName}_${studentId}`;
     const savedData = localStorage.getItem(storageKey);
     if (savedData) {
       const parsed = JSON.parse(savedData);
@@ -303,7 +309,6 @@ export default function Voca({ onBack, currentBook, studentId, studentName }: Vo
       } else {
         if (wrongQuestions.length === 0 && isCorrect) {
           setIsDateFinished(true); 
-          // ❌ 여기서 수파베이스로 보내던 중복 코드를 삭제했습니다! (마지막 버튼에서만 보냅니다)
         }
         setGameState('result');
       }
@@ -314,14 +319,13 @@ export default function Voca({ onBack, currentBook, studentId, studentName }: Vo
     setIsDateFinished(true); 
     saveProgressToLocal('완료', totalQCount, attemptCount);
     
-    // ⭐️ 오직 '처음 화면으로 이동' 버튼을 누를 때 1번만, 원래 만점(totalQCount)을 기록합니다!
     sendToSupabaseLog({
       studentId,
       studentName,
       date: selectedDate,
       book: selectedBook,
       status: '완료',
-      score: totalQCount, // 재시험 1점이 아닌 원래의 총 문제 수를 기록
+      score: totalQCount, 
       attempt: attemptCount,
       note: '테스트 완료'
     });
@@ -355,7 +359,10 @@ export default function Voca({ onBack, currentBook, studentId, studentName }: Vo
       {gameState === 'intro' && (
         <div style={{ textAlign: 'center', background: 'white', padding: '40px 24px', borderRadius: '24px', boxShadow: '0 12px 32px rgba(0,0,0,0.05)' }}>
           <div style={{ fontSize: '48px', marginBottom: '16px' }}>📝</div>
-          <h2 style={{ margin: '0 0 4px', fontSize: '28px', fontWeight: '800', color: '#111' }}>단어 마스터 테스트</h2>
+          {/* 💡 테이블에 따라 제목도 바뀜! */}
+          <h2 style={{ margin: '0 0 4px', fontSize: '28px', fontWeight: '800', color: '#111' }}>
+            {tableName === 'words_high' ? '고등 단어 마스터' : '단어 마스터 테스트'}
+          </h2>
           <div style={{ fontSize: '14px', color: '#8e8e93', fontWeight: '600', marginBottom: '16px' }}>
             학생 이름: <span style={{ color: '#111', fontWeight: '800' }}>{studentName} ({studentId})</span>
           </div>
