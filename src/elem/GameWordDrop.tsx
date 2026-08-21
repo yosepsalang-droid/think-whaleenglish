@@ -58,7 +58,6 @@ const parseAcceptableAnswers = (text: string, mode: 'FIND_KOR' | 'FIND_ENG') => 
 };
 
 export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
-  // 💡 BOOK_CLEAR(교재 마스터) 상태 추가
   const [appPhase, setAppPhase] = useState<'SETUP' | 'PLAYING' | 'GAME_OVER' | 'BOOK_CLEAR'>('SETUP');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -78,7 +77,7 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
 
   const gameRef = useRef({
     wordsPool: [] as WordData[],
-    unusedTargets: [] as WordData[], // 💡 중복 출제 방지를 위한 남은 단어 목록
+    unusedTargets: [] as WordData[], 
     fallingWords: [] as FallingWord[],
     currentTarget: null as WordData | null, 
     lives: 3,
@@ -145,7 +144,6 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
       if (error) throw error;
       if (!data || data.length === 0) throw new Error("단어 데이터가 없습니다.");
 
-      // 💡 랜덤으로 섞어서 남은 단어 목록(unusedTargets)에 채워넣기
       const shuffledWords = [...data].sort(() => Math.random() - 0.5);
 
       gameRef.current = {
@@ -178,14 +176,11 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
   const spawnWave = () => {
     const state = gameRef.current;
     
-    // 💡 남은 단어가 하나도 없으면 에러가 날 수 있으니 방어
     if (state.unusedTargets.length === 0) return;
 
-    // 1. 진짜 정답 뽑기 (중복 없이 pop)
     const targetWord = state.unusedTargets.pop()!;
     state.currentTarget = targetWord;
 
-    // 2. 가짜 미끼 2개 뽑기 (전체 풀에서 정답과 겹치지 않게)
     const distractors: WordData[] = [];
     while (distractors.length < 2) {
       const d = state.wordsPool[Math.floor(Math.random() * state.wordsPool.length)];
@@ -198,7 +193,6 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     waveItems.sort(() => Math.random() - 0.5);
 
     const colors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
-    // 💡 화면 밖 이탈 방지를 위한 고정된 3개 라인 (좌, 중, 우)
     const basePositions = [18, 50, 82]; 
 
     state.fallingWords = waveItems.map((item, index) => {
@@ -211,7 +205,6 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
         text: textToShow,
         acceptableAnswers: parseAcceptableAnswers(answerToType, mode),
         isCorrect: isCorrect,
-        // 각 라인에서 아주 미세하게만 흔들리도록 설정 (이탈 절대 불가)
         x: basePositions[index] + (Math.random() * 4 - 2), 
         y: -10 - (Math.random() * 5), 
         speed: Math.random() * 0.025 + 0.04, 
@@ -244,9 +237,8 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     if (state.isGameOver) return;
 
     if (state.needNewWave) {
-      // 💡 [핵심] 출제할 남은 단어가 없으면 교재 클리어!
       if (state.unusedTargets.length === 0) {
-        endGame(true); // true = STAGE CLEAR
+        endGame(true); 
         return;
       }
       spawnWave();
@@ -277,7 +269,7 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
       forceClearInput(); 
 
       if (state.lives <= 0) {
-        endGame(false); // false = GAME OVER
+        endGame(false); 
         return;
       }
     }
@@ -333,23 +325,24 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     }
   };
 
-  // 💡 종료 함수에 isClear (전체 마스터 여부) 파라미터 추가
   const endGame = async (isClear = false) => {
     const state = gameRef.current;
     state.isGameOver = true;
     if (requestRef.current) cancelAnimationFrame(requestRef.current);
     
     setFinalScore(state.score);
-    // 전부 다 맞췄으면 BOOK_CLEAR 화면으로, 아니면 GAME_OVER 화면으로!
     setAppPhase(isClear ? 'BOOK_CLEAR' : 'GAME_OVER');
 
     const modeText = mode === 'FIND_KOR' ? '뜻찾기' : '스펠링찾기';
 
     try {
+      // 💡 [버그 수정] 수파베이스에 저장할 때 student_name과 score를 명확하게 추가했습니다!
       await supabase.from('learning_logs').insert([{
         student_id: student.id,
+        student_name: student.name,
         task_type: `타자게임(${modeText})`,
         book_info: selectedBook,
+        score: state.score,
         status: '완료'
       }]);
 
@@ -377,7 +370,6 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     };
   }, []);
 
-  // 💡 다음 교재 계산 로직
   const currentIndex = BOOK_SEQUENCE.indexOf(selectedBook);
   const nextBook = currentIndex !== -1 && currentIndex + 1 < BOOK_SEQUENCE.length 
       ? BOOK_SEQUENCE[currentIndex + 1] 
@@ -386,7 +378,7 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
   const handleNextBook = () => {
     if (nextBook) {
       setSelectedBook(nextBook);
-      setAppPhase('SETUP'); // 셋업 화면으로 보내면 useEffect가 자동으로 남은 횟수 3번인지 체크해 줍니다!
+      setAppPhase('SETUP'); 
     }
   };
 
@@ -443,7 +435,6 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     );
   }
 
-  // 💡 새롭게 추가된 [교재 마스터] 화면
   if (appPhase === 'BOOK_CLEAR') {
     return (
       <div style={{ backgroundColor: '#0f172a', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', fontFamily: 'Pretendard, sans-serif', textAlign: 'center', padding: '20px' }}>
@@ -490,7 +481,7 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
           </div>
 
           <button onClick={() => setAppPhase('SETUP')} style={{ backgroundColor: '#3b82f6', color: 'white', border: 'none', padding: '16px', borderRadius: '16px', fontWeight: '800', fontSize: '16px', width: '100%', cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
-            메뉴로 돌아가기
+            다시 도전하기
           </button>
         </div>
       </div>
@@ -553,9 +544,9 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
                 padding: '10px 14px',
                 borderRadius: '24px', 
                 fontWeight: '900',
-                fontSize: '15px', // 💡 모바일 삐져나감 방지 폰트 조정
-                maxWidth: '28%', // 💡 화면 밖으로 이탈 방지!
-                whiteSpace: 'pre-wrap', // 💡 단어가 길면 예쁘게 줄바꿈됨
+                fontSize: '15px', 
+                maxWidth: '28%', 
+                whiteSpace: 'pre-wrap', 
                 wordBreak: 'keep-all',
                 textAlign: 'center',
                 lineHeight: '1.2',
