@@ -42,7 +42,6 @@ export default function MidManage() {
     return new Date(date.getTime() + kstOffset).toISOString().split('T')[0];
   };
 
-  // 💡 [핵심 버그 수정] 수파베이스의 UTC 시간 표기를 무시하고 한국 시간 검색용 텍스트를 생성하는 함수
   const getFakeUTCString = (date: Date) => {
     const yyyy = date.getFullYear();
     const mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -59,13 +58,18 @@ export default function MidManage() {
     try {
       setIsLoading(true);
 
-      const { data: studentsData, error: studentError } = await supabase
+      // 💡 [수정됨] 중등부와 고등부 학생 모두 불러오기
+      const { data: rawStudentsData, error: studentError } = await supabase
         .from('students')
         .select('*')
-        .like('grade', '%중%')
         .order('name', { ascending: true }); 
 
       if (studentError) throw studentError;
+
+      // 💡 중학교('중') 또는 고등학교('고') 문자가 포함된 학생만 필터링
+      const studentsData = (rawStudentsData || []).filter(s => 
+        s.grade && (s.grade.includes('중') || s.grade.includes('고'))
+      );
 
       const startOfSelectedDay = new Date(selectedDate);
       startOfSelectedDay.setHours(0, 0, 0, 0);
@@ -88,7 +92,6 @@ export default function MidManage() {
       const oldestDate = new Date(pastWeekdays[pastWeekdays.length - 1]);
       oldestDate.setHours(0, 0, 0, 0);
 
-      // 💡 9시간 밀림 현상 방어를 위해 자체 조작된 검색 기간 적용
       const gteString = getFakeUTCString(oldestDate);
       const lteString = getFakeUTCString(endOfSelectedDay);
 
@@ -105,13 +108,10 @@ export default function MidManage() {
       const completedDaysMap = new Map<string, Set<string>>();
 
       (logsData || []).forEach(log => {
-        // 💡 [핵심 버그 수정] DB에 KST 시간이 UTC로 잘못 저장되어 있는 현상 완벽 방어!
-        // Z(UTC표기)를 떼어내고, 문자열 자체를 강제로 한국 시간(로컬)으로 덮어씌워서 해석합니다.
         const localTimeString = log.created_at.substring(0, 19); 
         const [yyyy, mm, dd] = localTimeString.split('T')[0].split('-').map(Number);
         const [hh, mi, ss] = localTimeString.split('T')[1].split(':').map(Number);
         
-        // 이렇게 생성된 logTime은 완벽하게 한국 시간 기준이 됩니다.
         const logTime = new Date(yyyy, mm - 1, dd, hh, mi, ss); 
         const logTimestamp = logTime.getTime();
         
@@ -140,7 +140,7 @@ export default function MidManage() {
         completedDaysMap.get(log.student_id)!.add(dateStr);
       });
 
-      const midStudents: Student[] = (studentsData || []).map(row => {
+      const midStudents: Student[] = studentsData.map(row => {
         const doneStatus = selectedDayDoneMap.get(row.student_id) || { word: '', verb: '' };
         
         const studentCompleted = completedDaysMap.get(row.student_id) || new Set();
@@ -159,7 +159,7 @@ export default function MidManage() {
           name: row.name || '이름없음',
           currentBook: row.currentBook || '',
           progress: row.progress || '',
-          grade: row.grade || '중1',
+          grade: row.grade || '미지정',
           wordDone: doneStatus.word,
           verbDone: doneStatus.verb,
           missedDays: missedDates.length > 0 ? missedDates.join(', ') : '',
@@ -295,14 +295,16 @@ export default function MidManage() {
     ? students 
     : students.filter(s => s.grade === selectedGrade);
 
-  const uniqueGrades = ['전체', '중1', '중2', '중3'];
+  // 💡 [수정됨] 고1, 고2, 고3 필터 탭 추가
+  const uniqueGrades = ['전체', '중1', '중2', '중3', '고1', '고2', '고3'];
 
   return (
     <div style={{ backgroundColor: 'white', color: '#1f2937', padding: '24px', borderRadius: '12px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', width: '95vw', marginLeft: 'calc(-47.5vw + 50%)', boxSizing: 'border-box', fontFamily: 'Pretendard, sans-serif' }}>
       
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#1f2937', margin: 0 }}>🦅 중등부 관제탑</h2>
+          {/* 💡 [수정됨] 타이틀 변경 */}
+          <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#1f2937', margin: 0 }}>🦅 중·고등부 관제탑</h2>
           
           <div style={{ display: 'flex', alignItems: 'center', backgroundColor: '#f3f4f6', borderRadius: '8px', padding: '4px', border: '1px solid #e5e7eb' }}>
             <button onClick={() => changeDate(-1)} style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', padding: '4px 8px', fontSize: '14px', color: '#4b5563', fontWeight: 'bold' }}>◀</button>
@@ -479,7 +481,7 @@ export default function MidManage() {
                 />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '13px', color: '#4b5563', marginBottom: '4px', fontWeight: 'bold' }}>학년 (예: 중1, 중3)</label>
+                <label style={{ display: 'block', fontSize: '13px', color: '#4b5563', marginBottom: '4px', fontWeight: 'bold' }}>학년 (예: 중1, 고2)</label>
                 <input 
                   type="text" 
                   value={manageGrade}
