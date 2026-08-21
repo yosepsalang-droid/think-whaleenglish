@@ -5,6 +5,7 @@ import { CONFIG } from '../config';
 interface GameWordDropProps {
   student: any;
   onBack: () => void;
+  onGameComplete?: (score: number) => void; // 💡 랭킹 업데이트를 위한 연결고리 추가!
 }
 
 interface WordData {
@@ -23,7 +24,6 @@ interface FallingWord {
   color: string;
 }
 
-// 💡 교재 자동 넘어가기를 위한 전체 시리즈 순서 정의
 const BOOK_SEQUENCE = [
   '240_1', '240_2', '240_3', '240_4', '240_5', '240_6',
   '520_1', '520_2', '520_3', '520_4', '520_5', '520_6',
@@ -49,15 +49,12 @@ const parseAcceptableAnswers = (text: string, mode: 'FIND_KOR' | 'FIND_ENG') => 
     let noBracket = text.replace(/\(.*?\)|\[.*?\]/g, '');
     let splitAnswers = noBracket.split(/[,/]/); 
     let cleaned = splitAnswers.map(ans => ans.replace(/[^가-힣a-zA-Z0-9]/g, '')).filter(ans => ans.length > 0);
-    
-    if (cleaned.length === 0) {
-        cleaned = [text.replace(/[^가-힣a-zA-Z0-9]/g, '')];
-    }
+    if (cleaned.length === 0) cleaned = [text.replace(/[^가-힣a-zA-Z0-9]/g, '')];
     return cleaned;
   }
 };
 
-export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
+export default function GameWordDrop({ student, onBack, onGameComplete }: GameWordDropProps) {
   const [appPhase, setAppPhase] = useState<'SETUP' | 'PLAYING' | 'GAME_OVER' | 'BOOK_CLEAR'>('SETUP');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -110,7 +107,6 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
       const now = new Date();
       const kstOffset = 9 * 60 * 60 * 1000;
       const kstNow = new Date(now.getTime() + kstOffset);
-      
       const startOfDay = new Date(kstNow);
       startOfDay.setUTCHours(0, 0, 0, 0);
       const endOfDay = new Date(kstNow);
@@ -175,7 +171,6 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
 
   const spawnWave = () => {
     const state = gameRef.current;
-    
     if (state.unusedTargets.length === 0) return;
 
     const targetWord = state.unusedTargets.pop()!;
@@ -211,7 +206,6 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
         color: colors[index % colors.length]
       };
     });
-
     state.speedMultiplier += 0.005;
   };
 
@@ -224,7 +218,6 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     clearLockRef.current = true; 
     setInputValue(""); 
     if (inputRef.current) inputRef.current.value = ""; 
-    
     setTimeout(() => {
       if (inputRef.current) inputRef.current.value = "";
       setInputValue("");
@@ -273,7 +266,6 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
         return;
       }
     }
-
     setRenderTick(prev => prev + 1);
     requestRef.current = requestAnimationFrame(gameLoop);
   };
@@ -281,7 +273,6 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
   const handleType = (e: React.ChangeEvent<HTMLInputElement>) => {
     const state = gameRef.current;
     if (state.isGameOver) return;
-
     if (clearLockRef.current) {
       e.target.value = "";
       return;
@@ -304,7 +295,6 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     
     if (matchIndex > -1) {
       const hitWord = state.fallingWords[matchIndex];
-
       if (hitWord.isCorrect) {
         state.fallingWords = []; 
         forceClearInput(); 
@@ -336,7 +326,6 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     const modeText = mode === 'FIND_KOR' ? '뜻찾기' : '스펠링찾기';
 
     try {
-      // 💡 [핵심 버그 수정] 수파베이스에 이름(student_name)과 점수(score)를 완벽하게 포함시켰습니다!
       await supabase.from('learning_logs').insert([{
         student_id: student.id,
         student_name: student.name,
@@ -359,6 +348,12 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
           bookInfo: selectedBook
         }),
       });
+
+      // 💡 [핵심] 게임 점수를 메인 화면(App.tsx)의 랭킹에 즉시 실시간 연동시킵니다!
+      if (onGameComplete && state.score > 0) {
+        onGameComplete(state.score);
+      }
+
     } catch (err) {
       console.error("결과 저장 실패", err);
     }
@@ -489,7 +484,6 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
   }
 
   const st = gameRef.current;
-  
   const getBackgroundColor = () => {
     if (hitFlash === 'success') return 'rgba(34, 197, 94, 0.2)';
     if (hitFlash === 'fail') return 'rgba(239, 68, 68, 0.2)';
@@ -498,9 +492,7 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
 
   return (
     <div style={{ backgroundColor: '#020617', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', fontFamily: 'Pretendard, sans-serif' }}>
-      
       <div style={{ width: '100%', maxWidth: '480px', height: '100vh', maxHeight: '800px', backgroundColor: getBackgroundColor(), backgroundImage: 'radial-gradient(circle at 50% 10%, #1e293b 0%, #0f172a 80%)', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 0 30px rgba(0,0,0,0.8)', transition: 'background-color 0.1s' }}>
-        
         <div style={{ padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', zIndex: 10 }}>
           <div>
             <div style={{ fontSize: '14px', color: '#94a3b8', fontWeight: 'bold', marginBottom: '4px' }}>SCORE</div>
