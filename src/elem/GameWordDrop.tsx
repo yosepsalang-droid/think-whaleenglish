@@ -336,7 +336,7 @@ export default function GameWordDrop({ student, onBack }: GameWordDropProps) {
     const modeText = mode === 'FIND_KOR' ? '뜻찾기' : '스펠링찾기';
 
     try {
-      // 💡 [버그 수정] 수파베이스에 저장할 때 student_name과 score를 명확하게 추가했습니다!
+      // 💡 [핵심 버그 수정] 수파베이스에 이름(student_name)과 점수(score)를 완벽하게 포함시켰습니다!
       await supabase.from('learning_logs').insert([{
         student_id: student.id,
         student_name: student.name,
