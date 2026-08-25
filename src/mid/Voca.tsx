@@ -22,11 +22,10 @@ interface DailyRecord {
 
 export default function Voca({ onBack, currentBook, studentId, studentName, tableName = 'words_mid' }: VocaProps) {
   const [allWords, setAllWords] = useState<WordItem[]>([]);
-  const [testWords, setTestWords] = useState<WordItem[]>([]); // 현재 시험에 뽑힌 단어들 저장
+  const [testWords, setTestWords] = useState<WordItem[]>([]); 
   
-  // 💡 진행 상태 세분화: 타이핑(주관식) 모드 추가
   const [gameState, setGameState] = useState<'intro' | 'playing_mc' | 'playing_typing' | 'result'>('intro');
-  const [currentPhase, setCurrentPhase] = useState<0 | 1 | 2>(0); // 0: 중등부, 1: 고등 1차(객관식), 2: 고등 2차(주관식)
+  const [currentPhase, setCurrentPhase] = useState<0 | 1 | 2>(0); 
   
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -34,11 +33,9 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
   const [selectedBook, setSelectedBook] = useState(currentBook || '');
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
 
-  // 고등부 주관식 타이핑을 위한 상태
   const [typingInput, setTypingInput] = useState('');
   const [showTypingFeedback, setShowTypingFeedback] = useState<'O' | 'X' | null>(null);
 
-  // 고등부 전용: 범위 입력
   const [startNo, setStartNo] = useState<number | ''>('');
   const [endNo, setEndNo] = useState<number | ''>('');
   
@@ -68,11 +65,11 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
     return `${d.getFullYear()}. ${String(d.getMonth() + 1).padStart(2, '0')}. ${String(d.getDate()).padStart(2, '0')}`;
   }, [selectedDate]);
 
-  // DB 로드
+  // 💡 DB 로드 (limit(10000) 추가! 이제 워드타파 3권도 안 짤립니다!)
   useEffect(() => {
     const fetchWords = async () => {
       try {
-        const { data, error } = await supabase.from(tableName).select('book, eng, kor, day');
+        const { data, error } = await supabase.from(tableName).select('book, eng, kor, day').limit(10000);
         if (error) throw error;
         const validWords = (data || []).filter(w => w.book && w.eng && w.kor && (tableName === 'words_mid' || w.day));
         setAllWords(validWords);
@@ -98,7 +95,6 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
     }
   };
 
-  // 💡 시험 시작 핵심 로직
   const startGame = (mode: 'eng2kor' | 'kor2eng' | 'half' | 'high_phase1', maxLimit?: number) => {
     if (!selectedBook) return alert("교재를 선택해주세요.");
     if (!selectedDate) return alert("학습 날짜를 선택해주세요.");
@@ -117,7 +113,6 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
       });
       if (availableWords.length === 0) return alert(`해당 범위에 단어가 없습니다.`);
     } else {
-      // 💡 중등부: 최근 2일(48시간) 쿨타임 필터링 적용!
       const historyKey = `voca_history_${studentId}`;
       const history = JSON.parse(localStorage.getItem(historyKey) || '{}');
       const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
@@ -126,19 +121,17 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
       const wordsNotRecent = availableWords.filter(w => {
         const lastTested = history[w.eng];
         if (!lastTested) return true;
-        return (now - lastTested) > TWO_DAYS_MS; // 48시간 지났으면 통과
+        return (now - lastTested) > TWO_DAYS_MS; 
       });
 
-      // 단어가 너무 적게 남으면 에러 방지를 위해 쿨타임 무시하고 전부 포함
       if (wordsNotRecent.length >= 20) {
         availableWords = wordsNotRecent;
       }
     }
 
-    setTestWords(availableWords); // 이번 시험에 쓰일 단어장 저장
+    setTestWords(availableWords); 
     const shuffledWords = [...availableWords].sort(() => Math.random() - 0.5).slice(0, maxLimit || availableWords.length);
     
-    // 모드 이름 기록
     if (tableName === 'words_high') setCurrentTestMode('고등 2단계 집중 훈련');
     else if (mode === 'eng2kor') setCurrentTestMode('뜻 시험 (150)');
     else if (mode === 'kor2eng') setCurrentTestMode('스펠링 시험 (30)');
@@ -176,11 +169,16 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
     setSelectedOption(null);
   };
 
-  // 💡 고등부 2단계(주관식 타이핑) 준비 로직
+  // 💡 Vercel 에러 해결! (as Question 을 붙여서 타입스크립트가 안심하게 만들었습니다)
   const preparePhase2 = () => {
     const typingQs = testWords.map((w, i) => ({
-      id: i, type: 'eng2kor', eng: w.eng, kor: w.kor, options: [], answer: w.kor
-    })).sort(() => Math.random() - 0.5);
+      id: i, 
+      type: 'eng2kor', 
+      eng: w.eng, 
+      kor: w.kor, 
+      options: [] as string[], 
+      answer: w.kor
+    } as Question)).sort(() => Math.random() - 0.5);
 
     setQuestions(typingQs);
     setWrongQuestions([]);
@@ -211,7 +209,6 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
     }
   }, [currentIndex, gameState, questions, selectedOption, showTypingFeedback]);
 
-  // 💡 1차전(객관식) 정답 체크
   const handleOptionClick = (opt: string) => {
     if (selectedOption) return;
     const currentQ = questions[currentIndex];
@@ -229,7 +226,7 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
       } else {
         const currentWrongList = isCorrect ? wrongQuestions : [...wrongQuestions, currentQ];
         if (currentWrongList.length === 0) {
-          if (currentPhase === 1) preparePhase2(); // 고등부면 2차전 시작!
+          if (currentPhase === 1) preparePhase2(); 
           else { setIsDateFinished(true); setGameState('result'); }
         } else {
           setGameState('result');
@@ -238,12 +235,10 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
     }, 1200);
   };
 
-  // 💡 2차전(주관식 타이핑) 정답 체크 (유사 정답 인정 로직)
   const isCorrectMeaning = (input: string, correctStr: string) => {
-    const inputClean = input.replace(/\s+/g, '').toLowerCase(); // 띄어쓰기 무시
-    // 정답을 세미콜론(;)이나 쉼표(,) 기준으로 쪼개서 배열로 만듦
+    const inputClean = input.replace(/\s+/g, '').toLowerCase(); 
     const answers = correctStr.split(/[;,]/).map(s => s.replace(/\s+/g, '').toLowerCase());
-    return answers.includes(inputClean); // 입력한 답이 쪼갠 정답들 중 하나라도 완벽히 일치하면 통과!
+    return answers.includes(inputClean); 
   };
 
   const handleTypingSubmit = (e: React.FormEvent) => {
@@ -270,20 +265,18 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
     }, 1200);
   };
 
-  // 완료 후 쿨타임 기록 저장
   const updateCooldownHistory = () => {
     const historyKey = `voca_history_${studentId}`;
     const history = JSON.parse(localStorage.getItem(historyKey) || '{}');
     const now = Date.now();
-    testWords.forEach(w => { history[w.eng] = now; }); // 방금 본 단어들 시간 기록
+    testWords.forEach(w => { history[w.eng] = now; }); 
     localStorage.setItem(historyKey, JSON.stringify(history));
   };
 
   const handleFinalPass = () => {
     setIsDateFinished(true); 
-    updateCooldownHistory(); // 쿨타임 업데이트
+    updateCooldownHistory(); 
     
-    // 관제탑 전송... (생략 없이 기존 로직 그대로 유지, 길이 제한 상 단순화 표현)
     const storageKey = `voca_log_${tableName}_${studentId}`;
     const savedData = JSON.parse(localStorage.getItem(storageKey) || '{"records":{}}');
     const rangeText = tableName === 'words_high' ? `${startNo}~${endNo}번` : '전체';
@@ -378,7 +371,6 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
             </h2>
           </div>
           
-          {/* 💡 객관식 모드 UI */}
           {gameState === 'playing_mc' && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', width: '100%' }}>
               {questions[currentIndex].options.map((opt, i) => {
@@ -399,7 +391,6 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
             </div>
           )}
 
-          {/* 💡 주관식 타이핑 모드 UI */}
           {gameState === 'playing_typing' && (
             <form onSubmit={handleTypingSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' }}>
               <input 
