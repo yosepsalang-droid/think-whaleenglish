@@ -5,7 +5,7 @@ import { CONFIG } from '../config';
 interface GameWordDropProps {
   student: any;
   onBack: () => void;
-  onGameComplete?: (score: number) => void; // 💡 랭킹 업데이트를 위한 연결고리 추가!
+  onGameComplete?: (score: number) => void; 
 }
 
 interface WordData {
@@ -325,6 +325,12 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
 
     const modeText = mode === 'FIND_KOR' ? '뜻찾기' : '스펠링찾기';
 
+    // 💡 누락되었던 log_date(오늘 날짜)와 attempt 생성 로직 추가
+    const now = new Date();
+    const kstOffset = 9 * 60 * 60 * 1000;
+    const kstNow = new Date(now.getTime() + kstOffset);
+    const logDateStr = `${kstNow.getUTCFullYear()}-${String(kstNow.getUTCMonth() + 1).padStart(2, '0')}-${String(kstNow.getUTCDate()).padStart(2, '0')}`;
+
     try {
       await supabase.from('learning_logs').insert([{
         student_id: student.id,
@@ -332,7 +338,9 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
         task_type: `타자게임(${modeText})`,
         book_info: selectedBook,
         score: state.score,
-        status: '완료'
+        status: '완료',
+        attempt: 1, // 💡 랭킹 반영을 위해 필수!
+        log_date: logDateStr // 💡 랭킹 반영을 위해 필수!
       }]);
 
       await fetch(CONFIG.WEB_APP_URL, {
@@ -349,7 +357,6 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
         }),
       });
 
-      // 💡 [핵심] 게임 점수를 메인 화면(App.tsx)의 랭킹에 즉시 실시간 연동시킵니다!
       if (onGameComplete && state.score > 0) {
         onGameComplete(state.score);
       }
