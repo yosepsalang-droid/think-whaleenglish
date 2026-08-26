@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CONFIG, withCacheBust } from '../config'; 
 import { supabase } from '../lib/supabase'; 
+import { isIntegratedRankingTask } from '../utils/grammarLogRanking'; 
 
 interface RankEntry {
   studentName: string;
@@ -152,7 +153,7 @@ export default function Grammar({
           const taskType = cols[5]?.replace(/^"|"$/g, '').trim();
 
           if (!name || isNaN(scoreVal) || scoreVal <= 0) return;
-          if (taskType !== '문법게임' && taskType !== '단어게임') return;
+          if (!isIntegratedRankingTask(taskType)) return;
           if (!grade.includes('초')) return;
 
           let rowYear = 0;

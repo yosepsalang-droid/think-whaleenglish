@@ -12,7 +12,10 @@ export interface IntegratedRankingResult {
   lastMonth: RankEntry[];
 }
 
-const INTEGRATED_TASK_TYPES = ['문법게임', '단어게임'];
+export function isIntegratedRankingTask(taskType: string): boolean {
+  const t = (taskType || '').trim();
+  return t === '문법게임' || t === '단어게임' || t.includes('타자게임');
+}
 
 function parseCsvRow(row: string): string[] {
   return row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map((c) => c.replace(/^"|"$/g, '').trim());
@@ -102,7 +105,7 @@ export async function fetchIntegratedRankings(studentName: string): Promise<Inte
       const date = parseDate(cells[dateIdx] || '');
 
       if (!student || !date || Number.isNaN(score)) continue;
-      if (!INTEGRATED_TASK_TYPES.includes(taskType)) continue;
+      if (!isIntegratedRankingTask(taskType)) continue;
 
       parsedRows.push({
         studentName: student,

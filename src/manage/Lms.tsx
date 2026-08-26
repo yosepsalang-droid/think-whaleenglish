@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import ElemManage from './ElemManage';
 import MidManage from './MidManage';
 import ReportManage from './ReportManage';
+import LmsAiStudio from './LmsAiStudio';
 
 interface LmsProps {
   onBack: () => void;
@@ -9,6 +10,11 @@ interface LmsProps {
 
 export default function Lms({ onBack }: LmsProps) {
   const [activeTab, setActiveTab] = useState<'elementary' | 'middle' | 'report'>('elementary');
+  const [showAiStudio, setShowAiStudio] = useState(false);
+
+  if (showAiStudio) {
+    return <LmsAiStudio onBack={() => setShowAiStudio(false)} />;
+  }
 
   return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: '#f0f4f8', padding: '20px', fontFamily: 'Pretendard, sans-serif' }}>
@@ -22,6 +28,25 @@ export default function Lms({ onBack }: LmsProps) {
         <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#1e293b', margin: '20px 0 30px 0', textAlign: 'center' }}>
           👑 ACADEMY CONTROL TOWER (통합 관제탑)
         </h2>
+
+        <button
+          onClick={() => setShowAiStudio(true)}
+          style={{
+            display: 'block',
+            width: '100%',
+            marginBottom: '20px',
+            padding: '14px 16px',
+            border: 'none',
+            borderRadius: '12px',
+            backgroundColor: '#1e293b',
+            color: 'white',
+            fontSize: '15px',
+            fontWeight: 800,
+            cursor: 'pointer',
+          }}
+        >
+          🤖 AI 문제 연구소
+        </button>
 
         {/* 탭 네비게이션 바 */}
         <div style={{ display: 'flex', gap: '8px', marginBottom: '30px', backgroundColor: '#f1f5f9', padding: '6px', borderRadius: '14px' }}>

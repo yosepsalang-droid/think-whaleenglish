@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CONFIG, withCacheBust } from '../config'; 
+import { isIntegratedRankingTask } from '../utils/grammarLogRanking'; 
 
 // 📝 구글 시트에서 불러올 단어 데이터 타입
 interface WordItem {
@@ -125,7 +126,7 @@ export default function WordMaster({
 
           // ✨ '단어게임'과 '문법게임' 점수만 완벽하게 합산합니다.
           if (!name || isNaN(scoreVal) || scoreVal <= 0) return;
-          if (taskType !== '단어게임' && taskType !== '문법게임') return;
+          if (!isIntegratedRankingTask(taskType)) return;
 
           let rowYear = 0;
           let rowMonth = 0;

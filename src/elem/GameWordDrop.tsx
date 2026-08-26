@@ -5,7 +5,7 @@ import { CONFIG } from '../config';
 interface GameWordDropProps {
   student: any;
   onBack: () => void;
-  onGameComplete?: (score: number) => void; 
+  onGameComplete?: (score: number) => void;
 }
 
 interface WordData {
@@ -325,7 +325,7 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
 
     const modeText = mode === 'FIND_KOR' ? '뜻찾기' : '스펠링찾기';
 
-    // 💡 누락되었던 log_date(오늘 날짜)와 attempt 생성 로직 추가
+    // 💡 누락되었던 log_date(오늘 날짜)와 attempt 생성 로직 추가!
     const now = new Date();
     const kstOffset = 9 * 60 * 60 * 1000;
     const kstNow = new Date(now.getTime() + kstOffset);
@@ -357,6 +357,7 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
         }),
       });
 
+      // 💡 [핵심] 게임 점수를 메인 화면 랭킹에 실시간 연동
       if (onGameComplete && state.score > 0) {
         onGameComplete(state.score);
       }
