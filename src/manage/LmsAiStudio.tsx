@@ -42,7 +42,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const handleGenerateAI = async (type: 'mid' | 'high') => {
     if (!sourceText) return alert("원본 지문이나 문제를 먼저 입력해주세요!");
     
-    const apiKey = CONFIG?.GEMINI_API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY;
+    const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || CONFIG?.GEMINI_API_KEY;
     if (!apiKey) return alert("API 키를 찾을 수 없습니다.");
 
     setIsGenerating(true);
