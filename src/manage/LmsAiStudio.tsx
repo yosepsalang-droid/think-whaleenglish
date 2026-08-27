@@ -28,7 +28,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const [selectedGrade, setSelectedGrade] = useState('');
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
 
-  // 💡 [추가됨] 수정을 위한 상태 변수
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editFormData, setEditFormData] = useState<Problem | null>(null);
 
@@ -185,10 +184,9 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     setSelectedStudentIds(prev => prev.includes(studentId) ? prev.filter(id => id !== studentId) : [...prev, studentId]);
   };
 
-  // 💡 [추가됨] 수정 관련 함수들
   const startEditing = (index: number) => {
     setEditingIndex(index);
-    setEditFormData(JSON.parse(JSON.stringify(generatedProblems[index]))); // 깊은 복사
+    setEditFormData(JSON.parse(JSON.stringify(generatedProblems[index]))); 
   };
 
   const saveEditing = () => {
@@ -330,13 +328,22 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
 
         {/* 듀얼 뷰 (미리보기) */}
         <div style={{ flex: '1', display: 'flex', gap: '20px' }}>
+          
           {/* 1. 학생용 문제 뷰 */}
           <div style={{ flex: '1', backgroundColor: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', minHeight: '600px', overflowY: 'auto', maxHeight: '800px' }}>
             <h3 style={{ margin: '0 0 20px 0', paddingBottom: '12px', borderBottom: '2px solid #e2e8f0', color: '#3b82f6' }}>📄 인쇄 미리보기 (문제)</h3>
             {!isGenerated && <div style={{ color: '#94a3b8', textAlign: 'center', marginTop: '100px' }}>왼쪽에서 문제를 생성해주세요.</div>}
             {isGenerated && generatedProblems.map((prob, idx) => (
               <div key={idx} style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid #e2e8f0' }}>
-                <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>Q{idx + 1}. {prob.question}</div>
+                
+                {/* 💡 [수정] 문제 제목 옆에 "문제 수정" 버튼 추가! */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                  <div style={{ fontWeight: 'bold' }}>Q{idx + 1}. {prob.question}</div>
+                  <button onClick={() => startEditing(idx)} style={{ padding: '4px 8px', backgroundColor: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', flexShrink: 0, marginLeft: '8px' }}>
+                    ✏️ 문제 수정
+                  </button>
+                </div>
+
                 <div style={{ fontSize: '13px', color: '#475569', backgroundColor: '#f8fafc', padding: '10px', borderRadius: '6px', marginBottom: '8px', whiteSpace: 'pre-wrap' }}>{prob.passage}</div>
                 <div style={{ fontSize: '13px', color: '#334155' }}>
                   {prob.options.map((opt, i) => <span key={i} style={{ marginRight: '12px' }}>{opt}</span>)}
@@ -345,7 +352,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
             ))}
           </div>
 
-          {/* 2. 교사용 해설지 뷰 (+ 수정 버튼) */}
+          {/* 2. 교사용 해설지 뷰 */}
           <div style={{ flex: '1', backgroundColor: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', minHeight: '600px', overflowY: 'auto', maxHeight: '800px' }}>
             <h3 style={{ margin: '0 0 20px 0', paddingBottom: '12px', borderBottom: '2px solid #e2e8f0', color: '#10b981' }}>👩‍🏫 교사용 해설 및 분석지</h3>
             {!isGenerated && <div style={{ color: '#94a3b8', textAlign: 'center', marginTop: '100px' }}>왼쪽에서 문제를 생성해주세요.</div>}
@@ -353,9 +360,10 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
               <div key={idx} style={{ marginBottom: '24px', paddingBottom: '20px', borderBottom: '2px dashed #e2e8f0' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                   <h4 style={{ margin: 0, color: '#10b981', fontSize: '16px' }}>Q{idx + 1} 문항 분석</h4>
-                  {/* 💡 [추가됨] 수정 버튼 */}
-                  <button onClick={() => startEditing(idx)} style={{ padding: '6px 12px', backgroundColor: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>
-                    ✏️ 수정하기
+                  
+                  {/* 💡 [수정] 여기 있는 버튼도 일관성 있게 '해설 수정'으로 이름 변경 */}
+                  <button onClick={() => startEditing(idx)} style={{ padding: '4px 8px', backgroundColor: '#f0fdf4', color: '#10b981', border: '1px solid #bbf7d0', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>
+                    ✏️ 해설 수정
                   </button>
                 </div>
                 
@@ -376,7 +384,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
         </div>
       </div>
 
-      {/* 💡 [추가됨] 문항 수정 모달창 */}
+      {/* 💡 문항 전체 수정 모달창 (여기는 건드릴 필요 없이 완벽합니다!) */}
       {editingIndex !== null && editFormData && (
         <div className="no-print" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 }}>
           <div style={{ backgroundColor: 'white', width: '800px', maxHeight: '90vh', overflowY: 'auto', borderRadius: '16px', padding: '32px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
