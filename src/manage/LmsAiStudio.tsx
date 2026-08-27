@@ -28,6 +28,10 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const [selectedGrade, setSelectedGrade] = useState('');
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
 
+  // 💡 [추가됨] 수정을 위한 상태 변수
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editFormData, setEditFormData] = useState<Problem | null>(null);
+
   useEffect(() => {
     const fetchStudents = async () => {
       const { data } = await supabase.from('students').select('*');
@@ -42,7 +46,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const handleGenerateAI = async (type: 'mid' | 'high') => {
     if (!sourceText) return alert("원본 지문이나 문제를 먼저 입력해주세요!");
     
-    // 💡 빌드 에러를 완벽하게 방지하는 안전한 API 키 호출 방식
     const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || (CONFIG as any)?.GEMINI?.API_KEY || (CONFIG as any)?.GEMINI_API_KEY;
     if (!apiKey) return alert("API 키를 찾을 수 없습니다.");
 
@@ -161,8 +164,11 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     window.print();
   };
 
-  const handleToggleStudent = (studentId: string) => {
-    setSelectedStudentIds(prev => prev.includes(studentId) ? prev.filter(id => id !== studentId) : [...prev, studentId]);
+  const handleDistribute = () => {
+    if (selectedStudentIds.length === 0) return alert("과제를 보낼 학생을 1명 이상 선택해주세요.");
+    alert(`선택한 ${selectedStudentIds.length}명의 학생에게 과제가 배포되었습니다! 🚀`);
+    setShowDistributeModal(false);
+    setSelectedStudentIds([]);
   };
 
   const handleSelectAllInGrade = () => {
@@ -175,11 +181,52 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     }
   };
 
-  const handleDistribute = () => {
-    if (selectedStudentIds.length === 0) return alert("과제를 보낼 학생을 1명 이상 선택해주세요.");
-    alert(`선택한 ${selectedStudentIds.length}명의 학생에게 과제가 배포되었습니다! 🚀`);
-    setShowDistributeModal(false);
-    setSelectedStudentIds([]);
+  const handleToggleStudent = (studentId: string) => {
+    setSelectedStudentIds(prev => prev.includes(studentId) ? prev.filter(id => id !== studentId) : [...prev, studentId]);
+  };
+
+  // 💡 [추가됨] 수정 관련 함수들
+  const startEditing = (index: number) => {
+    setEditingIndex(index);
+    setEditFormData(JSON.parse(JSON.stringify(generatedProblems[index]))); // 깊은 복사
+  };
+
+  const saveEditing = () => {
+    if (editingIndex !== null && editFormData) {
+      const updated = [...generatedProblems];
+      updated[editingIndex] = editFormData;
+      setGeneratedProblems(updated);
+    }
+    setEditingIndex(null);
+    setEditFormData(null);
+  };
+
+  const cancelEditing = () => {
+    setEditingIndex(null);
+    setEditFormData(null);
+  };
+
+  const updateEditForm = (field: keyof Problem, value: any) => {
+    if (editFormData) {
+      setEditFormData({ ...editFormData, [field]: value });
+    }
+  };
+
+  const updateExplanation = (field: keyof Problem['explanation'], value: string) => {
+    if (editFormData) {
+      setEditFormData({
+        ...editFormData,
+        explanation: { ...editFormData.explanation, [field]: value }
+      });
+    }
+  };
+
+  const updateOption = (index: number, value: string) => {
+    if (editFormData) {
+      const newOptions = [...editFormData.options];
+      newOptions[index] = value;
+      setEditFormData({ ...editFormData, options: newOptions });
+    }
   };
 
   const chunkArray = <T,>(arr: T[], size: number): T[][] => {
@@ -283,21 +330,117 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
 
         {/* 듀얼 뷰 (미리보기) */}
         <div style={{ flex: '1', display: 'flex', gap: '20px' }}>
+          {/* 1. 학생용 문제 뷰 */}
           <div style={{ flex: '1', backgroundColor: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', minHeight: '600px', overflowY: 'auto', maxHeight: '800px' }}>
             <h3 style={{ margin: '0 0 20px 0', paddingBottom: '12px', borderBottom: '2px solid #e2e8f0', color: '#3b82f6' }}>📄 인쇄 미리보기 (문제)</h3>
             {!isGenerated && <div style={{ color: '#94a3b8', textAlign: 'center', marginTop: '100px' }}>왼쪽에서 문제를 생성해주세요.</div>}
             {isGenerated && generatedProblems.map((prob, idx) => (
               <div key={idx} style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid #e2e8f0' }}>
                 <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>Q{idx + 1}. {prob.question}</div>
-                <div style={{ fontSize: '13px', color: '#475569', backgroundColor: '#f8fafc', padding: '10px', borderRadius: '6px', marginBottom: '8px' }}>{prob.passage}</div>
+                <div style={{ fontSize: '13px', color: '#475569', backgroundColor: '#f8fafc', padding: '10px', borderRadius: '6px', marginBottom: '8px', whiteSpace: 'pre-wrap' }}>{prob.passage}</div>
                 <div style={{ fontSize: '13px', color: '#334155' }}>
                   {prob.options.map((opt, i) => <span key={i} style={{ marginRight: '12px' }}>{opt}</span>)}
                 </div>
               </div>
             ))}
           </div>
+
+          {/* 2. 교사용 해설지 뷰 (+ 수정 버튼) */}
+          <div style={{ flex: '1', backgroundColor: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', minHeight: '600px', overflowY: 'auto', maxHeight: '800px' }}>
+            <h3 style={{ margin: '0 0 20px 0', paddingBottom: '12px', borderBottom: '2px solid #e2e8f0', color: '#10b981' }}>👩‍🏫 교사용 해설 및 분석지</h3>
+            {!isGenerated && <div style={{ color: '#94a3b8', textAlign: 'center', marginTop: '100px' }}>왼쪽에서 문제를 생성해주세요.</div>}
+            {isGenerated && generatedProblems.map((prob, idx) => (
+              <div key={idx} style={{ marginBottom: '24px', paddingBottom: '20px', borderBottom: '2px dashed #e2e8f0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <h4 style={{ margin: 0, color: '#10b981', fontSize: '16px' }}>Q{idx + 1} 문항 분석</h4>
+                  {/* 💡 [추가됨] 수정 버튼 */}
+                  <button onClick={() => startEditing(idx)} style={{ padding: '6px 12px', backgroundColor: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>
+                    ✏️ 수정하기
+                  </button>
+                </div>
+                
+                <div style={{ marginBottom: '12px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontWeight: 'bold', backgroundColor: '#ef4444', color: 'white', padding: '4px 8px', borderRadius: '6px' }}>정답</span> 
+                  <b>{prob.answer}</b>
+                </div>
+                
+                <div style={{ fontSize: '13px', lineHeight: '1.5', color: '#334155' }}>
+                  <p style={{ margin: '0 0 8px 0' }}><b>[핵심 어휘]</b><br/>{prob.explanation.vocabulary}</p>
+                  <p style={{ margin: '0 0 8px 0' }}><b>[직독직해]</b><br/>{prob.explanation.direct}</p>
+                  <p style={{ margin: '0 0 8px 0' }}><b>[자연스러운 해석]</b><br/>{prob.explanation.natural}</p>
+                  <p style={{ margin: '0 0 8px 0', backgroundColor: '#f8fafc', padding: '8px', borderRadius: '4px' }}><b>[구조 & 문법]</b><br/>{prob.explanation.structure}<br/>{prob.explanation.grammar}</p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
+
+      {/* 💡 [추가됨] 문항 수정 모달창 */}
+      {editingIndex !== null && editFormData && (
+        <div className="no-print" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 }}>
+          <div style={{ backgroundColor: 'white', width: '800px', maxHeight: '90vh', overflowY: 'auto', borderRadius: '16px', padding: '32px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #e2e8f0', paddingBottom: '16px', marginBottom: '20px' }}>
+              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '800', color: '#1e293b' }}>✏️ {editingIndex + 1}번 문항 직접 수정</h2>
+              <button onClick={cancelEditing} style={{ border: 'none', background: 'none', fontSize: '24px', cursor: 'pointer', color: '#94a3b8' }}>&times;</button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block' }}>질문 (Question)</label>
+                <input value={editFormData.question} onChange={e => updateEditForm('question', e.target.value)} style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box' }} />
+              </div>
+              
+              <div>
+                <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block' }}>지문 (Passage)</label>
+                <textarea value={editFormData.passage} onChange={e => updateEditForm('passage', e.target.value)} rows={6} style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box', resize: 'vertical' }} />
+              </div>
+
+              <div>
+                <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block' }}>보기 (Options)</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {editFormData.options.map((opt, i) => (
+                    <input key={i} value={opt} onChange={e => updateOption(i, e.target.value)} style={{ width: '100%', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box' }} />
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block' }}>정답 기호 (예: ③)</label>
+                <input value={editFormData.answer} onChange={e => updateEditForm('answer', e.target.value)} style={{ width: '100px', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box' }} />
+              </div>
+
+              <hr style={{ borderTop: '1px dashed #cbd5e1', margin: '10px 0' }} />
+
+              <div>
+                <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block', color: '#10b981' }}>핵심 어휘</label>
+                <textarea value={editFormData.explanation.vocabulary} onChange={e => updateExplanation('vocabulary', e.target.value)} rows={2} style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box' }} />
+              </div>
+              <div>
+                <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block', color: '#10b981' }}>직독직해</label>
+                <textarea value={editFormData.explanation.direct} onChange={e => updateExplanation('direct', e.target.value)} rows={3} style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box' }} />
+              </div>
+              <div>
+                <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block', color: '#10b981' }}>자연스러운 해석</label>
+                <textarea value={editFormData.explanation.natural} onChange={e => updateExplanation('natural', e.target.value)} rows={3} style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box' }} />
+              </div>
+              <div>
+                <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block', color: '#10b981' }}>구조 분석</label>
+                <textarea value={editFormData.explanation.structure} onChange={e => updateExplanation('structure', e.target.value)} rows={2} style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box' }} />
+              </div>
+              <div>
+                <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block', color: '#10b981' }}>핵심 문법</label>
+                <textarea value={editFormData.explanation.grammar} onChange={e => updateExplanation('grammar', e.target.value)} rows={2} style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box' }} />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'flex-end' }}>
+              <button onClick={cancelEditing} style={{ padding: '12px 24px', backgroundColor: '#f1f5f9', color: '#475569', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>취소</button>
+              <button onClick={saveEditing} style={{ padding: '12px 32px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>저장 및 반영하기</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 🖨️ 인쇄될 영역 (생각학원 타이틀, 보기 좌측 정렬 및 줄맞춤 적용) */}
       <div className="print-only">
@@ -313,7 +456,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                 <div className="print-grid-2">
                   {chunk.map((prob, idx) => {
                     const absoluteIdx = pageIdx * 4 + idx;
-                    // 💡 짧은 보기 판정 (짧으면 가로 2열, 길면 무조건 세로 줄바꿈)
                     const isShortOptions = prob.options.every(opt => opt.length < 16) && prob.options.join('').length < 55;
 
                     return (
@@ -322,11 +464,10 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                           {absoluteIdx + 1}. {prob.question}
                         </p>
                         
-                        <div style={{ border: '1px solid #000', padding: '12px', marginBottom: '10px', fontSize: '10pt', lineHeight: '1.5', wordBreak: 'keep-all', overflowWrap: 'break-word', width: '100%', boxSizing: 'border-box', textAlign: 'left' }}>
+                        <div style={{ border: '1px solid #000', padding: '12px', marginBottom: '10px', fontSize: '10pt', lineHeight: '1.5', wordBreak: 'keep-all', overflowWrap: 'break-word', width: '100%', boxSizing: 'border-box', textAlign: 'left', whiteSpace: 'pre-wrap' }}>
                           {prob.passage}
                         </div>
                         
-                        {/* 💡 보기 정렬: 긴 보기는 왼쪽 정렬 및 줄바꿈 시에도 들여쓰기처럼 완벽하게 맞춤 */}
                         <div style={{
                           display: 'flex',
                           flexDirection: isShortOptions ? 'row' : 'column',
