@@ -42,7 +42,8 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const handleGenerateAI = async (type: 'mid' | 'high') => {
     if (!sourceText) return alert("원본 지문이나 문제를 먼저 입력해주세요!");
     
-    const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || CONFIG?.GEMINI_API_KEY;
+    // 💡 빌드 에러를 완벽하게 방지하는 안전한 API 키 호출 방식
+    const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || (CONFIG as any)?.GEMINI?.API_KEY || (CONFIG as any)?.GEMINI_API_KEY;
     if (!apiKey) return alert("API 키를 찾을 수 없습니다.");
 
     setIsGenerating(true);
@@ -280,7 +281,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
           </div>
         </div>
 
-        {/* 듀얼 뷰 (미리보기 - 문제들이 보이도록 수정 완료!) */}
+        {/* 듀얼 뷰 (미리보기) */}
         <div style={{ flex: '1', display: 'flex', gap: '20px' }}>
           <div style={{ flex: '1', backgroundColor: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', minHeight: '600px', overflowY: 'auto', maxHeight: '800px' }}>
             <h3 style={{ margin: '0 0 20px 0', paddingBottom: '12px', borderBottom: '2px solid #e2e8f0', color: '#3b82f6' }}>📄 인쇄 미리보기 (문제)</h3>
@@ -298,13 +299,12 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
         </div>
       </div>
 
-      {/* 🖨️ 인쇄될 영역 (생각학원 타이틀, 좌측 정렬, 보기 정렬 적용) */}
+      {/* 🖨️ 인쇄될 영역 (생각학원 타이틀, 보기 좌측 정렬 및 줄맞춤 적용) */}
       <div className="print-only">
         {isGenerated && (
           <div>
             {problemChunks.map((chunk, pageIdx) => (
               <div key={pageIdx} className={pageIdx > 0 ? "print-page-break" : ""}>
-                {/* 💡 상단 타이틀 '생각학원'으로 변경 */}
                 <div style={{ textAlign: 'center', fontSize: '11pt', fontWeight: 'bold', marginBottom: '4px' }}>생각학원</div>
                 <h2 style={{ textAlign: 'center', borderBottom: '2px solid black', paddingBottom: '8px', marginBottom: '16px', fontSize: '15pt' }}>
                   고래영어 특별 과제 {problemChunks.length > 1 ? `(${pageIdx + 1}p)` : ''}
@@ -313,32 +313,39 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                 <div className="print-grid-2">
                   {chunk.map((prob, idx) => {
                     const absoluteIdx = pageIdx * 4 + idx;
-                    // 💡 짧은 보기 판정 및 긴 보기 좌측 정렬 처리
+                    // 💡 짧은 보기 판정 (짧으면 가로 2열, 길면 무조건 세로 줄바꿈)
                     const isShortOptions = prob.options.every(opt => opt.length < 16) && prob.options.join('').length < 55;
 
                     return (
                       <div key={idx} className="avoid-break" style={{ width: '100%' }}>
-                        <p style={{ fontWeight: 'bold', fontSize: '10.5pt', marginBottom: '8px' }}>
+                        <p style={{ fontWeight: 'bold', fontSize: '10.5pt', marginBottom: '8px', textAlign: 'left' }}>
                           {absoluteIdx + 1}. {prob.question}
                         </p>
                         
-                        <div style={{ border: '1px solid #000', padding: '12px', marginBottom: '10px', fontSize: '10pt', lineHeight: '1.5', wordBreak: 'keep-all', overflowWrap: 'break-word', width: '100%', boxSizing: 'border-box' }}>
+                        <div style={{ border: '1px solid #000', padding: '12px', marginBottom: '10px', fontSize: '10pt', lineHeight: '1.5', wordBreak: 'keep-all', overflowWrap: 'break-word', width: '100%', boxSizing: 'border-box', textAlign: 'left' }}>
                           {prob.passage}
                         </div>
                         
-                        {/* 보기 정렬: 짧으면 2열/가로, 길면 왼쪽 정렬 세로 배치 */}
+                        {/* 💡 보기 정렬: 긴 보기는 왼쪽 정렬 및 줄바꿈 시에도 들여쓰기처럼 완벽하게 맞춤 */}
                         <div style={{
                           display: 'flex',
                           flexDirection: isShortOptions ? 'row' : 'column',
                           flexWrap: isShortOptions ? 'wrap' : 'nowrap',
                           justifyContent: isShortOptions ? 'space-between' : 'flex-start',
-                          gap: isShortOptions ? '8px' : '4px',
+                          gap: isShortOptions ? '8px' : '5px',
                           fontSize: '9.5pt',
                           paddingLeft: '2px',
-                          textAlign: 'left' // 긴 보기 좌측 정렬 고정
+                          textAlign: 'left'
                         }}>
                           {prob.options.map(opt => (
-                            <div key={opt} style={{ width: isShortOptions ? '48%' : '100%', textAlign: 'left' }}>{opt}</div>
+                            <div key={opt} style={{ 
+                              width: isShortOptions ? '48%' : '100%', 
+                              textAlign: 'left',
+                              display: 'block',
+                              paddingLeft: isShortOptions ? '0' : '0px'
+                            }}>
+                              {opt}
+                            </div>
                           ))}
                         </div>
                       </div>
@@ -348,7 +355,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
               </div>
             ))}
 
-            {/* 해설지 (다른 페이지로 분리 및 좌측 정렬) */}
+            {/* 해설지 영역 */}
             <div className="print-page-break"></div>
             
             <div style={{ textAlign: 'center', fontSize: '11pt', fontWeight: 'bold', marginBottom: '4px' }}>생각학원</div>
