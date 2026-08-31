@@ -10,7 +10,7 @@ import WhaleChat from './elem/WhaleChat';
 import Grammar from './elem/Grammar';
 import WordMaster from './elem/WordMaster';
 import Ranking from './elem/Ranking'; 
-import GameWordDrop from './elem/GameWordDrop'; // ⭐️ 게임 컴포넌트 불러오기!
+import GameWordDrop from './elem/GameWordDrop'; 
 
 // 📘 중·고등부 학습 컴포넌트
 import MidHome from './mid/MidHome';
@@ -44,29 +44,21 @@ export default function App() {
   const [showTestLogin, setShowTestLogin] = useState(false);
   const [showSchoolSelect, setShowSchoolSelect] = useState(false);
 
-  const refreshIntegratedRank = useCallback(async (studentName: string, optimisticAddedScore = 0) => {
-    setIntegratedRank((prev) => ({
-      ...prev,
-      loading: true,
-      totalScore: optimisticAddedScore > 0 ? prev.totalScore + optimisticAddedScore : prev.totalScore,
-    }));
-
-    if (optimisticAddedScore > 0) {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-    }
-
+  // 💡 [핵심 수정] 가짜 덧셈과 1.5초 딜레이를 모두 삭제하고, 오직 서버의 '진짜' 점수만 가져오도록 단순화했습니다.
+  const refreshIntegratedRank = useCallback(async (studentName: string) => {
+    setIntegratedRank((prev) => ({ ...prev, loading: true }));
     const result = await fetchIntegratedRankings(studentName);
-    setIntegratedRank((prev) => ({
+    
+    setIntegratedRank({
       ...result,
       loading: false,
-      totalScore: Math.max(prev.totalScore, result.totalScore),
-      myRank: result.myRank ?? prev.myRank,
-    }));
+    });
   }, []);
 
-  const handleGameComplete = useCallback((addedScore = 0) => {
+  // 💡 [핵심 수정] 게임이 끝났을 때 점수를 억지로 더하지 않고, 그냥 서버 점수를 새로고침만 합니다.
+  const handleGameComplete = useCallback((_addedScore = 0) => {
     if (loggedInStudent?.name) {
-      refreshIntegratedRank(loggedInStudent.name, addedScore);
+      refreshIntegratedRank(loggedInStudent.name);
     }
   }, [loggedInStudent, refreshIntegratedRank]);
 
@@ -144,9 +136,7 @@ export default function App() {
       return <Lms onBack={() => { setIsLoggedIn(false); setIsAdmin(false); setId(''); }} />;
     }
 
-    // 💡 중·고등부 학습 모드
     if (loggedInStudent && studentMode === 'middle') {
-      // 🚀 핵심 수정 부분: 학년에 '고'가 들어가면 'words_high'를, 아니면 'words_mid'를 전달!
       if (currentMenu === 'voca') {
         return (
           <Voca 
@@ -206,7 +196,6 @@ export default function App() {
               <span style={{ fontSize: '22px', fontWeight: '800', wordBreak: 'keep-all', lineHeight: '1.3' }}>초등부<br/>입장</span>
             </button>
             
-            {/* 💡 센스 추가: 고등학생도 자연스럽게 누를 수 있도록 이름 변경! */}
             <button onClick={() => handleModeSelect('middle')} style={{ flex: 1, aspectRatio: '1 / 1', backgroundColor: '#007aff', color: 'white', border: 'none', borderRadius: '24px', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '16px', boxShadow: '0 6px 16px rgba(0, 122, 255, 0.3)', transition: 'all 0.2s ease-in-out' }} onMouseOver={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 122, 255, 0.4)'; }} onMouseOut={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(0, 122, 255, 0.3)'; }}>
               <span style={{ fontSize: '56px', lineHeight: '1' }}>📘</span>
               <span style={{ fontSize: '22px', fontWeight: '800', wordBreak: 'keep-all', lineHeight: '1.3' }}>중·고등부<br/>입장</span>
