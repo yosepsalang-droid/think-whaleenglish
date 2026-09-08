@@ -123,6 +123,26 @@ export default function Ranking({ onBack }: RankingProps) {
         <div style={{ width: '80px' }}></div>
       </div>
 
+      {/* 💡 [추가된 부분] 10월 연기 안내 공지 배너 */}
+      <div style={{ 
+        backgroundColor: '#fffdf0', 
+        border: '1px solid #ffda79', 
+        borderRadius: '12px', 
+        padding: '16px', 
+        marginBottom: '24px', 
+        boxShadow: '0 4px 6px rgba(0,0,0,0.02)' 
+      }}>
+        <div style={{ fontWeight: '900', color: '#cc8e00', fontSize: '15px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          📢 [공지] 랭킹 이벤트 10월 연기 안내
+        </div>
+        <div style={{ fontSize: '13.5px', color: '#555', lineHeight: '1.6', wordBreak: 'keep-all' }}>
+          고래영어 친구들! 현재 랭킹 점수판을 더 완벽하고 공정하게 업데이트하고 있어요. 🛠️<br/>
+          이에 따라 아쉽게도 9월 1~3등 시상 이벤트는 <strong>10월로 연기</strong>됩니다.<br/>
+          점수 오류로 불편을 드려 미안해요! 지금 열심히 공부한 실력은 그대로 남으니까, 10월 랭킹전을 위해 계속 파이팅해 봐요! 🐳✨
+        </div>
+      </div>
+      {/* ------------------------------------------------ */}
+
       <RankingCard 
         title="지난달 명예의 전당" 
         data={lastMonthRankings} 
