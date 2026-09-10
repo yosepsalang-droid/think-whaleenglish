@@ -62,7 +62,7 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
   const [pendingDates, setPendingDates] = useState<string[]>([]);
   const [isDateFinished, setIsDateFinished] = useState(false);
 
-  // 💡 [핵심] 주말(토,일) 제외하고 '통과 못한 밀린 날짜'만 쏙쏙 뽑아오는 자동 계산 함수
+  // 💡 주말 제외 + 8월 데이터 무시하는 자동 계산 함수
   const refreshPendingDates = useCallback(() => {
     const pending: string[] = [];
     const now = new Date();
@@ -70,22 +70,24 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
     const savedData = JSON.parse(localStorage.getItem(storageKey) || '{"records":{}}');
     const records = savedData.records || {};
 
-    for (let i = 0; i < 30; i++) { // 최근 한 달(30일)을 검사
+    for (let i = 0; i < 30; i++) { 
       const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      
+      // 💡 [핵심] 9월 1일 이전(8월 등) 날짜는 밀린 목록에서 가차없이 제외!
+      if (d < new Date(now.getFullYear(), 8, 1)) continue; 
+
       const dayOfWeek = d.getDay();
       
-      // 0은 일요일, 6은 토요일 -> 주말은 가차없이 패스!
+      // 주말(토,일) 제외
       if (dayOfWeek === 0 || dayOfWeek === 6) continue; 
 
       const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
       
-      // 기록이 아예 없거나 '완료'가 아니면 밀린 날짜 리스트에 추가
       if (!records[dateStr] || records[dateStr].status !== '완료') {
         pending.push(dateStr);
       }
     }
     
-    // 오래된 밀린 날짜부터 차례대로 깨부수도록 배열 뒤집기
     pending.reverse(); 
     setPendingDates(pending);
     return pending;
@@ -94,13 +96,12 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
   useEffect(() => {
     const pDates = refreshPendingDates();
     if (pDates.length > 0) {
-      setSelectedDate(pDates[0]); // 접속하자마자 가장 오래된 밀린 날짜를 떡하니 잡아줌
+      setSelectedDate(pDates[0]);
     } else {
       setSelectedDate(realTodayStr);
     }
   }, [refreshPendingDates, realTodayStr]);
 
-  // 워드타파 3권 누락 방지용 (1000개 제한 돌파)
   useEffect(() => {
     const fetchWords = async () => {
       try {
@@ -348,7 +349,6 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
     
     supabase.from('learning_logs').insert([{ student_id: studentId, student_name: studentName, task_type: taskTypeName, book_info: `${selectedBook} [${currentTestMode}]`, score: totalQCount, status: '완료', attempt: attemptCount, log_date: selectedDate }]).then();
     
-    // 💡 방금 클리어한 날짜를 지우고, 다음 밀린 날짜로 목록을 갱신!
     const newPending = refreshPendingDates();
     if (newPending.length > 0) {
       setSelectedDate(newPending[0]);
@@ -379,7 +379,6 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
             학생 이름: <span style={{ color: '#111', fontWeight: '800' }}>{studentName} ({studentId})</span>
           </div>
 
-          {/* 💡 [핵심] 밀린 날짜 리스트 선택창 */}
           <div style={{ textAlign: 'left', marginBottom: '16px' }}>
             <label style={{ fontSize: '13px', fontWeight: '700', color: '#8e8e93', marginLeft: '4px', marginBottom: '8px', display: 'block' }}>학습할 날짜 선택 (밀린 퀘스트)</label>
             <select 
