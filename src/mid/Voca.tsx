@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase'; 
 
 interface VocaProps { 
@@ -25,7 +25,6 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
   const [testWords, setTestWords] = useState<WordItem[]>([]); 
   
   const [gameState, setGameState] = useState<'intro' | 'playing_mc' | 'playing_typing' | 'result'>('intro');
-  // 💡 Phase 0: 기본 객관식, Phase 1: 고등 1차, Phase 2: 고등 2차(뜻타이핑), Phase 3: 중등 스펠링타이핑
   const [currentPhase, setCurrentPhase] = useState<0 | 1 | 2 | 3>(0); 
   
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -47,26 +46,78 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
   const [isRetestMode, setIsRetestMode] = useState(false);
   
   const [totalQCount, setTotalQCount] = useState(0); 
+  const typingInputRef = useRef<HTMLInputElement>(null);
 
   const taskTypeName = tableName === 'words_high' ? '고등단어' : '중등단어';
 
-  const { realTodayStr, currentMonthStr } = useMemo(() => {
+  const { realTodayStr } = useMemo(() => {
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
-    return { realTodayStr: `${year}-${month}-${day}`, currentMonthStr: `${year}-${month}` };
+    return { realTodayStr: `${year}-${month}-${day}` };
   }, []);
 
   const [selectedDate, setSelectedDate] = useState(realTodayStr);
+  const [pendingDates, setPendingDates] = useState<string[]>([]);
   const [isDateFinished, setIsDateFinished] = useState(false);
 
+  // 💡 [핵심] 주말(토,일) 제외하고 '통과 못한 밀린 날짜'만 쏙쏙 뽑아오는 자동 계산 함수
+  const refreshPendingDates = useCallback(() => {
+    const pending: string[] = [];
+    const now = new Date();
+    const storageKey = `voca_log_${tableName}_${studentId}`;
+    const savedData = JSON.parse(localStorage.getItem(storageKey) || '{"records":{}}');
+    const records = savedData.records || {};
+
+    for (let i = 0; i < 30; i++) { // 최근 한 달(30일)을 검사
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      const dayOfWeek = d.getDay();
+      
+      // 0은 일요일, 6은 토요일 -> 주말은 가차없이 패스!
+      if (dayOfWeek === 0 || dayOfWeek === 6) continue; 
+
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      
+      // 기록이 아예 없거나 '완료'가 아니면 밀린 날짜 리스트에 추가
+      if (!records[dateStr] || records[dateStr].status !== '완료') {
+        pending.push(dateStr);
+      }
+    }
+    
+    // 오래된 밀린 날짜부터 차례대로 깨부수도록 배열 뒤집기
+    pending.reverse(); 
+    setPendingDates(pending);
+    return pending;
+  }, [tableName, studentId]);
+
+  useEffect(() => {
+    const pDates = refreshPendingDates();
+    if (pDates.length > 0) {
+      setSelectedDate(pDates[0]); // 접속하자마자 가장 오래된 밀린 날짜를 떡하니 잡아줌
+    } else {
+      setSelectedDate(realTodayStr);
+    }
+  }, [refreshPendingDates, realTodayStr]);
+
+  // 워드타파 3권 누락 방지용 (1000개 제한 돌파)
   useEffect(() => {
     const fetchWords = async () => {
       try {
-        const { data, error } = await supabase.from(tableName).select('book, eng, kor, day').limit(10000);
-        if (error) throw error;
-        const validWords = (data || []).filter(w => w.book && w.eng && w.kor && (tableName === 'words_mid' || w.day));
+        let allData: any[] = [];
+        let from = 0;
+        const step = 1000;
+        
+        while (true) {
+          const { data, error } = await supabase.from(tableName).select('book, eng, kor, day').range(from, from + step - 1);
+          if (error) throw error;
+          if (!data || data.length === 0) break;
+          allData = [...allData, ...data];
+          if (data.length < step) break; 
+          from += step;
+        }
+
+        const validWords = allData.filter(w => w.book && w.eng && w.kor && (tableName === 'words_mid' || w.day));
         setAllWords(validWords);
       } catch (e) { 
         alert(`데이터 로드 실패. 관리자에게 문의하세요.`); 
@@ -158,7 +209,6 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
     setAttemptCount(1);
     setIsRetestMode(false);
     
-    // 💡 [수정됨] 스펠링 시험(kor2eng)일 때는 객관식이 아닌 타이핑 모드(Phase 3)로 진입!
     if (mode === 'kor2eng') {
       setCurrentPhase(3);
       setGameState('playing_typing');
@@ -197,7 +247,6 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
     setWrongQuestions([]); 
     setAttemptCount(prev => prev + 1); 
     setIsRetestMode(true);
-    // 💡 Phase 2나 Phase 3이면 무조건 다시 타이핑 모드로 진입
     setGameState((currentPhase === 2 || currentPhase === 3) ? 'playing_typing' : 'playing_mc');
     setCurrentIndex(0);
     setScore(0);
@@ -205,6 +254,14 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
     setTypingInput('');
     setShowTypingFeedback(null);
   };
+
+  useEffect(() => {
+    if (gameState === 'playing_typing' && !showTypingFeedback) {
+      setTimeout(() => {
+        if (typingInputRef.current) typingInputRef.current.focus();
+      }, 50); 
+    }
+  }, [currentIndex, gameState, showTypingFeedback]);
 
   useEffect(() => {
     if (gameState.includes('playing') && questions.length > 0 && !selectedOption && !showTypingFeedback) {
@@ -255,7 +312,6 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
     if (isCorrect) setScore(s => s + 1);
     else setWrongQuestions(prev => [...prev, currentQ]);
 
-    // 💡 영어를 맞췄을 때 자동으로 발음 들려주기
     if (isCorrect && currentPhase === 3) speakText(currentQ.answer);
 
     setTimeout(() => {
@@ -292,6 +348,14 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
     
     supabase.from('learning_logs').insert([{ student_id: studentId, student_name: studentName, task_type: taskTypeName, book_info: `${selectedBook} [${currentTestMode}]`, score: totalQCount, status: '완료', attempt: attemptCount, log_date: selectedDate }]).then();
     
+    // 💡 방금 클리어한 날짜를 지우고, 다음 밀린 날짜로 목록을 갱신!
+    const newPending = refreshPendingDates();
+    if (newPending.length > 0) {
+      setSelectedDate(newPending[0]);
+    } else {
+      setSelectedDate(realTodayStr);
+    }
+    
     setGameState('intro');
   };
 
@@ -313,6 +377,26 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
           </h2>
           <div style={{ fontSize: '14px', color: '#8e8e93', fontWeight: '600', marginBottom: '16px' }}>
             학생 이름: <span style={{ color: '#111', fontWeight: '800' }}>{studentName} ({studentId})</span>
+          </div>
+
+          {/* 💡 [핵심] 밀린 날짜 리스트 선택창 */}
+          <div style={{ textAlign: 'left', marginBottom: '16px' }}>
+            <label style={{ fontSize: '13px', fontWeight: '700', color: '#8e8e93', marginLeft: '4px', marginBottom: '8px', display: 'block' }}>학습할 날짜 선택 (밀린 퀘스트)</label>
+            <select 
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              style={{ width: '100%', padding: '16px', borderRadius: '14px', border: `1px solid ${pendingDates.length > 0 ? '#ff9500' : '#4caf50'}`, fontSize: '15px', fontWeight: '700', color: pendingDates.length > 0 ? '#cc7a00' : '#2e7d32', backgroundColor: pendingDates.length > 0 ? '#fffdf0' : '#e8f5e9', outline: 'none', boxSizing: 'border-box' }}
+            >
+              {pendingDates.length > 0 ? (
+                pendingDates.map(date => (
+                  <option key={date} value={date}>
+                    {date === realTodayStr ? `${date} (오늘 할당량)` : `${date} (밀린 학습)`}
+                  </option>
+                ))
+              ) : (
+                <option value={realTodayStr}>{realTodayStr} (모든 밀린 학습 완료! 🎉)</option>
+              )}
+            </select>
           </div>
 
           <div style={{ textAlign: 'left', marginBottom: '16px' }}>
@@ -369,7 +453,6 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
           </div>
           
           <div style={{ textAlign: 'center', height: '160px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', marginBottom: '32px' }}>
-            {/* 💡 타이핑 모드에 맞는 안내 멘트 적용 */}
             <span style={{ display: 'inline-block', padding: '6px 14px', backgroundColor: (currentPhase === 2 || currentPhase === 3) ? '#fff5e6' : '#eef6ff', color: (currentPhase === 2 || currentPhase === 3) ? '#ff9500' : '#007aff', borderRadius: '8px', fontSize: '14px', fontWeight: '800', marginBottom: '16px' }}>
               {currentPhase === 2 ? '⌨️ 정확한 한글 뜻을 적어주세요' : currentPhase === 3 ? '⌨️ 정확한 영어 스펠링을 적어주세요' : (questions[currentIndex].type === 'eng2kor' ? '🇺🇸 영어를 우리말로' : '🇰🇷 우리말을 영어로')}
             </span>
@@ -400,13 +483,12 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
 
           {gameState === 'playing_typing' && (
             <form onSubmit={handleTypingSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' }}>
-              {/* 💡 [핵심] 스마트폰 자동완성, 맞춤법 힌트 완벽 차단 코드 4종 세트 적용! */}
               <input 
+                ref={typingInputRef}
                 type="text" 
                 value={typingInput} 
                 onChange={e => setTypingInput(e.target.value)} 
                 placeholder={currentPhase === 3 ? "스펠링을 적으세요 (예: apple)" : "뜻을 적으세요 (예: 사과)"}
-                autoFocus
                 disabled={!!showTypingFeedback}
                 autoComplete="off"
                 autoCorrect="off"
