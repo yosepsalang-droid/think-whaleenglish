@@ -25,7 +25,8 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
   const [testWords, setTestWords] = useState<WordItem[]>([]); 
   
   const [gameState, setGameState] = useState<'intro' | 'playing_mc' | 'playing_typing' | 'result'>('intro');
-  const [currentPhase, setCurrentPhase] = useState<0 | 1 | 2>(0); 
+  // 💡 Phase 0: 기본 객관식, Phase 1: 고등 1차, Phase 2: 고등 2차(뜻타이핑), Phase 3: 중등 스펠링타이핑
+  const [currentPhase, setCurrentPhase] = useState<0 | 1 | 2 | 3>(0); 
   
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -60,12 +61,6 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
   const [selectedDate, setSelectedDate] = useState(realTodayStr);
   const [isDateFinished, setIsDateFinished] = useState(false);
 
-  const selectedDateFormatted = useMemo(() => {
-    const d = new Date(selectedDate);
-    return `${d.getFullYear()}. ${String(d.getMonth() + 1).padStart(2, '0')}. ${String(d.getDate()).padStart(2, '0')}`;
-  }, [selectedDate]);
-
-  // 💡 DB 로드 (limit(10000) 추가! 이제 워드타파 3권도 안 짤립니다!)
   useEffect(() => {
     const fetchWords = async () => {
       try {
@@ -162,14 +157,21 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
     setWrongQuestions([]);
     setAttemptCount(1);
     setIsRetestMode(false);
-    setCurrentPhase(tableName === 'words_high' ? 1 : 0);
-    setGameState('playing_mc');
+    
+    // 💡 [수정됨] 스펠링 시험(kor2eng)일 때는 객관식이 아닌 타이핑 모드(Phase 3)로 진입!
+    if (mode === 'kor2eng') {
+      setCurrentPhase(3);
+      setGameState('playing_typing');
+    } else {
+      setCurrentPhase(tableName === 'words_high' ? 1 : 0);
+      setGameState('playing_mc');
+    }
+    
     setCurrentIndex(0);
     setScore(0);
     setSelectedOption(null);
   };
 
-  // 💡 Vercel 에러 해결! (as Question 을 붙여서 타입스크립트가 안심하게 만들었습니다)
   const preparePhase2 = () => {
     const typingQs = testWords.map((w, i) => ({
       id: i, 
@@ -195,7 +197,8 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
     setWrongQuestions([]); 
     setAttemptCount(prev => prev + 1); 
     setIsRetestMode(true);
-    setGameState(currentPhase === 2 ? 'playing_typing' : 'playing_mc');
+    // 💡 Phase 2나 Phase 3이면 무조건 다시 타이핑 모드로 진입
+    setGameState((currentPhase === 2 || currentPhase === 3) ? 'playing_typing' : 'playing_mc');
     setCurrentIndex(0);
     setScore(0);
     setSelectedOption(null);
@@ -251,6 +254,9 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
     setShowTypingFeedback(isCorrect ? 'O' : 'X');
     if (isCorrect) setScore(s => s + 1);
     else setWrongQuestions(prev => [...prev, currentQ]);
+
+    // 💡 영어를 맞췄을 때 자동으로 발음 들려주기
+    if (isCorrect && currentPhase === 3) speakText(currentQ.answer);
 
     setTimeout(() => {
       setShowTypingFeedback(null);
@@ -340,7 +346,7 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
                 🇰🇷 뜻만 시험보기 (150문제)
               </button>
               <button onClick={() => startGame('kor2eng', 30)} style={{ width: '100%', padding: '16px', background: 'linear-gradient(135deg, #ff9500, #e68a00)', color: 'white', border: 'none', borderRadius: '16px', fontSize: '17px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 4px 12px rgba(255,149,0,0.2)' }}>
-                🇺🇸 스펠링 시험보기 (30문제)
+                🇺🇸 영어 스펠링 쓰기 (30문제)
               </button>
               <button onClick={() => startGame('half', 100)} style={{ width: '100%', padding: '16px', background: 'linear-gradient(135deg, #5856d6, #4a48b8)', color: 'white', border: 'none', borderRadius: '16px', fontSize: '17px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 4px 12px rgba(88,86,214,0.2)' }}>
                 ⚖️ 반반 시험보기 (100문제)
@@ -353,18 +359,19 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
       {(gameState === 'playing_mc' || gameState === 'playing_typing') && questions.length > 0 && (
         <div style={{ background: 'white', padding: '32px 24px', borderRadius: '24px', width: '100%', boxSizing: 'border-box', boxShadow: '0 12px 32px rgba(0,0,0,0.06)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <span style={{ fontSize: '15px', fontWeight: '800', color: currentPhase === 2 ? '#ff9500' : '#007aff' }}>
-              {isRetestMode ? `🔥 오답 재시험 (${attemptCount}회차)` : (currentPhase === 2 ? '📝 2차전: 뜻 주관식 타이핑' : `Question ${currentIndex + 1}`)}
+            <span style={{ fontSize: '15px', fontWeight: '800', color: (currentPhase === 2 || currentPhase === 3) ? '#ff9500' : '#007aff' }}>
+              {isRetestMode ? `🔥 오답 재시험 (${attemptCount}회차)` : (currentPhase === 2 ? '📝 2차전: 뜻 주관식 타이핑' : currentPhase === 3 ? '📝 스펠링 타이핑' : `Question ${currentIndex + 1}`)}
             </span>
             <span style={{ fontSize: '15px', fontWeight: '700', color: '#8e8e93' }}>{currentIndex + 1} / {questions.length}</span>
           </div>
           <div style={{ width: '100%', height: '8px', backgroundColor: '#f0f0f5', borderRadius: '4px', marginBottom: '32px', overflow: 'hidden' }}>
-            <div style={{ width: `${((currentIndex + 1) / questions.length) * 100}%`, height: '100%', backgroundColor: currentPhase === 2 ? '#ff9500' : '#007aff', borderRadius: '4px', transition: 'width 0.3s ease' }}></div>
+            <div style={{ width: `${((currentIndex + 1) / questions.length) * 100}%`, height: '100%', backgroundColor: (currentPhase === 2 || currentPhase === 3) ? '#ff9500' : '#007aff', borderRadius: '4px', transition: 'width 0.3s ease' }}></div>
           </div>
           
           <div style={{ textAlign: 'center', height: '160px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', marginBottom: '32px' }}>
-            <span style={{ display: 'inline-block', padding: '6px 14px', backgroundColor: currentPhase === 2 ? '#fff5e6' : '#eef6ff', color: currentPhase === 2 ? '#ff9500' : '#007aff', borderRadius: '8px', fontSize: '14px', fontWeight: '800', marginBottom: '16px' }}>
-              {currentPhase === 2 ? '⌨️ 정확한 한글 뜻을 적어주세요' : (questions[currentIndex].type === 'eng2kor' ? '🇺🇸 영어를 우리말로' : '🇰🇷 우리말을 영어로')}
+            {/* 💡 타이핑 모드에 맞는 안내 멘트 적용 */}
+            <span style={{ display: 'inline-block', padding: '6px 14px', backgroundColor: (currentPhase === 2 || currentPhase === 3) ? '#fff5e6' : '#eef6ff', color: (currentPhase === 2 || currentPhase === 3) ? '#ff9500' : '#007aff', borderRadius: '8px', fontSize: '14px', fontWeight: '800', marginBottom: '16px' }}>
+              {currentPhase === 2 ? '⌨️ 정확한 한글 뜻을 적어주세요' : currentPhase === 3 ? '⌨️ 정확한 영어 스펠링을 적어주세요' : (questions[currentIndex].type === 'eng2kor' ? '🇺🇸 영어를 우리말로' : '🇰🇷 우리말을 영어로')}
             </span>
             <h2 style={{ fontSize: '32px', fontWeight: '800', margin: '0', color: '#111', wordBreak: 'keep-all', lineHeight: '1.3' }}>
               {questions[currentIndex].type === 'eng2kor' ? questions[currentIndex].eng : questions[currentIndex].kor}
@@ -393,13 +400,18 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
 
           {gameState === 'playing_typing' && (
             <form onSubmit={handleTypingSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' }}>
+              {/* 💡 [핵심] 스마트폰 자동완성, 맞춤법 힌트 완벽 차단 코드 4종 세트 적용! */}
               <input 
                 type="text" 
                 value={typingInput} 
                 onChange={e => setTypingInput(e.target.value)} 
-                placeholder="뜻을 입력하세요 (예: 사과)"
+                placeholder={currentPhase === 3 ? "스펠링을 적으세요 (예: apple)" : "뜻을 적으세요 (예: 사과)"}
                 autoFocus
                 disabled={!!showTypingFeedback}
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck="false"
                 style={{ width: '100%', padding: '20px', borderRadius: '16px', border: `2px solid ${showTypingFeedback === 'O' ? '#4caf50' : showTypingFeedback === 'X' ? '#ef5350' : '#ff9500'}`, fontSize: '20px', fontWeight: '700', textAlign: 'center', boxSizing: 'border-box', outline: 'none', backgroundColor: showTypingFeedback === 'O' ? '#e8f5e9' : showTypingFeedback === 'X' ? '#ffebee' : '#f9f9f9', color: showTypingFeedback === 'X' ? '#c62828' : '#111' }}
               />
               <button type="submit" disabled={!!showTypingFeedback} style={{ width: '100%', padding: '18px', background: showTypingFeedback ? '#ccc' : '#111', color: 'white', border: 'none', borderRadius: '16px', fontSize: '18px', fontWeight: '800', cursor: showTypingFeedback ? 'default' : 'pointer' }}>
