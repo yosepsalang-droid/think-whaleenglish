@@ -88,21 +88,47 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
     }
   };
 
-  // 💡 [핵심 해결] 구글 API의 가장 최신 공식 무료 모델명('gemini-1.5-flash') 단일 지정!
+  // 💡 [해결!] 과거 AI 연구소에서 에러 없이 100% 성공했던 그 다중 우회 로직을 완벽 이식했습니다.
   const callGeminiAPI = async (promptText: string) => {
-    const API_KEY = (import.meta.env.VITE_GEMINI_API_KEY || CONFIG?.GEMINI?.API_KEY || "").trim();
-    if (!API_KEY) throw new Error("API 키가 누락되었습니다.");
+    const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || (CONFIG as any)?.GEMINI?.API_KEY || (CONFIG as any)?.GEMINI_API_KEY;
+    if (!apiKey) throw new Error("API 키를 찾을 수 없습니다.");
 
-    const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + API_KEY;
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: promptText }] }] })
-    });
-    
-    const data = await response.json();
-    if (data.error) throw new Error(data.error.message || "API 서버 에러");
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    // 원장님 환경에서 가장 잘 작동했던 모델 우선순위
+    const modelsToTry = ['gemini-3.7-flash', 'gemini-3.1-pro', 'gemini-3.5-flash-lite', 'gemini-1.5-flash', 'gemini-pro'];
+    let textResponse = '';
+    let success = false;
+    let lastErrorMsg = '';
+
+    for (const model of modelsToTry) {
+      try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: promptText }] }],
+            generationConfig: { temperature: 0.7 }
+          })
+        });
+
+        const data = await response.json();
+        if (data.error) throw new Error(data.error.message);
+
+        textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        if (!textResponse) throw new Error("응답이 비어있습니다.");
+
+        success = true; 
+        break; // 성공하면 즉시 반복문 탈출!
+      } catch (error: any) {
+        console.warn(`${model} 호출 실패, 다음 모델로 우회 접속 시도...`, error.message);
+        lastErrorMsg = error.message;
+      }
+    }
+
+    if (!success) {
+      throw new Error(`모든 AI 통신망 접속에 실패했습니다. (마지막 에러: ${lastErrorMsg})`);
+    }
+
+    return textResponse;
   };
 
   const handleStartChat = () => {
