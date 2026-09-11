@@ -6,7 +6,7 @@ interface WhaleChatProps {
   onBack: () => void;
   studentId?: string;
   studentName?: string;
-  currentBook?: string; // 💡 기존 호환성을 위해 남겨두지만, 일기장에서는 사용하지 않습니다.
+  currentBook?: string; 
 }
 
 interface Message {
@@ -92,11 +92,12 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
     }
   };
 
+  // 💡 [오류 해결] gemini-1.5-flash-latest 로 모델명 정확하게 수정!
   const callGeminiAPI = async (promptText: string) => {
     const API_KEY = (import.meta.env.VITE_GEMINI_API_KEY || CONFIG?.GEMINI?.API_KEY || "").trim();
     if (!API_KEY) throw new Error("API 키가 누락되었습니다.");
 
-    const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + API_KEY;
+    const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=" + API_KEY;
     const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -128,7 +129,6 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
     setAnswers(updatedAnswers);
 
     try {
-      // 💡 1. 아이의 대답을 칭찬하고 영작 코칭해주는 프롬프트
       const coachPrompt = `
         너는 초등학생에게 영어를 가르쳐주는 친절하고 발랄한 고래 선생님이야.
         내가 방금 한 질문: "${DIARY_QUESTIONS[currentStep].q}"
@@ -144,7 +144,6 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
       const coachReply = await callGeminiAPI(coachPrompt);
       setMessages(prev => [...prev, { sender: 'whale', text: coachReply }]);
 
-      // 💡 2. 다음 질문으로 넘어가기 (또는 일기 완성하기)
       if (currentStep < 3) {
         setTimeout(() => {
           const nextQ = DIARY_QUESTIONS[currentStep + 1].q;
@@ -152,9 +151,8 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
           speakWhale(nextQ);
           setCurrentStep(currentStep + 1);
           setIsAIThinking(false);
-        }, 2000); // 코칭 메시지 읽을 시간 2초 부여
+        }, 2000); 
       } else {
-        // 모든 질문 끝! 마법의 일기장 제작 시작
         setTimeout(async () => {
           setMessages(prev => [...prev, { sender: 'system', text: "✨ 마법의 고래가 너의 대답을 모아 영어 일기를 만들고 있어요..." }]);
           
@@ -176,7 +174,6 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
 
           const diaryReply = await callGeminiAPI(diaryPrompt);
           
-          // [ENG] 와 [KOR] 파싱
           const engMatch = diaryReply.match(/\[ENG\]([\s\S]*?)\[KOR\]/);
           const korMatch = diaryReply.match(/\[KOR\]([\s\S]*)/);
           
@@ -189,7 +186,7 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
             
             const finishMsg = `짜잔! 🎉 너의 이야기로 멋진 영어 일기가 완성되었어!\n\n${finalEng}\n\n이제 이 일기를 똑같이 따라 쳐보는 마지막 미션을 시작할게!`;
             setMessages(prev => [...prev, { sender: 'whale', text: finishMsg }]);
-            speakWhale(finalEng); // 완성된 일기 읽어주기
+            speakWhale(finalEng); 
             
             setTimeout(() => {
               setChatPhase('typing');
@@ -207,7 +204,6 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
     }
   };
 
-  // 💡 타자 검사 로직 (공백, 대소문자 무시하고 알파벳/문장부호만 비교하여 너그럽게 채점)
   const handleTypingChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setTypingInput(val);
@@ -227,7 +223,6 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
       const now = new Date();
       const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       
-      // 1. [원장님 기획] 새로 만든 whale_diaries 보물상자에 일기 전문 쏙 넣기!
       await supabase.from('whale_diaries').insert([{
         student_id: studentId,
         student_name: studentName,
@@ -236,11 +231,10 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
         log_date: todayStr
       }]);
 
-      // 2. 기존 learning_logs 에도 기록하여 LMS 통계에 반영 (task_type을 'AI회화' 로 지정)
       await supabase.from('learning_logs').insert([{
         student_id: studentId,
         student_name: studentName,
-        task_type: 'AI회화', // 💡 LMS 관제탑에서 '회화'로 인식하도록 세팅
+        task_type: 'AI회화', 
         book_info: '오늘의 일기', 
         status: '완료',
         score: 100,
@@ -258,7 +252,6 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
   return (
     <div style={{ fontFamily: 'Pretendard, sans-serif', padding: '16px', maxWidth: '500px', margin: '0 auto', height: '92vh', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
       
-      {/* 상단 헤더 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
         <button onClick={onBack} style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #ccc', backgroundColor: 'white', cursor: 'pointer', fontWeight: 'bold' }}>← 나가기</button>
         <span style={{ fontWeight: 'bold', color: '#007aff', fontSize: '18px' }}>Whale Diary 🐋</span>
@@ -352,7 +345,6 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
             <div style={{ fontSize: '14px', fontWeight: '800', color: '#111', marginBottom: '8px' }}>
               ⌨️ 아래 빈칸에 똑같이 따라서 적어보세요!
             </div>
-            {/* 💡 [핵심] 자동완성 완벽 차단! */}
             <textarea
               ref={typingInputRef}
               value={typingInput}
