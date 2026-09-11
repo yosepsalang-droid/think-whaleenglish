@@ -16,8 +16,17 @@ interface Student {
 const SERIES_LIST = ['240', '520', '860', '1240', '1680'];
 const BOOK_NUM_LIST = ['1', '2', '3', '4', '5', '6'];
 
+// 💡 [핵심 수정] Unit/Day뿐만 아니라, 동사에서 넘어오는 "ID 1~15" 형식도 잡아내도록 업그레이드!
 const parseUnitDay = (bookInfo: string) => {
   if (!bookInfo) return '';
+  
+  // 1. 만약 bookInfo 안에 "ID"라는 글자가 들어있다면 (예: "ID 1~15") 그대로 괄호 쳐서 리턴합니다.
+  if (bookInfo.toUpperCase().includes('ID')) {
+    const idMatch = bookInfo.match(/ID\s*([\d~]+)/i);
+    if (idMatch) return `(${idMatch[0]})`; // 결과: "(ID 1~15)"
+  }
+
+  // 2. 기존 단어/문장 교재의 Unit/Day 처리
   const uMatch = bookInfo.match(/(?:u|unit|유닛)[^\d]*(\d+)/i);
   const dMatch = bookInfo.match(/(?:d|day|데이)[^\d]*(\d+)/i);
   
@@ -38,11 +47,11 @@ const getFakeUTCString = (date: Date) => {
   return `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}+00:00`;
 };
 
-// 💡 [핵심 추가] 여러 번 학습한 기록을 누적해서 예쁘게 합쳐주는 함수 (중복 방지 포함)
+// 💡 여러 번 학습한 기록을 누적해서 예쁘게 합쳐주는 함수 (중복 방지 포함)
 const appendDetail = (currentStr: string, title: string, newDetail: string) => {
   if (!currentStr) return `✅ ${title}${newDetail}`; 
-  if (currentStr.includes(newDetail)) return currentStr; // 똑같은 진도를 또 한 경우 중복 방지
-  return `${currentStr}, ${newDetail}`; // 여러 진도를 나간 경우 콤마로 연결
+  if (currentStr.includes(newDetail)) return currentStr; 
+  return `${currentStr}, ${newDetail}`; 
 };
 
 export default function ElemManage() {
@@ -122,7 +131,6 @@ export default function ElemManage() {
           const record = todayDoneMap.get(log.student_id)!;
           const detail = parseUnitDay(log.book_info); 
 
-          // 💡 [핵심 추가] 덮어쓰기(=) 대신, appendDetail 함수를 통해 누적 기록
           if (log.task_type.includes('단어')) record.word = appendDetail(record.word, '단어', detail);
           if (log.task_type.includes('문장')) record.sentence = appendDetail(record.sentence, '문장', detail);
           if (log.task_type.includes('동사') || log.task_type.includes('3단')) record.verb = appendDetail(record.verb, '3단동사', detail);
