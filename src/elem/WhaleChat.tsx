@@ -92,19 +92,38 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
     }
   };
 
-  // 💡 [오류 해결] gemini-1.5-flash-latest 로 모델명 정확하게 수정!
+  // 💡 [핵심 해결] 에러 방지용 "자동 우회(Fallback)" 통신 함수
   const callGeminiAPI = async (promptText: string) => {
     const API_KEY = (import.meta.env.VITE_GEMINI_API_KEY || CONFIG?.GEMINI?.API_KEY || "").trim();
     if (!API_KEY) throw new Error("API 키가 누락되었습니다.");
 
-    const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=" + API_KEY;
-    const response = await fetch(url, {
+    const requestBody = {
+      contents: [{ role: "user", parts: [{ text: promptText }] }]
+    };
+
+    // 1순위: 똑똑한 gemini-1.5-pro 모델 호출 시도
+    let url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=" + API_KEY;
+    let response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: promptText }] }] })
+      body: JSON.stringify(requestBody)
     });
+    let data = await response.json();
+
+    // 만약 1.5-pro 모델을 찾을 수 없다고 튕기면?
+    if (data.error && data.error.message.includes("not found")) {
+      console.warn("1.5 모델 접근 불가! 범용 gemini-pro 모델로 긴급 우회합니다.");
+      
+      // 2순위: 전 세계 모든 API 키로 작동하는 기본 gemini-pro 모델로 재호출
+      url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" + API_KEY;
+      response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody)
+      });
+      data = await response.json();
+    }
     
-    const data = await response.json();
     if (data.error) throw new Error(data.error.message || "API 서버 에러");
     return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
   };
@@ -199,7 +218,8 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
       }
     } catch (err: any) {
       console.error("AI 오류:", err);
-      setMessages(prev => [...prev, { sender: 'system', text: `앗, 고래 선생님과 통신이 잠시 끊겼어요. (${err.message})` }]);
+      // 에러 메시지를 한국어로 좀 더 부드럽게 표시합니다.
+      setMessages(prev => [...prev, { sender: 'system', text: `앗, 구글 AI 서버가 잠깐 혼잡한 것 같아요. 다시 한번 전송 버튼을 눌러주세요! (${err.message})` }]);
       setIsAIThinking(false);
     }
   };
