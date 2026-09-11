@@ -14,7 +14,6 @@ interface Message {
   text: string;
 }
 
-// 💡 육하원칙 질문 리스트 (영어 + 한글 번역)
 const DIARY_QUESTIONS = [
   { key: 'who', q: "Who did you spend time with today?\n(오늘 누구랑 재미있는 시간을 보냈니?)" },
   { key: 'where', q: "Where were you?\n(어디에서 놀았어?)" },
@@ -32,11 +31,9 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
   const [isListening, setIsListening] = useState(false);
   const [isAIThinking, setIsAIThinking] = useState(false);
 
-  // 💡 완성된 일기 저장용 상태
   const [diaryEng, setDiaryEng] = useState('');
   const [diaryKor, setDiaryKor] = useState('');
   
-  // 💡 마지막 타자 미션용 상태
   const [typingInput, setTypingInput] = useState('');
   const [isTypingSuccess, setIsTypingSuccess] = useState(false);
 
@@ -76,7 +73,6 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
   const speakWhale = (text: string) => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
-      // 영어만 발음하도록 한글 및 괄호 내용 제거
       let englishPart = text.replace(/\(.*?\)/g, '').replace(/[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/g, '').trim();
       if (!englishPart) return;
 
@@ -92,38 +88,19 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
     }
   };
 
-  // 💡 [핵심 해결] 에러 방지용 "자동 우회(Fallback)" 통신 함수
+  // 💡 [핵심 해결] 구글 API의 가장 최신 공식 무료 모델명('gemini-1.5-flash') 단일 지정!
   const callGeminiAPI = async (promptText: string) => {
     const API_KEY = (import.meta.env.VITE_GEMINI_API_KEY || CONFIG?.GEMINI?.API_KEY || "").trim();
     if (!API_KEY) throw new Error("API 키가 누락되었습니다.");
 
-    const requestBody = {
-      contents: [{ role: "user", parts: [{ text: promptText }] }]
-    };
-
-    // 1순위: 똑똑한 gemini-1.5-pro 모델 호출 시도
-    let url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=" + API_KEY;
-    let response = await fetch(url, {
+    const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + API_KEY;
+    const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: promptText }] }] })
     });
-    let data = await response.json();
-
-    // 만약 1.5-pro 모델을 찾을 수 없다고 튕기면?
-    if (data.error && data.error.message.includes("not found")) {
-      console.warn("1.5 모델 접근 불가! 범용 gemini-pro 모델로 긴급 우회합니다.");
-      
-      // 2순위: 전 세계 모든 API 키로 작동하는 기본 gemini-pro 모델로 재호출
-      url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" + API_KEY;
-      response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody)
-      });
-      data = await response.json();
-    }
     
+    const data = await response.json();
     if (data.error) throw new Error(data.error.message || "API 서버 에러");
     return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
   };
@@ -218,7 +195,6 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
       }
     } catch (err: any) {
       console.error("AI 오류:", err);
-      // 에러 메시지를 한국어로 좀 더 부드럽게 표시합니다.
       setMessages(prev => [...prev, { sender: 'system', text: `앗, 구글 AI 서버가 잠깐 혼잡한 것 같아요. 다시 한번 전송 버튼을 눌러주세요! (${err.message})` }]);
       setIsAIThinking(false);
     }
