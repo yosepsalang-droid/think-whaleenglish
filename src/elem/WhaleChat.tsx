@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { CONFIG } from '../config';
 import { supabase } from '../lib/supabase';
 
@@ -6,7 +6,7 @@ interface WhaleChatProps {
   onBack: () => void;
   studentId?: string;
   studentName?: string;
-  currentBook?: string;
+  currentBook?: string; // 💡 기존 호환성을 위해 남겨두지만, 일기장에서는 사용하지 않습니다.
 }
 
 interface Message {
@@ -14,70 +14,39 @@ interface Message {
   text: string;
 }
 
-const IS_TEST_MODE = false; 
+// 💡 육하원칙 질문 리스트 (영어 + 한글 번역)
+const DIARY_QUESTIONS = [
+  { key: 'who', q: "Who did you spend time with today?\n(오늘 누구랑 재미있는 시간을 보냈니?)" },
+  { key: 'where', q: "Where were you?\n(어디에서 놀았어?)" },
+  { key: 'what', q: "What did you do there?\n(거기서 무엇을 하면서 놀았어?)" },
+  { key: 'feeling', q: "How did you feel?\n(기분이 어땠어?)" }
+];
 
-export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName = "테스트학생", currentBook = "" }: WhaleChatProps) {
-  const [isLoading, setIsLoading] = useState(true);
-  const [availableLessons, setAvailableLessons] = useState<any[]>([]);
-
-  const [book, setBook] = useState(currentBook);
-  const [unit, setUnit] = useState('');
-  const [day, setDay] = useState('');
+export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName = "테스트학생" }: WhaleChatProps) {
+  const [chatPhase, setChatPhase] = useState<'intro' | 'chatting' | 'typing' | 'result'>('intro');
+  const [currentStep, setCurrentStep] = useState(0); 
+  const [answers, setAnswers] = useState<string[]>([]);
   
-  const [isChatStarted, setIsChatStarted] = useState(false);
-  const [isChatEnded, setIsChatEnded] = useState(false);
-  
-  const [systemPrompt, setSystemPrompt] = useState<string>('');
-  const [apiHistory, setApiHistory] = useState<any[]>([]);
-
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [isAIThinking, setIsAIThinking] = useState(false);
 
+  // 💡 완성된 일기 저장용 상태
+  const [diaryEng, setDiaryEng] = useState('');
+  const [diaryKor, setDiaryKor] = useState('');
+  
+  // 💡 마지막 타자 미션용 상태
+  const [typingInput, setTypingInput] = useState('');
+  const [isTypingSuccess, setIsTypingSuccess] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const typingInputRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  useEffect(() => {
-    const fetchLessons = async () => {
-      try {
-        const { data, error } = await supabase.from('sentences').select('book, unit, day');
-        if (error) throw error;
-        setAvailableLessons(data || []);
-      } catch (err) {
-        console.error("진도 데이터 로드 실패:", err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchLessons();
-  }, []);
-
-  useEffect(() => {
-    if (currentBook) setBook(currentBook);
-  }, [currentBook]);
-
-  const books = useMemo(() => {
-    const uniqueBooks = Array.from(new Set(availableLessons.map(s => s.book?.trim()))).filter(Boolean);
-    const order = ['240', '520', '860', '1240', '1680'];
-    return uniqueBooks.sort((a, b) => {
-      const numA = a.match(/\d+/)?.[0] || '';
-      const numB = b.match(/\d+/)?.[0] || '';
-      const indexA = order.indexOf(numA);
-      const indexB = order.indexOf(numB);
-      const posA = indexA === -1 ? 9999 : indexA;
-      const posB = indexB === -1 ? 9999 : indexB;
-      if (posA !== posB) return posA - posB;
-      return a.localeCompare(b);
-    });
-  }, [availableLessons]);
-
-  const units = useMemo(() => Array.from(new Set(availableLessons.filter(s => s.book === book).map(s => s.unit.toString()))).filter(Boolean), [availableLessons, book]);
-  const days = useMemo(() => Array.from(new Set(availableLessons.filter(s => s.book === book && s.unit.toString() === unit).map(s => s.day.toString()))).filter(Boolean), [availableLessons, book, unit]);
+  }, [messages, isAIThinking]);
 
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -107,282 +76,220 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
   const speakWhale = (text: string) => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
-      
-      let englishPart = text.split('[')[0]; 
-      
-      englishPart = englishPart
-        .replace(/\(.*?\)/g, '')
-        .replace(/[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/g, '') 
-        .trim();
-      
+      // 영어만 발음하도록 한글 및 괄호 내용 제거
+      let englishPart = text.replace(/\(.*?\)/g, '').replace(/[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/g, '').trim();
       if (!englishPart) return;
 
       const utterance = new SpeechSynthesisUtterance(englishPart);
       utterance.lang = 'en-US';
       utterance.rate = 0.95; 
-      utterance.pitch = 1.0; 
       
       const voices = window.speechSynthesis.getVoices();
-      const bestVoice = voices.find(v => 
-        v.name.includes('Google US English') || 
-        v.name.includes('Microsoft Aria') || 
-        v.name.includes('Microsoft Zira') || 
-        v.name.includes('Samantha') || 
-        v.name.includes('Alex')
-      ) || voices.find(v => v.lang === 'en-US');
-
-      if (bestVoice) {
-        utterance.voice = bestVoice;
-      }
+      const bestVoice = voices.find(v => v.name.includes('Google US English') || v.name.includes('Samantha') || v.name.includes('Alex')) || voices.find(v => v.lang === 'en-US');
+      if (bestVoice) utterance.voice = bestVoice;
       
       window.speechSynthesis.speak(utterance);
     }
   };
 
-  useEffect(() => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.getVoices();
-    }
-  }, []);
+  const callGeminiAPI = async (promptText: string) => {
+    const API_KEY = (import.meta.env.VITE_GEMINI_API_KEY || CONFIG?.GEMINI?.API_KEY || "").trim();
+    if (!API_KEY) throw new Error("API 키가 누락되었습니다.");
 
-  const handleStartChat = async () => {
-    if (!book || !unit || !day) {
-      alert("교재, Unit, Day를 모두 선택해주세요.");
-      return;
-    }
-    setIsAIThinking(true);
+    const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + API_KEY;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: promptText }] }] })
+    });
+    
+    const data = await response.json();
+    if (data.error) throw new Error(data.error.message || "API 서버 에러");
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  };
 
-    try {
-      const { data: wordsData } = await supabase.from('words').select('eng, kor').eq('book', book).eq('unit', unit).eq('day', day);
-      const { data: sentencesData } = await supabase.from('sentences').select('eng, kor').eq('book', book).eq('unit', unit).eq('day', day);
-
-      const targetWords = wordsData?.map(w => `${w.eng}(${w.kor})`).join(', ') || '없음';
-      const targetSentences = sentencesData?.map(s => `${s.eng}(${s.kor})`).join(', ') || '없음';
-
-      const instruction = `
-        너는 초등학생에게 영어를 가르쳐주는 친근하고 발랄한 원어민 고래 선생님(Whale)이야.
-        로봇처럼 딱딱하게 굴지 말고, 진짜 외국인 친구처럼 아주 부드럽고 자연스럽게 대화해줘.
-        
-        [오늘의 학습 목표: 교재 단어와 문장]
-        - 단어: ${targetWords}
-        - 문장: ${targetSentences}
-
-        [매우 중요 규칙 1: 대화의 유연성 (창의적 대답 대환영!)]
-        아이가 교재에 있는 목표 단어(예: orange) 대신 다른 단어(예: tomato, apple)를 사용해서 대답하더라도, 문맥상 말이 되고 영어 문법이 맞다면 절대 틀렸다고 하지 마! 
-        오히려 "Wow, tomatoes! Are they red or green?" 처럼 아이의 창의적인 대답을 받아쳐 주고 아주 자연스럽게 대화를 이어가줘. 
-
-        [매우 중요 규칙 2: 틀린 문장 교정]
-        만약 아이가 보낸 문장의 문법이 정말로 심각하게 틀렸거나 뜻이 아예 안 통할 때만:
-        1. 먼저 영어로 짧게 격려해줘. (예: Good try! But let's try it again.)
-        2. 그 다음, 어디가 틀렸고 올바른 표현은 무엇인지 한국어로 설명하는데, 이 한국어 설명은 **반드시 괄호 ( ) 안에** 적어야 해!!
-
-        [매우 중요 규칙 3: 대화 종료]
-        아이가 "Bye", "Goodbye", "잘 가", "그만할래" 등 작별 인사를 하거나 대화를 끝내려 한다면, 따뜻한 작별 인사를 건넨 후 네 응답의 맨 마지막에 반드시 [END_CHAT] 이라는 키워드를 적어줘.
-
-        [응답 형식 규칙]
-        - 네가 하는 대화 문장 뒤에는 괄호()를 치고 자연스러운 한국어 번역을 넣어줘.
-        - 대답 맨 밑에는 항상 [추천 대답] 이라는 제목으로 아이가 대답할 수 있는 영어 문장과 (한국어 뜻)을 1~2개 제시해줘.
-      `;
-      
-      setSystemPrompt(instruction);
-
-      const welcomeMsg = `Hello! I'm Whale. What is your name? (안녕! 난 고래야. 네 이름은 뭐니?) \n\n[추천 대답]\n- My name is... (내 이름은 ...야.)`;
-      
-      setApiHistory([
-        { role: "user", parts: [{ text: "채팅을 시작할게. 나에게 먼저 반갑게 인사하고 내 이름을 물어봐줘!" }] },
-        { role: "model", parts: [{ text: welcomeMsg }] }
-      ]);
-
-      setMessages([{ sender: 'whale', text: welcomeMsg }]);
-      speakWhale(welcomeMsg);
-      setIsChatStarted(true);
-      setIsChatEnded(false);
-
-    } catch (err) {
-      console.error("채팅 준비 에러:", err);
-      alert("데이터를 불러오는 중 문제가 발생했습니다.");
-    } finally {
-      setIsAIThinking(false);
-    }
+  const handleStartChat = () => {
+    setChatPhase('chatting');
+    const firstQ = `Hello! I'm Whale. Let's write a diary together! 🐋\n\n${DIARY_QUESTIONS[0].q}`;
+    setMessages([{ sender: 'whale', text: firstQ }]);
+    speakWhale(firstQ);
   };
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isAIThinking || isChatEnded) return;
+    if (!input.trim() || isAIThinking) return;
 
     const userText = input;
     setMessages(prev => [...prev, { sender: 'user', text: userText }]);
     setInput('');
     setIsAIThinking(true);
 
+    const updatedAnswers = [...answers, userText];
+    setAnswers(updatedAnswers);
+
     try {
-      if (IS_TEST_MODE) {
-        await new Promise(res => setTimeout(res, 1000));
-        const mockReply = `Nice to meet you! (만나서 반가워!) \n\n[추천 대답]\n- Me too! (나도 반가워!)`;
-        setMessages(prev => [...prev, { sender: 'whale', text: mockReply }]);
-        speakWhale(mockReply);
+      // 💡 1. 아이의 대답을 칭찬하고 영작 코칭해주는 프롬프트
+      const coachPrompt = `
+        너는 초등학생에게 영어를 가르쳐주는 친절하고 발랄한 고래 선생님이야.
+        내가 방금 한 질문: "${DIARY_QUESTIONS[currentStep].q}"
+        초등학생의 대답: "${userText}"
+        
+        [지시사항]
+        1. 학생의 대답을 보고 칭찬하고 공감해줘. (한국어로 작성)
+        2. 학생의 대답(한글이든 어색한 영어든)을 자연스러운 1~2단어짜리 '초등학생용 영어 표현'으로 어떻게 말하는지 코칭해줘.
+        3. 전체 답변 길이는 2~3문장으로 아주 짧고 친근하게 작성해.
+        예시: "우와, 동생이랑 놀았구나! '동생과 함께'는 영어로 'with my brother'라고 해. 참 잘했어! 👏"
+      `;
+      
+      const coachReply = await callGeminiAPI(coachPrompt);
+      setMessages(prev => [...prev, { sender: 'whale', text: coachReply }]);
+
+      // 💡 2. 다음 질문으로 넘어가기 (또는 일기 완성하기)
+      if (currentStep < 3) {
+        setTimeout(() => {
+          const nextQ = DIARY_QUESTIONS[currentStep + 1].q;
+          setMessages(prev => [...prev, { sender: 'whale', text: nextQ }]);
+          speakWhale(nextQ);
+          setCurrentStep(currentStep + 1);
+          setIsAIThinking(false);
+        }, 2000); // 코칭 메시지 읽을 시간 2초 부여
       } else {
-        const newUserMsg = { role: "user", parts: [{ text: userText }] };
-        const currentHistory = [...apiHistory, newUserMsg];
-        
-        // 💡 API 키 유효성 검사 강화
-        const API_KEY = (import.meta.env.VITE_GEMINI_API_KEY || CONFIG?.GEMINI?.API_KEY || "").trim();
-        if (!API_KEY) {
-          throw new Error("API 키가 누락되었습니다. 환경변수를 확인해 주세요.");
-        }
-
-        const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + API_KEY;
-        
-        let aiReply = "";
-        let attempt = 0;
-        const maxAttempts = 3; 
-
-        while (attempt < maxAttempts) {
-          try {
-            const controller = new AbortController();
-            // 💡 [핵심 수정] 타임아웃을 10초(10000)에서 30초(30000)로 대폭 연장
-            const timeoutId = setTimeout(() => controller.abort(), 30000); 
-
-            const response = await fetch(url, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                systemInstruction: { parts: [{ text: systemPrompt }] },
-                contents: currentHistory
-              }),
-              signal: controller.signal 
-            });
+        // 모든 질문 끝! 마법의 일기장 제작 시작
+        setTimeout(async () => {
+          setMessages(prev => [...prev, { sender: 'system', text: "✨ 마법의 고래가 너의 대답을 모아 영어 일기를 만들고 있어요..." }]);
+          
+          const diaryPrompt = `
+            다음 4가지 정보를 바탕으로 초등학생 수준의 쉽고 자연스러운 영어 일기를 딱 3문장으로 작성해줘.
+            누구랑: ${updatedAnswers[0]}
+            어디서: ${updatedAnswers[1]}
+            무엇을: ${updatedAnswers[2]}
+            느낌: ${updatedAnswers[3]}
             
-            clearTimeout(timeoutId);
+            [매우 중요: 출력 형식]
+            반드시 아래 형식에 맞춰서 텍스트만 출력해. 다른 말은 절대 추가하지 마.
+            
+            [ENG]
+            (여기에 영어 일기 3문장)
+            [KOR]
+            (여기에 한국어 번역 3문장)
+          `;
 
-            const data = await response.json();
-            if (data.error) throw new Error(data.error.message || "Gemini API 서버 에러");
-
-            aiReply = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          const diaryReply = await callGeminiAPI(diaryPrompt);
+          
+          // [ENG] 와 [KOR] 파싱
+          const engMatch = diaryReply.match(/\[ENG\]([\s\S]*?)\[KOR\]/);
+          const korMatch = diaryReply.match(/\[KOR\]([\s\S]*)/);
+          
+          if (engMatch && korMatch) {
+            const finalEng = engMatch[1].trim();
+            const finalKor = korMatch[1].trim();
             
-            if (!aiReply) {
-              throw new Error("AI가 빈 응답을 반환했습니다. (필터링 또는 모델 에러)");
-            }
+            setDiaryEng(finalEng);
+            setDiaryKor(finalKor);
             
-            break; 
-          } catch (err: any) {
-            attempt++;
-            console.warn(`API 호출 실패 (시도 ${attempt}/${maxAttempts}):`, err);
+            const finishMsg = `짜잔! 🎉 너의 이야기로 멋진 영어 일기가 완성되었어!\n\n${finalEng}\n\n이제 이 일기를 똑같이 따라 쳐보는 마지막 미션을 시작할게!`;
+            setMessages(prev => [...prev, { sender: 'whale', text: finishMsg }]);
+            speakWhale(finalEng); // 완성된 일기 읽어주기
             
-            if (attempt >= maxAttempts) {
-              throw err; 
-            }
-            await new Promise(res => setTimeout(res, 1500));
+            setTimeout(() => {
+              setChatPhase('typing');
+            }, 4000);
+          } else {
+            throw new Error("일기 생성 형식 오류");
           }
-        }
-        
-        let isEndingNow = false;
-        if (aiReply.includes('[END_CHAT]')) {
-          isEndingNow = true;
-          aiReply = aiReply.replace('[END_CHAT]', '').trim(); 
-        }
-        
-        setMessages(prev => [...prev, { sender: 'whale', text: aiReply }]);
-        setApiHistory([...currentHistory, { role: "model", parts: [{ text: aiReply }] }]);
-        speakWhale(aiReply);
-
-        if (isEndingNow) {
-          setIsChatEnded(true);
-          setTimeout(() => {
-            setMessages(prev => [...prev, { sender: 'system', text: "🛑 대화가 중지되었습니다. 우측 상단의 [종료/저장] 버튼을 눌러 학습을 완료해주세요." }]);
-          }, 1500);
-        }
+          setIsAIThinking(false);
+        }, 2000);
       }
     } catch (err: any) {
-      console.error("AI 응답 오류 (최종 실패):", err);
-      // 💡 [핵심 수정] 진짜 에러 메시지를 화면에 띄워줍니다.
-      const realErrorMessage = err.name === 'AbortError' || err.message?.includes('aborted') 
-        ? "시간 초과 (인터넷 환경이 불안정하거나 구글 서버가 지연되고 있습니다.)" 
-        : err.message;
-
-      setMessages(prev => [...prev, { 
-        sender: 'system', 
-        text: `앗, 고래 선생님과 통신이 잠시 끊겼어요.\n(오류 원인: ${realErrorMessage})` 
-      }]);
-    } finally {
+      console.error("AI 오류:", err);
+      setMessages(prev => [...prev, { sender: 'system', text: `앗, 고래 선생님과 통신이 잠시 끊겼어요. (${err.message})` }]);
       setIsAIThinking(false);
     }
   };
 
-  const handleFinishChat = async () => {
-    if (window.confirm("학습 기록을 저장하고 채팅을 종료할까요?")) {
-      try {
-        await fetch(CONFIG.WEB_APP_URL, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify({
-            type: "saveLog",
-            studentId,
-            studentName,
-            taskType: "AI회화",
-            status: "완료",
-            score: "100" 
-          }),
-        });
-        alert("학습 결과가 성공적으로 기록되었습니다!");
-      } catch (err) {
-        console.error("로그 저장 실패:", err);
-      }
-      onBack();
+  // 💡 타자 검사 로직 (공백, 대소문자 무시하고 알파벳/문장부호만 비교하여 너그럽게 채점)
+  const handleTypingChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setTypingInput(val);
+    
+    const cleanEng = diaryEng.replace(/\s+/g, '').toLowerCase();
+    const cleanInput = val.replace(/\s+/g, '').toLowerCase();
+    
+    if (cleanEng === cleanInput && cleanEng.length > 0) {
+      setIsTypingSuccess(true);
+    } else {
+      setIsTypingSuccess(false);
     }
   };
 
-  if (isLoading) {
-    return <div style={{ textAlign: 'center', marginTop: '100px' }}><h2>🐋 고래 엔진 가동 중...</h2></div>;
-  }
+  const handleFinishMission = async () => {
+    try {
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      
+      // 1. [원장님 기획] 새로 만든 whale_diaries 보물상자에 일기 전문 쏙 넣기!
+      await supabase.from('whale_diaries').insert([{
+        student_id: studentId,
+        student_name: studentName,
+        eng_diary: diaryEng,
+        kor_diary: diaryKor,
+        log_date: todayStr
+      }]);
+
+      // 2. 기존 learning_logs 에도 기록하여 LMS 통계에 반영 (task_type을 'AI회화' 로 지정)
+      await supabase.from('learning_logs').insert([{
+        student_id: studentId,
+        student_name: studentName,
+        task_type: 'AI회화', // 💡 LMS 관제탑에서 '회화'로 인식하도록 세팅
+        book_info: '오늘의 일기', 
+        status: '완료',
+        score: 100,
+        attempt: 1,
+        log_date: todayStr
+      }]);
+
+      setChatPhase('result');
+    } catch (err) {
+      console.error("DB 저장 실패:", err);
+      alert("기록 저장 중 문제가 발생했습니다.");
+    }
+  };
 
   return (
     <div style={{ fontFamily: 'Pretendard, sans-serif', padding: '16px', maxWidth: '500px', margin: '0 auto', height: '92vh', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
       
       {/* 상단 헤더 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-        <button onClick={onBack} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #ccc', backgroundColor: 'white', cursor: 'pointer' }}>← 나가기</button>
-        <span style={{ fontWeight: 'bold', color: '#007aff' }}>Whale Chat 💬</span>
-        {isChatStarted && (
-          <button onClick={handleFinishChat} style={{ padding: '6px 12px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', animation: isChatEnded ? 'pulse 2s infinite' : 'none' }}>
-            종료/저장
-          </button>
-        )}
+        <button onClick={onBack} style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #ccc', backgroundColor: 'white', cursor: 'pointer', fontWeight: 'bold' }}>← 나가기</button>
+        <span style={{ fontWeight: 'bold', color: '#007aff', fontSize: '18px' }}>Whale Diary 🐋</span>
+        <div style={{ width: '70px' }}></div>
       </div>
 
-      {/* 진도 선택창 */}
-      {!isChatStarted ? (
-        <div style={{ padding: '20px', backgroundColor: '#f8f9fa', borderRadius: '16px', textAlign: 'center', border: '1px solid #e9ecef' }}>
-          <h3 style={{ margin: '0 0 16px 0' }}>오늘 말하기 연습할 단원 선택</h3>
-          <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
-            <select value={book} onChange={(e) => { setBook(e.target.value); setUnit(''); setDay(''); }} style={selectStyle}>
-              <option value="">교재</option>
-              {books.map(b => <option key={b} value={b}>{b}</option>)}
-            </select>
-            <select value={unit} onChange={(e) => { setUnit(e.target.value); setDay(''); }} disabled={!book} style={selectStyle}>
-              <option value="">Unit</option>
-              {units.map(u => <option key={u} value={u}>{u}</option>)}
-            </select>
-            <select value={day} onChange={(e) => setDay(e.target.value)} disabled={!unit} style={selectStyle}>
-              <option value="">Day</option>
-              {days.map(d => <option key={d} value={d}>{d}</option>)}
-            </select>
-          </div>
-          <button onClick={handleStartChat} disabled={isAIThinking} style={{ width: '100%', padding: '14px', backgroundColor: '#007aff', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}>
-            {isAIThinking ? "고래 선생님 모시는 중... 🐳" : "고래 친구와 대화 시작하기 🚀"}
+      {chatPhase === 'intro' && (
+        <div style={{ padding: '40px 20px', backgroundColor: 'white', borderRadius: '24px', textAlign: 'center', boxShadow: '0 12px 32px rgba(0,0,0,0.05)' }}>
+          <div style={{ fontSize: '64px', marginBottom: '16px' }}>📝</div>
+          <h2 style={{ margin: '0 0 12px 0', fontSize: '24px', fontWeight: '900', color: '#111' }}>고래와 함께 영어 일기 쓰기</h2>
+          <p style={{ fontSize: '15px', color: '#666', lineHeight: '1.6', marginBottom: '32px' }}>
+            고래 선생님이 물어보는 4가지 질문에 편하게 대답해 봐! <br/>
+            한글로 대답해도 똑똑한 고래가 다 알아듣고 <br/>멋진 영어 일기로 만들어 줄 거야. ✨
+          </p>
+          <button onClick={handleStartChat} style={{ width: '100%', padding: '18px', background: 'linear-gradient(135deg, #007aff, #0056b3)', color: 'white', border: 'none', borderRadius: '16px', fontWeight: '800', fontSize: '18px', cursor: 'pointer', boxShadow: '0 6px 16px rgba(0,122,255,0.2)' }}>
+            일기 쓰기 시작! 🚀
           </button>
         </div>
-      ) : (
-        /* 채팅 인터페이스 영역 */
+      )}
+
+      {chatPhase === 'chatting' && (
         <>
           <div style={{ flex: 1, backgroundColor: '#f0f4f8', borderRadius: '16px', padding: '16px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {messages.map((msg, idx) => (
               <div key={idx} style={{ display: 'flex', justifyContent: msg.sender === 'user' ? 'flex-end' : 'flex-start' }}>
                 <div style={{ 
-                  maxWidth: '85%', padding: '12px 16px', borderRadius: '16px', fontSize: '15px', lineHeight: '1.5',
-                  backgroundColor: msg.sender === 'user' ? '#007aff' : msg.sender === 'system' ? '#ffeeba' : 'white', 
-                  color: msg.sender === 'user' ? 'white' : '#333',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.05)', whiteSpace: 'pre-wrap',
+                  maxWidth: '85%', padding: '14px 18px', borderRadius: '20px', fontSize: '15px', lineHeight: '1.5',
+                  backgroundColor: msg.sender === 'user' ? '#007aff' : msg.sender === 'system' ? '#fffdf0' : 'white', 
+                  color: msg.sender === 'user' ? 'white' : '#111',
+                  border: msg.sender === 'system' ? '1px solid #ffda79' : 'none',
+                  boxShadow: '0 4px 6px rgba(0,0,0,0.02)', whiteSpace: 'pre-wrap',
                   fontWeight: msg.sender === 'system' ? 'bold' : 'normal',
                   textAlign: msg.sender === 'system' ? 'center' : 'left'
                 }}>
@@ -392,18 +299,19 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
             ))}
             {isAIThinking && (
               <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-                <div style={{ padding: '12px 16px', backgroundColor: '#e2e8f0', borderRadius: '16px', color: '#666', fontSize: '14px' }}>🐋 고래가 문장을 생각하고 있어요...</div>
+                <div style={{ padding: '12px 16px', backgroundColor: '#e2e8f0', borderRadius: '20px', color: '#666', fontSize: '14px', fontWeight: 'bold' }}>
+                  🐋 고래가 생각하고 있어요...
+                </div>
               </div>
             )}
             <div ref={messagesEndRef} />
           </div>
 
-          {/* 입력창 및 음성인식 버튼 기능 */}
           <form onSubmit={handleSend} style={{ marginTop: '12px', display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <button type="button" onClick={toggleListening} disabled={isChatEnded} style={{
-              width: '50px', height: '50px', borderRadius: '50%', border: 'none',
-              backgroundColor: isChatEnded ? '#ccc' : isListening ? '#dc3545' : '#6c757d', color: 'white',
-              fontSize: '20px', cursor: isChatEnded ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            <button type="button" onClick={toggleListening} disabled={isAIThinking} style={{
+              width: '52px', height: '52px', borderRadius: '50%', border: 'none',
+              backgroundColor: isListening ? '#ff3b30' : '#8e8e93', color: 'white',
+              fontSize: '22px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
               boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
             }}>
               {isListening ? "🛑" : "🎙️"}
@@ -411,25 +319,85 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
             <input 
               value={input} 
               onChange={(e) => setInput(e.target.value)} 
-              placeholder={isChatEnded ? "대화가 종료되었습니다." : isListening ? "말씀하세요..." : "영어로 대답을 입력하거나 마이크를 누르세요"} 
-              disabled={isAIThinking || isChatEnded}
-              style={{ flex: 1, padding: '14px', borderRadius: '24px', border: '1px solid #ccc', outline: 'none', fontSize: '15px', backgroundColor: isChatEnded ? '#e9ecef' : 'white' }} 
+              placeholder={isListening ? "듣고 있어요..." : "한글이나 영어로 대답해봐요!"} 
+              disabled={isAIThinking}
+              autoFocus
+              style={{ flex: 1, padding: '16px', borderRadius: '26px', border: '1px solid #ccc', outline: 'none', fontSize: '15px', fontWeight: 'bold' }} 
             />
-            <button type="submit" disabled={!input.trim() || isAIThinking || isChatEnded} style={{
-              padding: '14px 20px', backgroundColor: isChatEnded ? '#ccc' : '#007aff', color: 'white', border: 'none', borderRadius: '24px', fontWeight: 'bold', cursor: isChatEnded ? 'not-allowed' : 'pointer'
+            <button type="submit" disabled={!input.trim() || isAIThinking} style={{
+              padding: '16px 20px', backgroundColor: '#007aff', color: 'white', border: 'none', borderRadius: '26px', fontWeight: '900', cursor: 'pointer'
             }}>전송</button>
           </form>
         </>
       )}
+
+      {chatPhase === 'typing' && (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '20px', boxShadow: '0 8px 24px rgba(0,0,0,0.06)' }}>
+            <h3 style={{ margin: '0 0 12px 0', color: '#007aff', fontSize: '16px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              📝 마법의 영어 일기 완성!
+            </h3>
+            <div style={{ fontSize: '17px', fontWeight: '800', color: '#111', lineHeight: '1.6', wordBreak: 'keep-all' }}>
+              {diaryEng}
+            </div>
+            <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed #eee', fontSize: '14px', color: '#666', lineHeight: '1.5', wordBreak: 'keep-all' }}>
+              {diaryKor}
+            </div>
+            <button onClick={() => speakWhale(diaryEng)} style={{ marginTop: '16px', padding: '8px 16px', backgroundColor: '#eef2ff', color: '#4f46e5', border: 'none', borderRadius: '12px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>
+              🔊 선생님 발음 다시 듣기
+            </button>
+          </div>
+
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ fontSize: '14px', fontWeight: '800', color: '#111', marginBottom: '8px' }}>
+              ⌨️ 아래 빈칸에 똑같이 따라서 적어보세요!
+            </div>
+            {/* 💡 [핵심] 자동완성 완벽 차단! */}
+            <textarea
+              ref={typingInputRef}
+              value={typingInput}
+              onChange={handleTypingChange}
+              placeholder="위의 영어 일기를 똑같이 따라 치면 미션 완료! (대소문자, 띄어쓰기 주의)"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck="false"
+              autoFocus
+              style={{
+                flex: 1, width: '100%', padding: '16px', borderRadius: '16px', border: `2px solid ${isTypingSuccess ? '#4caf50' : '#ccc'}`,
+                backgroundColor: isTypingSuccess ? '#f0fdf4' : 'white', fontSize: '16px', fontWeight: '700', lineHeight: '1.6', 
+                resize: 'none', outline: 'none', boxSizing: 'border-box'
+              }}
+            />
+          </div>
+
+          <button 
+            onClick={handleFinishMission} 
+            disabled={!isTypingSuccess}
+            style={{ 
+              width: '100%', padding: '18px', backgroundColor: isTypingSuccess ? '#111' : '#ccc', color: 'white', 
+              border: 'none', borderRadius: '16px', fontWeight: '800', fontSize: '18px', cursor: isTypingSuccess ? 'pointer' : 'not-allowed',
+              boxShadow: isTypingSuccess ? '0 6px 16px rgba(0,0,0,0.2)' : 'none'
+            }}
+          >
+            {isTypingSuccess ? "🎉 완벽해요! 도장 받기" : "아직 스펠링이 조금 달라요 😅"}
+          </button>
+        </div>
+      )}
+
+      {chatPhase === 'result' && (
+        <div style={{ padding: '40px 20px', backgroundColor: 'white', borderRadius: '24px', textAlign: 'center', boxShadow: '0 12px 32px rgba(0,0,0,0.05)' }}>
+          <div style={{ fontSize: '64px', marginBottom: '16px' }}>🏆</div>
+          <h2 style={{ margin: '0 0 12px 0', fontSize: '26px', fontWeight: '900', color: '#111' }}>일기 쓰기 완료!</h2>
+          <p style={{ fontSize: '15px', color: '#666', lineHeight: '1.6', marginBottom: '32px' }}>
+            오늘 하루를 영어로 정말 멋지게 표현했어! <br/>너의 빛나는 일기를 선생님께 잘 전달할게.
+          </p>
+          <button onClick={onBack} style={{ width: '100%', padding: '18px', backgroundColor: '#111', color: 'white', border: 'none', borderRadius: '16px', fontWeight: '800', fontSize: '18px', cursor: 'pointer' }}>
+            학습 홈으로 돌아가기
+          </button>
+        </div>
+      )}
+
     </div>
   );
 }
-
-const selectStyle = {
-  width: '33.3%',
-  padding: '10px',
-  borderRadius: '8px',
-  border: '1px solid #ccc',
-  fontSize: '14px',
-  backgroundColor: 'white'
-};
