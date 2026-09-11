@@ -29,6 +29,13 @@ interface StudentStats {
   prevGrammar?: number;
 }
 
+// 💡 일기장 데이터를 담을 인터페이스 추가
+interface DiaryData {
+  eng: string;
+  kor: string;
+  date: string;
+}
+
 export default function ReportManage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
@@ -43,6 +50,9 @@ export default function ReportManage() {
     wordCount: 0, sentenceCount: 0, prevWord: 0, prevSentence: 0, prevAi: 0, prevGrammar: 0 
   });
   
+  // 💡 수파베이스에서 불러온 일기를 저장할 상태
+  const [weeklyDiary, setWeeklyDiary] = useState<DiaryData | null>(null);
+
   const [comment, setComment] = useState('');
   const [nextGoal, setNextGoal] = useState('');
   
@@ -122,6 +132,7 @@ export default function ReportManage() {
     if (currentIndex < filteredStudents.length - 1) setSelectedStudent(filteredStudents[currentIndex + 1]);
   };
 
+  // 💡 선택된 학생이 바뀔 때마다 성적과 [최신 일기]를 동시에 불러옵니다.
   useEffect(() => {
     if (!selectedStudent) return;
     
@@ -138,7 +149,6 @@ export default function ReportManage() {
         });
         const stats: StudentStats = await response.json();
         
-        // 💡 [핵심 강화] 랜덤 데이터(Math.random)를 완전히 제거하고 0으로 처리합니다!
         const safeStats = {
           word: stats.word ?? 0,
           sentence: stats.sentence ?? 0,
@@ -158,7 +168,35 @@ export default function ReportManage() {
         console.error("성적 로드 실패:", err);
       }
     };
+
+    // 💡 [핵심] 수파베이스에서 해당 학생의 가장 최근 일기(limit 1)를 가져오는 로직
+    const fetchLatestDiary = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('whale_diaries')
+          .select('eng_diary, kor_diary, log_date')
+          .eq('student_id', selectedStudent.id)
+          .order('created_at', { ascending: false }) // 최신순 정렬
+          .limit(1); // 딱 1개만
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          setWeeklyDiary({
+            eng: data[0].eng_diary,
+            kor: data[0].kor_diary,
+            date: data[0].log_date
+          });
+        } else {
+          setWeeklyDiary(null); // 이번 주 일기가 없으면 null
+        }
+      } catch (err) {
+        console.error("일기장 로드 실패:", err);
+      }
+    };
+
     fetchRealStats();
+    fetchLatestDiary();
   }, [selectedStudent]);
 
   useEffect(() => {
@@ -169,12 +207,11 @@ export default function ReportManage() {
     
     let autoComment = `${selectedStudent.name} 학생의 이번 주 학습 리포트입니다.\n\n`;
 
-    // 💡 [핵심 강화] 학습량이 전혀 없는(결석한) 주간일 경우의 특별 코멘트 로직
     if (totalVolume === 0 && avg === 0) {
       autoComment += `이번 주는 아쉽게도 등원 및 학습 기록이 없습니다. 다음 주에는 건강하고 밝은 모습으로 다시 만나 즐겁게 학습을 이어나갈 수 있기를 바랍니다. 😌\n`;
       setComment(autoComment);
       setNextGoal(`🎯 다음 주 목표: 활기찬 모습으로 등원하여 밀린 진도 복구하기`);
-      return; // 결석생은 아래 코멘트 로직을 건너뜁니다.
+      return; 
     }
 
     const statsArray = [
@@ -200,7 +237,13 @@ export default function ReportManage() {
     if (needsWorkSubject.score < 70) autoComment += `다만 [${needsWorkSubject.name}] 영역은 오답을 한 번 더 복습하며 정확도를 높이도록 지도하겠습니다.\n`;
     else autoComment += `모든 영역에서 고르게 균형 잡힌 실력을 보여주고 있습니다.\n`;
 
-    autoComment += `\n다음 주도 우리 아이가 성취감을 느낄 수 있도록 아낌없는 폭풍 칭찬 부탁드립니다!`;
+    // 💡 일기가 있다면 코멘트에 감성 한 스푼 추가!
+    if (weeklyDiary) {
+      autoComment += `\n아래 첨부된 일기는 ${selectedStudent.name} 학생이 고래 선생님과 대화하며 스스로 완성한 영어 일기입니다. 폭풍 칭찬 부탁드립니다! ❤️`;
+    } else {
+      autoComment += `\n다음 주도 우리 아이가 성취감을 느낄 수 있도록 아낌없는 폭풍 칭찬 부탁드립니다!`;
+    }
+    
     setComment(autoComment);
 
     if (needsWorkSubject.score < 75) {
@@ -209,7 +252,7 @@ export default function ReportManage() {
       setNextGoal(`🎯 다음 주 목표: 현재의 훌륭한 학습 밸런스 유지하며 다음 챕터 진도 나가기`);
     }
 
-  }, [realStats, selectedStudent]);
+  }, [realStats, selectedStudent, weeklyDiary]);
 
   const chartData = [
     { subject: 'Vocabulary', score: realStats.word, prev: realStats.prevWord, fullMark: 100, fill: '#8884d8' },
@@ -428,8 +471,37 @@ export default function ReportManage() {
           </div>
         </div>
 
+        {/* 💡 [핵심] 5번 영역: 우리 아이의 영어 일기 갤러리 */}
+        <div style={{ marginBottom: '35px' }}>
+          <h2 style={{ fontSize: '14px', color: '#555', borderBottom: '1px solid #eee', paddingBottom: '5px' }}>5. This Week's English Diary (우리 아이가 직접 쓴 영어 일기)</h2>
+          
+          {weeklyDiary ? (
+             <div style={{ marginTop: '20px', backgroundColor: '#fffdf0', border: '1px solid #ffda79', borderRadius: '16px', padding: '24px 30px', position: 'relative', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
+                {/* 편지지 압정 포인트 */}
+                <div style={{ position: 'absolute', top: '-14px', right: '30px', fontSize: '28px' }}>📌</div>
+                
+                <div style={{ fontSize: '13px', color: '#cc8e00', fontWeight: 'bold', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  📅 {weeklyDiary.date} 작성
+                </div>
+                
+                <div style={{ fontSize: '18px', fontWeight: '800', color: '#111', lineHeight: '1.6', marginBottom: '16px', wordBreak: 'keep-all' }}>
+                  {weeklyDiary.eng}
+                </div>
+                
+                <div style={{ borderTop: '1px dashed #ffda79', paddingTop: '16px', fontSize: '14px', color: '#78350f', lineHeight: '1.6', wordBreak: 'keep-all' }}>
+                  {weeklyDiary.kor}
+                </div>
+             </div>
+          ) : (
+             <div style={{ marginTop: '20px', backgroundColor: '#f9fafb', border: '1px dashed #cbd5e1', borderRadius: '16px', padding: '30px', textAlign: 'center', color: '#9ca3af', fontSize: '15px', fontWeight: 'bold' }}>
+                📝 이번 주에는 작성된 영어 일기가 없습니다.
+             </div>
+          )}
+        </div>
+
+        {/* 기존 피드백 영역은 6번으로 밀려납니다 */}
         <div>
-          <h2 style={{ fontSize: '14px', color: '#555', borderBottom: '1px solid #eee', paddingBottom: '5px' }}>5. Teacher's Feedback</h2>
+          <h2 style={{ fontSize: '14px', color: '#555', borderBottom: '1px solid #eee', paddingBottom: '5px' }}>6. Teacher's Feedback</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '15px' }}>
             <textarea 
               value={comment}
