@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { PHONICS_DB } from './data/phonics_db';
+// 💡 [경로 완벽 수정] 같은 폴더(src/elem)에 있는 PhonicsData.ts를 바로 불러옵니다.
+import { PHONICS_DB } from './PhonicsData'; 
+
 interface PhonicsLearnProps {
   day: number; 
   onBack: () => void;
