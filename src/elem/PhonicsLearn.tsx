@@ -8,7 +8,8 @@ interface PhonicsLearnProps {
 }
 
 export default function PhonicsLearn({ day, onBack, onFinish }: PhonicsLearnProps) {
-  const dayWords = PHONICS_DB.filter(item => item.day === day);
+  // 💡 [에러 해결] item이 어떤 타입인지 Vercel이 헷갈리지 않도록 (item: any)로 명확히 지정!
+  const dayWords = PHONICS_DB.filter((item: any) => item.day === day);
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isListening, setIsListening] = useState(false);
