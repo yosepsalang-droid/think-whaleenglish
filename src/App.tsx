@@ -24,6 +24,9 @@ import Lms from './manage/Lms';
 // 🚀 수파베이스 로그인 화면 불러오기
 import Login from './pages/Login';
 
+// 🐣 파닉스 어드벤처 불러오기
+import PhonicsLobby from './elem/PhonicsLobby';
+
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentMenu, setCurrentMenu] = useState('home');
@@ -32,7 +35,10 @@ export default function App() {
   const [students, setStudents] = useState<any[]>([]);
   const [loggedInStudent, setLoggedInStudent] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [studentMode, setStudentMode] = useState<'elementary' | 'middle' | null>(null);
+  
+  // 💡 [수정] studentMode에 'phonics' 모드를 추가했습니다.
+  const [studentMode, setStudentMode] = useState<'elementary' | 'middle' | 'phonics' | null>(null);
+  
   const [integratedRank, setIntegratedRank] = useState<IntegratedRankingResult & { loading: boolean }>({
     totalScore: 0,
     myRank: null,
@@ -44,7 +50,6 @@ export default function App() {
   const [showTestLogin, setShowTestLogin] = useState(false);
   const [showSchoolSelect, setShowSchoolSelect] = useState(false);
 
-  // 💡 [핵심 수정] 가짜 덧셈과 1.5초 딜레이를 모두 삭제하고, 오직 서버의 '진짜' 점수만 가져오도록 단순화했습니다.
   const refreshIntegratedRank = useCallback(async (studentName: string) => {
     setIntegratedRank((prev) => ({ ...prev, loading: true }));
     const result = await fetchIntegratedRankings(studentName);
@@ -55,7 +60,6 @@ export default function App() {
     });
   }, []);
 
-  // 💡 [핵심 수정] 게임이 끝났을 때 점수를 억지로 더하지 않고, 그냥 서버 점수를 새로고침만 합니다.
   const handleGameComplete = useCallback((_addedScore = 0) => {
     if (loggedInStudent?.name) {
       refreshIntegratedRank(loggedInStudent.name);
@@ -110,7 +114,8 @@ export default function App() {
     }
   };
 
-  const handleModeSelect = (mode: 'elementary' | 'middle') => {
+  // 💡 [수정] phonics 모드도 처리할 수 있게 변경했습니다.
+  const handleModeSelect = (mode: 'elementary' | 'middle' | 'phonics') => {
     if (!loggedInStudent) {
       setLoggedInStudent({
         id: 'test_supabase',
@@ -134,6 +139,11 @@ export default function App() {
   if (isLoggedIn) {
     if (isAdmin) {
       return <Lms onBack={() => { setIsLoggedIn(false); setIsAdmin(false); setId(''); }} />;
+    }
+
+    // 💡 [핵심] 파닉스 모드일 때 PhonicsLobby 화면을 띄워줍니다!
+    if (loggedInStudent && studentMode === 'phonics') {
+      return <PhonicsLobby onBack={handleBackToSelect} studentName={loggedInStudent.name} stars={150} />;
     }
 
     if (loggedInStudent && studentMode === 'middle') {
@@ -186,11 +196,18 @@ export default function App() {
   if (showSchoolSelect) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f9f9f9', fontFamily: 'Pretendard' }}>
-        <div style={{ background: 'white', padding: '40px', borderRadius: '24px', textAlign: 'center', width: '420px', boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }}>
+        <div style={{ background: 'white', padding: '40px', borderRadius: '24px', textAlign: 'center', width: '520px', boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }}>
           <div style={{ fontSize: '32px', fontWeight: '900', color: '#007aff', marginBottom: '8px', letterSpacing: '-1px' }}>생각교육</div>
           <h2 style={{ margin: '0 0 32px 0', fontSize: '22px', fontWeight: '800', color: '#111' }}>어떤 과정으로 입장할까요?</h2>
           
+          {/* 💡 [핵심] 여기에 '파닉스' 버튼을 세 번째로 추가했습니다. */}
           <div style={{ display: 'flex', gap: '20px', justifyContent: 'space-between' }}>
+            
+            <button onClick={() => handleModeSelect('phonics')} style={{ flex: 1, aspectRatio: '1 / 1', backgroundColor: '#34c759', color: 'white', border: 'none', borderRadius: '24px', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '16px', boxShadow: '0 6px 16px rgba(52, 199, 89, 0.3)', transition: 'all 0.2s ease-in-out' }} onMouseOver={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(52, 199, 89, 0.4)'; }} onMouseOut={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(52, 199, 89, 0.3)'; }}>
+              <span style={{ fontSize: '56px', lineHeight: '1' }}>🐣</span>
+              <span style={{ fontSize: '22px', fontWeight: '800', wordBreak: 'keep-all', lineHeight: '1.3' }}>파닉스<br/>입장</span>
+            </button>
+
             <button onClick={() => handleModeSelect('elementary')} style={{ flex: 1, aspectRatio: '1 / 1', backgroundColor: '#ff9500', color: 'white', border: 'none', borderRadius: '24px', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '16px', boxShadow: '0 6px 16px rgba(255, 149, 0, 0.3)', transition: 'all 0.2s ease-in-out' }} onMouseOver={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(255, 149, 0, 0.4)'; }} onMouseOut={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(255, 149, 0, 0.3)'; }}>
               <span style={{ fontSize: '56px', lineHeight: '1' }}>🐋</span>
               <span style={{ fontSize: '22px', fontWeight: '800', wordBreak: 'keep-all', lineHeight: '1.3' }}>초등부<br/>입장</span>
@@ -200,6 +217,7 @@ export default function App() {
               <span style={{ fontSize: '56px', lineHeight: '1' }}>📘</span>
               <span style={{ fontSize: '22px', fontWeight: '800', wordBreak: 'keep-all', lineHeight: '1.3' }}>중·고등부<br/>입장</span>
             </button>
+
           </div>
         </div>
       </div>

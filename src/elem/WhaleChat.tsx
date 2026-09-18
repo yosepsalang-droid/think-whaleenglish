@@ -6,7 +6,6 @@ interface WhaleChatProps {
   onBack: () => void;
   studentId?: string;
   studentName?: string;
-  currentBook?: string; 
 }
 
 interface Message {
@@ -14,18 +13,8 @@ interface Message {
   text: string;
 }
 
-const DIARY_QUESTIONS = [
-  { key: 'who', q: "Who did you spend time with today?\n(오늘 누구랑 재미있는 시간을 보냈니?)" },
-  { key: 'where', q: "Where were you?\n(어디에서 놀았어?)" },
-  { key: 'what', q: "What did you do there?\n(거기서 무엇을 하면서 놀았어?)" },
-  { key: 'feeling', q: "How did you feel?\n(기분이 어땠어?)" }
-];
-
 export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName = "테스트학생" }: WhaleChatProps) {
   const [chatPhase, setChatPhase] = useState<'intro' | 'chatting' | 'typing' | 'result'>('intro');
-  const [currentStep, setCurrentStep] = useState(0); 
-  const [answers, setAnswers] = useState<string[]>([]);
-  
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isListening, setIsListening] = useState(false);
@@ -33,7 +22,6 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
 
   const [diaryEng, setDiaryEng] = useState('');
   const [diaryKor, setDiaryKor] = useState('');
-  
   const [typingInput, setTypingInput] = useState('');
   const [isTypingSuccess, setIsTypingSuccess] = useState(false);
 
@@ -88,12 +76,10 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
     }
   };
 
-  // 💡 [해결!] 과거 AI 연구소에서 에러 없이 100% 성공했던 그 다중 우회 로직을 완벽 이식했습니다.
   const callGeminiAPI = async (promptText: string) => {
     const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || (CONFIG as any)?.GEMINI?.API_KEY || (CONFIG as any)?.GEMINI_API_KEY;
     if (!apiKey) throw new Error("API 키를 찾을 수 없습니다.");
 
-    // 원장님 환경에서 가장 잘 작동했던 모델 우선순위
     const modelsToTry = ['gemini-3.7-flash', 'gemini-3.1-pro', 'gemini-3.5-flash-lite', 'gemini-1.5-flash', 'gemini-pro'];
     let textResponse = '';
     let success = false;
@@ -117,23 +103,20 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
         if (!textResponse) throw new Error("응답이 비어있습니다.");
 
         success = true; 
-        break; // 성공하면 즉시 반복문 탈출!
+        break; 
       } catch (error: any) {
-        console.warn(`${model} 호출 실패, 다음 모델로 우회 접속 시도...`, error.message);
+        console.warn(`${model} 호출 실패, 다음 모델 시도...`, error.message);
         lastErrorMsg = error.message;
       }
     }
 
-    if (!success) {
-      throw new Error(`모든 AI 통신망 접속에 실패했습니다. (마지막 에러: ${lastErrorMsg})`);
-    }
-
+    if (!success) throw new Error(`모든 AI 통신망 접속에 실패했습니다. (에러: ${lastErrorMsg})`);
     return textResponse;
   };
 
   const handleStartChat = () => {
     setChatPhase('chatting');
-    const firstQ = `Hello! I'm Whale. Let's write a diary together! 🐋\n\n${DIARY_QUESTIONS[0].q}`;
+    const firstQ = "Hello! I'm Whale. Let's write a diary together! 🐋\nWho did you spend time with today?\n(오늘 누구랑 재미있는 시간을 보냈니?)";
     setMessages([{ sender: 'whale', text: firstQ }]);
     speakWhale(firstQ);
   };
@@ -143,47 +126,43 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
     if (!input.trim() || isAIThinking) return;
 
     const userText = input;
-    setMessages(prev => [...prev, { sender: 'user', text: userText }]);
+    const newMessages: Message[] = [...messages, { sender: 'user', text: userText }];
+    setMessages(newMessages);
     setInput('');
     setIsAIThinking(true);
 
-    const updatedAnswers = [...answers, userText];
-    setAnswers(updatedAnswers);
-
     try {
+      const conversationHistory = newMessages.map(m => `${m.sender === 'user' ? '학생' : '고래'}: ${m.text}`).join('\n');
+      
       const coachPrompt = `
-        너는 초등학생에게 영어를 가르쳐주는 친절하고 발랄한 고래 선생님이야.
-        내가 방금 한 질문: "${DIARY_QUESTIONS[currentStep].q}"
-        초등학생의 대답: "${userText}"
+        너는 초등학생의 영어 일기 작성을 돕는 유쾌한 원어민 고래 친구 'Whale'이야.
+        목표: 학생과 대화하며 일기 작성에 필요한 4가지 정보(1.누구와 2.어디서 3.무엇을 4.기분)를 자연스럽게 수집할 것.
         
-        [지시사항]
-        1. 학생의 대답을 보고 칭찬하고 공감해줘. (한국어로 작성)
-        2. 학생의 대답(한글이든 어색한 영어든)을 자연스러운 1~2단어짜리 '초등학생용 영어 표현'으로 어떻게 말하는지 코칭해줘.
-        3. 전체 답변 길이는 2~3문장으로 아주 짧고 친근하게 작성해.
-        예시: "우와, 동생이랑 놀았구나! '동생과 함께'는 영어로 'with my brother'라고 해. 참 잘했어! 👏"
+        [대화 기록]
+        ${conversationHistory}
+        
+        [고래의 답변 규칙]
+        1. [오류 교정]: 학생의 마지막 대답에 명백한 오타(예: fist -> first)나 틀린 영어가 있다면, 꼰대 선생님처럼 혼내지 말고 "앗, fist(주먹)라고 썼네? first(첫째)를 말하고 싶었던 거지? 😆" 처럼 가볍고 장난스럽게 짚어준 뒤 올바른 표현을 알려줘.
+        2. [유연한 흐름]: 학생이 한 번의 대답에 여러 정보(예: "집에서 폰게임 했어" -> 어디서, 무엇을)를 말했다면 눈치껏 모두 파악하고, 이미 대답한 내용을 또 묻지 마.
+        3. [질문 이어가기]: 공감 리액션을 한 뒤, 아직 파악하지 못한 남은 정보가 있다면 다음 질문을 이어가. (질문은 항상 "영어 1문장\\n(한글 뜻)" 형태로 해줘)
+        4. [일기 작성 단계]: 만약 4가지 정보(누구, 어디, 무엇, 기분)를 모두 파악했다면, 더 이상 질문하지 말고 "이제 이 이야기들로 멋진 일기를 만들어볼까?" 라고 말한 뒤, 네 답변 맨 마지막 줄에 반드시 '[일기작성시작]' 이라는 태그를 적어줘.
       `;
       
-      const coachReply = await callGeminiAPI(coachPrompt);
-      setMessages(prev => [...prev, { sender: 'whale', text: coachReply }]);
+      let coachReply = await callGeminiAPI(coachPrompt);
+      
+      if (coachReply.includes('[일기작성시작]')) {
+        coachReply = coachReply.replace('[일기작성시작]', '').trim();
+        setMessages(prev => [...prev, { sender: 'whale', text: coachReply }]);
+        speakWhale(coachReply);
 
-      if (currentStep < 3) {
-        setTimeout(() => {
-          const nextQ = DIARY_QUESTIONS[currentStep + 1].q;
-          setMessages(prev => [...prev, { sender: 'whale', text: nextQ }]);
-          speakWhale(nextQ);
-          setCurrentStep(currentStep + 1);
-          setIsAIThinking(false);
-        }, 2000); 
-      } else {
         setTimeout(async () => {
           setMessages(prev => [...prev, { sender: 'system', text: "✨ 마법의 고래가 너의 대답을 모아 영어 일기를 만들고 있어요..." }]);
           
           const diaryPrompt = `
-            다음 4가지 정보를 바탕으로 초등학생 수준의 쉽고 자연스러운 영어 일기를 딱 3문장으로 작성해줘.
-            누구랑: ${updatedAnswers[0]}
-            어디서: ${updatedAnswers[1]}
-            무엇을: ${updatedAnswers[2]}
-            느낌: ${updatedAnswers[3]}
+            다음 [대화 기록]을 바탕으로, 초등학생 수준의 쉽고 자연스러운 영어 일기를 딱 3문장으로 작성해줘.
+            
+            [대화 기록]
+            ${conversationHistory}
             
             [매우 중요: 출력 형식]
             반드시 아래 형식에 맞춰서 텍스트만 출력해. 다른 말은 절대 추가하지 마.
@@ -195,7 +174,6 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
           `;
 
           const diaryReply = await callGeminiAPI(diaryPrompt);
-          
           const engMatch = diaryReply.match(/\[ENG\]([\s\S]*?)\[KOR\]/);
           const korMatch = diaryReply.match(/\[KOR\]([\s\S]*)/);
           
@@ -217,7 +195,12 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
             throw new Error("일기 생성 형식 오류");
           }
           setIsAIThinking(false);
-        }, 2000);
+        }, 3000);
+
+      } else {
+        setMessages(prev => [...prev, { sender: 'whale', text: coachReply }]);
+        speakWhale(coachReply);
+        setIsAIThinking(false);
       }
     } catch (err: any) {
       console.error("AI 오류:", err);
@@ -233,27 +216,30 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
     const cleanEng = diaryEng.replace(/\s+/g, '').toLowerCase();
     const cleanInput = val.replace(/\s+/g, '').toLowerCase();
     
-    if (cleanEng === cleanInput && cleanEng.length > 0) {
-      setIsTypingSuccess(true);
-    } else {
-      setIsTypingSuccess(false);
-    }
+    if (cleanEng === cleanInput && cleanEng.length > 0) setIsTypingSuccess(true);
+    else setIsTypingSuccess(false);
   };
 
+  // 💡 [핵심] 아이폰 사파리에서 수파베이스 전송이 차단되는 것을 감지하고 잡아내는 로직 적용!
   const handleFinishMission = async () => {
     try {
+      // 1. 사파리 날짜 파싱 오류를 막는 가장 안전한 한국 표준시(KST) 구하기
       const now = new Date();
-      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const offset = now.getTimezoneOffset() * 60000;
+      const dateOffset = new Date(now.getTime() - offset);
+      const todayStr = dateOffset.toISOString().split('T')[0];
       
-      await supabase.from('whale_diaries').insert([{
+      // 2. insert 후 에러가 있으면 반드시 throw 하도록 강제 체크 (.error 확인)
+      const { error: diaryError } = await supabase.from('whale_diaries').insert([{
         student_id: studentId,
         student_name: studentName,
         eng_diary: diaryEng,
         kor_diary: diaryKor,
         log_date: todayStr
       }]);
+      if (diaryError) throw diaryError;
 
-      await supabase.from('learning_logs').insert([{
+      const { error: logError } = await supabase.from('learning_logs').insert([{
         student_id: studentId,
         student_name: studentName,
         task_type: 'AI회화', 
@@ -263,11 +249,14 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
         attempt: 1,
         log_date: todayStr
       }]);
+      if (logError) throw logError;
 
+      // 3. 통신이 모두 성공했을 때만 완료 화면으로 넘어감
       setChatPhase('result');
-    } catch (err) {
+    } catch (err: any) {
       console.error("DB 저장 실패:", err);
-      alert("기록 저장 중 문제가 발생했습니다.");
+      // 4. 아이폰에서 몰래 삼키지 못하도록 무조건 경고창 띄우기
+      alert(`🚨 [데이터 저장 실패]\n원장님께 화면을 보여주세요!\n원인: ${err.message || '네트워크 오류'}`);
     }
   };
 
@@ -285,7 +274,7 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
           <div style={{ fontSize: '64px', marginBottom: '16px' }}>📝</div>
           <h2 style={{ margin: '0 0 12px 0', fontSize: '24px', fontWeight: '900', color: '#111' }}>고래와 함께 영어 일기 쓰기</h2>
           <p style={{ fontSize: '15px', color: '#666', lineHeight: '1.6', marginBottom: '32px' }}>
-            고래 선생님이 물어보는 4가지 질문에 편하게 대답해 봐! <br/>
+            고래 선생님이 물어보는 질문에 편하게 대답해 봐! <br/>
             한글로 대답해도 똑똑한 고래가 다 알아듣고 <br/>멋진 영어 일기로 만들어 줄 거야. ✨
           </p>
           <button onClick={handleStartChat} style={{ width: '100%', padding: '18px', background: 'linear-gradient(135deg, #007aff, #0056b3)', color: 'white', border: 'none', borderRadius: '16px', fontWeight: '800', fontSize: '18px', cursor: 'pointer', boxShadow: '0 6px 16px rgba(0,122,255,0.2)' }}>

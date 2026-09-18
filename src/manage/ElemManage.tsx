@@ -16,17 +16,14 @@ interface Student {
 const SERIES_LIST = ['240', '520', '860', '1240', '1680'];
 const BOOK_NUM_LIST = ['1', '2', '3', '4', '5', '6'];
 
-// 💡 [핵심 수정] Unit/Day뿐만 아니라, 동사에서 넘어오는 "ID 1~15" 형식도 잡아내도록 업그레이드!
 const parseUnitDay = (bookInfo: string) => {
   if (!bookInfo) return '';
   
-  // 1. 만약 bookInfo 안에 "ID"라는 글자가 들어있다면 (예: "ID 1~15") 그대로 괄호 쳐서 리턴합니다.
   if (bookInfo.toUpperCase().includes('ID')) {
     const idMatch = bookInfo.match(/ID\s*([\d~]+)/i);
-    if (idMatch) return `(${idMatch[0]})`; // 결과: "(ID 1~15)"
+    if (idMatch) return `(${idMatch[0]})`; 
   }
 
-  // 2. 기존 단어/문장 교재의 Unit/Day 처리
   const uMatch = bookInfo.match(/(?:u|unit|유닛)[^\d]*(\d+)/i);
   const dMatch = bookInfo.match(/(?:d|day|데이)[^\d]*(\d+)/i);
   
@@ -36,7 +33,6 @@ const parseUnitDay = (bookInfo: string) => {
   return '';
 };
 
-// 💡 수파베이스의 UTC 시간 표기를 무시하고 한국 시간 검색용 텍스트를 생성하는 함수
 const getFakeUTCString = (date: Date) => {
   const yyyy = date.getFullYear();
   const mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -47,7 +43,6 @@ const getFakeUTCString = (date: Date) => {
   return `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}+00:00`;
 };
 
-// 💡 여러 번 학습한 기록을 누적해서 예쁘게 합쳐주는 함수 (중복 방지 포함)
 const appendDetail = (currentStr: string, title: string, newDetail: string) => {
   if (!currentStr) return `✅ ${title}${newDetail}`; 
   if (currentStr.includes(newDetail)) return currentStr; 
@@ -291,13 +286,16 @@ export default function ElemManage() {
   return (
     <div style={{ backgroundColor: 'white', color: '#1f2937', padding: '16px', borderRadius: '12px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', width: '100%', boxSizing: 'border-box', margin: '0 auto', fontFamily: 'Pretendard, sans-serif' }}>
       
+      {/* 💡 [핵심] 여기서 flex-wrap: 'wrap' 과 minWidth 설정을 통해 좁은 화면에서도 날짜 컨트롤 영역이 줄바꿈 되며 깨지지 않게 방어합니다. */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#1f2937', margin: 0 }}>👑 초등부 관제탑</h2>
+        
+        {/* 상단 좌측: 타이틀 및 날짜 조작부 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#1f2937', margin: 0, whiteSpace: 'nowrap' }}>👑 초등부 관제탑</h2>
           
-          <div style={{ display: 'flex', alignItems: 'center', backgroundColor: '#f3f4f6', borderRadius: '8px', padding: '4px', border: '1px solid #e5e7eb' }}>
+          <div style={{ display: 'flex', alignItems: 'center', backgroundColor: '#f3f4f6', borderRadius: '8px', padding: '4px', border: '1px solid #e5e7eb', flexShrink: 0 }}>
             <button onClick={() => changeDate(-1)} style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', padding: '4px 8px', fontSize: '14px', color: '#4b5563', fontWeight: 'bold' }}>◀</button>
-            <span style={{ fontSize: '14px', fontWeight: '900', color: isToday ? '#2563eb' : '#374151', padding: '0 8px', minWidth: '110px', textAlign: 'center' }}>
+            <span style={{ fontSize: '14px', fontWeight: '900', color: isToday ? '#2563eb' : '#374151', padding: '0 8px', minWidth: '90px', textAlign: 'center', whiteSpace: 'nowrap' }}>
               {getFormattedDate(selectedDate)} {isToday && '(오늘)'}
             </span>
             <button onClick={() => changeDate(1)} disabled={isToday} style={{ border: 'none', backgroundColor: 'transparent', cursor: isToday ? 'not-allowed' : 'pointer', padding: '4px 8px', fontSize: '14px', color: isToday ? '#d1d5db' : '#4b5563', fontWeight: 'bold' }}>▶</button>
@@ -307,14 +305,16 @@ export default function ElemManage() {
             onClick={fetchAllLMSData} 
             style={{ 
               padding: '6px 12px', backgroundColor: '#eff6ff', color: '#2563eb', 
-              border: '1px solid #bfdbfe', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' 
+              border: '1px solid #bfdbfe', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer',
+              whiteSpace: 'nowrap', flexShrink: 0
             }}
           >
             {isLoading ? '⏳ 로딩중..' : '🔄 새로고침'}
           </button>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {/* 상단 우측: 학년 필터링 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
             {uniqueGrades.map(grade => {
               const isSelected = selectedGrade === grade;
@@ -331,7 +331,8 @@ export default function ElemManage() {
                     border: isSelected ? '1px solid #2563eb' : '1px solid #d1d5db',
                     backgroundColor: isSelected ? '#2563eb' : '#ffffff',
                     color: isSelected ? '#ffffff' : '#4b5563',
-                    transition: 'all 0.1s ease'
+                    transition: 'all 0.1s ease',
+                    whiteSpace: 'nowrap'
                   }}
                 >
                   {grade}
@@ -339,14 +340,14 @@ export default function ElemManage() {
               )
             })}
           </div>
-          <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#4b5563', borderLeft: '2px solid #e5e7eb', paddingLeft: '12px' }}>
+          <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#4b5563', borderLeft: '2px solid #e5e7eb', paddingLeft: '12px', whiteSpace: 'nowrap' }}>
             총 <span style={{ color: '#2563eb', fontSize: '15px' }}>{filteredStudents.length}</span>명
           </div>
         </div>
       </div>
 
-      <div style={{ overflowX: 'auto', width: '100%' }}>
-        <table style={{ borderCollapse: 'collapse', width: '100%', tableLayout: 'auto', fontSize: '13px' }}>
+      <div style={{ overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
+        <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: '700px', tableLayout: 'auto', fontSize: '13px' }}>
           <thead>
             <tr style={{ backgroundColor: '#f3f4f6', color: '#374151', borderBottom: '2px solid #9ca3af' }}>
               <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '4%' }}>번호</th>
@@ -431,9 +432,10 @@ export default function ElemManage() {
         </table>
       </div>
 
+      {/* 학생 관리 모달 (기존 동일) */}
       {manageStudent && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 50 }}>
-          <div style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', padding: '24px', borderRadius: '16px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', width: '24rem', position: 'relative', margin: '0 16px' }}>
+          <div style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', padding: '24px', borderRadius: '16px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', width: '24rem', position: 'relative', margin: '0 16px', maxWidth: '90vw' }}>
             <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#1f2937', margin: '0 0 16px 0' }}>⚙️ 학생 정보 관리</h3>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
