@@ -6,7 +6,7 @@ interface WhaleChatProps {
   onBack: () => void;
   studentId?: string;
   studentName?: string;
-  currentBook?: string; // 💡 이 줄 추가!
+  currentBook?: string; 
 }
 
 interface Message {
@@ -221,16 +221,42 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
     else setIsTypingSuccess(false);
   };
 
-  // 💡 [핵심] 아이폰 사파리에서 수파베이스 전송이 차단되는 것을 감지하고 잡아내는 로직 적용!
+  // 💡 [추가] 타이핑할 때 정답 텍스트와 비교해서 틀린 부분만 빨갛게 렌더링하는 함수
+  const renderHighlightedTarget = () => {
+    if (!typingInput) return <span style={{ color: '#94a3b8' }}>타이핑을 시작하면 틀린 부분이 빨간색으로 표시됩니다.</span>;
+
+    const targetChars = diaryEng.split('');
+    const inputChars = typingInput.split('');
+
+    return targetChars.map((char, index) => {
+      // 아직 타이핑하지 않은 부분
+      if (index >= inputChars.length) {
+        return <span key={index} style={{ color: '#111' }}>{char}</span>;
+      }
+      
+      // 타이핑은 했는데 대소문자 상관없이 스펠링이 틀렸거나 띄어쓰기를 틀린 경우
+      const isMatch = char.toLowerCase() === inputChars[index].toLowerCase();
+      
+      if (!isMatch) {
+        return (
+          <span key={index} style={{ color: '#ef4444', backgroundColor: '#fee2e2', borderBottom: '2px solid #ef4444', fontWeight: '900' }}>
+            {char === ' ' ? '_' : char} 
+          </span>
+        );
+      }
+      
+      // 맞춘 부분
+      return <span key={index} style={{ color: '#16a34a' }}>{char}</span>;
+    });
+  };
+
   const handleFinishMission = async () => {
     try {
-      // 1. 사파리 날짜 파싱 오류를 막는 가장 안전한 한국 표준시(KST) 구하기
       const now = new Date();
       const offset = now.getTimezoneOffset() * 60000;
       const dateOffset = new Date(now.getTime() - offset);
       const todayStr = dateOffset.toISOString().split('T')[0];
       
-      // 2. insert 후 에러가 있으면 반드시 throw 하도록 강제 체크 (.error 확인)
       const { error: diaryError } = await supabase.from('whale_diaries').insert([{
         student_id: studentId,
         student_name: studentName,
@@ -252,11 +278,9 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
       }]);
       if (logError) throw logError;
 
-      // 3. 통신이 모두 성공했을 때만 완료 화면으로 넘어감
       setChatPhase('result');
     } catch (err: any) {
       console.error("DB 저장 실패:", err);
-      // 4. 아이폰에서 몰래 삼키지 못하도록 무조건 경고창 띄우기
       alert(`🚨 [데이터 저장 실패]\n원장님께 화면을 보여주세요!\n원인: ${err.message || '네트워크 오류'}`);
     }
   };
@@ -342,9 +366,12 @@ export default function WhaleChat({ onBack, studentId = "ST_TEST", studentName =
             <h3 style={{ margin: '0 0 12px 0', color: '#007aff', fontSize: '16px', display: 'flex', alignItems: 'center', gap: '6px' }}>
               📝 마법의 영어 일기 완성!
             </h3>
-            <div style={{ fontSize: '17px', fontWeight: '800', color: '#111', lineHeight: '1.6', wordBreak: 'keep-all' }}>
-              {diaryEng}
+            
+            {/* 💡 [수정] 그냥 텍스트가 아니라, 틀린 부분을 하이라이트 해서 보여주는 영역으로 교체 */}
+            <div style={{ fontSize: '17px', fontWeight: '800', color: '#111', lineHeight: '1.6', wordBreak: 'keep-all', backgroundColor: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+              {renderHighlightedTarget()}
             </div>
+            
             <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed #eee', fontSize: '14px', color: '#666', lineHeight: '1.5', wordBreak: 'keep-all' }}>
               {diaryKor}
             </div>
