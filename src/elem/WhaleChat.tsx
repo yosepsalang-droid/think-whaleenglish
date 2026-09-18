@@ -6,6 +6,7 @@ interface WhaleChatProps {
   onBack: () => void;
   studentId?: string;
   studentName?: string;
+  currentBook?: string; // 💡 이 줄 추가!
 }
 
 interface Message {

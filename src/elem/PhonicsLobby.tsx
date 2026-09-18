@@ -1,27 +1,24 @@
 import React, { useState } from 'react';
-// 💡 1~6단계 파일을 모두 불러옵니다!
 import PhonicsLearn from './PhonicsLearn';
 import PhonicsTrace from './PhonicsTrace';
 import PhonicsBubblePop from './PhonicsBubblePop';
 import PhonicsWordDrop from './PhonicsWordDrop';
 import PhonicsMaster from './PhonicsMaster'; 
-import PhonicsBoss from './PhonicsBoss'; // 💡 6단계 미니 보스전 추가!
+import PhonicsBoss from './PhonicsBoss';
 
 interface PhonicsLobbyProps {
   onBack: () => void;
   studentName?: string;
+  stars?: number; // 💡 App.tsx에서 넘겨주는 stars를 허용하도록 추가!
 }
 
-export default function PhonicsLobby({ onBack, studentName = "김철수" }: PhonicsLobbyProps) {
-  // 별 개수 및 진도 상태 관리
-  const [stars, setStars] = useState(12);
+export default function PhonicsLobby({ onBack, studentName = "김철수", stars: initialStars = 12 }: PhonicsLobbyProps) {
+  const [stars, setStars] = useState(initialStars);
   const [currentProgress, setCurrentProgress] = useState({ level: 1, day: 1, step: 1 });
   const [reviewLimit, setReviewLimit] = useState(5);
 
   const [selectedLevel, setSelectedLevel] = useState<number | null>(null);
   const [selectedDay, setSelectedDay] = useState<number>(1);
-  
-  // 현재 실행 중인 미니게임 번호
   const [activeStep, setActiveStep] = useState<number | null>(null);
 
   const stages = [
@@ -50,47 +47,45 @@ export default function PhonicsLobby({ onBack, studentName = "김철수" }: Phon
     { id: 6, title: "미니 보스전", desc: "총정리 배틀", emoji: "👾", reward: "🌟 1" },
   ];
 
-  // 단계를 완료했을 때 별을 1개 받고 로비로 돌아오는 함수
   const handleStepComplete = () => {
     alert("🌟 미션 완료! 별 1개를 획득했습니다!");
     setStars(prev => prev + 1);
     
-    // 현재 진도를 깼다면 다음 스텝으로 넘어가기
     if (activeStep === currentProgress.step) {
       setCurrentProgress(prev => ({ ...prev, step: prev.step + 1 }));
     } else {
-      // 복습인 경우 복습 찬스 차감
       setReviewLimit(prev => Math.max(0, prev - 1));
     }
-    
-    setActiveStep(null); // 로비로 복귀
+    setActiveStep(null);
   };
 
   const handleStepClick = (dayId: number, stepId: number, status: string) => {
-    // 💡 6단계 막아두었던 로직을 깔끔하게 삭제했습니다!
-    
     if (status === 'completed') {
       if (reviewLimit > 0) {
-        setActiveStep(stepId); // 복습 진입
+        setActiveStep(stepId);
       } else {
         alert("오늘 복습 보상 횟수를 모두 소모했습니다. 연습 모드로 진입합니다.");
-        setActiveStep(stepId); // 보상 없는 연습 진입
+        setActiveStep(stepId);
       }
     } else {
-      setActiveStep(stepId); // 새 진도 진입
+      setActiveStep(stepId);
     }
   };
 
-  // 💡 선택된 단계에 따라 1~6단계 파일을 띄워줍니다!
-  // (여기에 day={selectedDay} 를 추가해서 몇 일차 수업인지 게임방에 알려줍니다!)
-  if (activeStep === 1) return <PhonicsLearn day={selectedDay} onBack={() => setActiveStep(null)} onFinish={handleStepComplete} />;
-  if (activeStep === 2) return <PhonicsTrace day={selectedDay} onBack={() => setActiveStep(null)} onComplete={handleStepComplete} />;
-  if (activeStep === 3) return <PhonicsBubblePop day={selectedDay} onComplete={handleStepComplete} />;
-  if (activeStep === 4) return <PhonicsWordDrop day={selectedDay} onComplete={handleStepComplete} />;
-  if (activeStep === 5) return <PhonicsMaster day={selectedDay} onBack={() => setActiveStep(null)} onComplete={handleStepComplete} />;
-  if (activeStep === 6) return <PhonicsBoss day={selectedDay} onBack={() => setActiveStep(null)} onComplete={handleStepComplete} />;
+  // 💡 컴포넌트 타입 에러 방지 (빌드 통과용)
+  const TraceComp = PhonicsTrace as any;
+  const BubbleComp = PhonicsBubblePop as any;
+  const WordDropComp = PhonicsWordDrop as any;
+  const MasterComp = PhonicsMaster as any;
+  const BossComp = PhonicsBoss as any;
 
-  // 기본 로비 화면
+  if (activeStep === 1) return <PhonicsLearn day={selectedDay} onBack={() => setActiveStep(null)} onFinish={handleStepComplete} />;
+  if (activeStep === 2) return <TraceComp day={selectedDay} onBack={() => setActiveStep(null)} onComplete={handleStepComplete} />;
+  if (activeStep === 3) return <BubbleComp day={selectedDay} onComplete={handleStepComplete} />;
+  if (activeStep === 4) return <WordDropComp day={selectedDay} onComplete={handleStepComplete} />;
+  if (activeStep === 5) return <MasterComp day={selectedDay} onBack={() => setActiveStep(null)} onComplete={handleStepComplete} />;
+  if (activeStep === 6) return <BossComp day={selectedDay} onBack={() => setActiveStep(null)} onComplete={handleStepComplete} />;
+
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'linear-gradient(135deg, #00b4db 0%, #0083b0 100%)', overflow: 'hidden', fontFamily: 'Pretendard, sans-serif', userSelect: 'none', zIndex: 1000 }}>
       
@@ -100,7 +95,6 @@ export default function PhonicsLobby({ onBack, studentName = "김철수" }: Phon
         .no-scrollbar::-webkit-scrollbar { display: none; }
       `}</style>
 
-      {/* 상단 헤더 */}
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 10 }}>
         <button onClick={onBack} style={{ width: '50px', height: '50px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.9)', border: 'none', fontSize: '24px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>←</button>
         <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
@@ -109,12 +103,10 @@ export default function PhonicsLobby({ onBack, studentName = "김철수" }: Phon
         </div>
       </div>
 
-      {/* 보물 지도 배경 선 */}
       <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1, pointerEvents: 'none' }}>
         <path d="M 200,600 Q 500,200 800,700 T 1600,400" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="6" strokeDasharray="15,15" />
       </svg>
 
-      {/* 섬 (스테이지) 아이콘들 */}
       {stages.map((stage) => {
         const isUnlocked = stage.id <= currentProgress.level;
         const isCurrentLevel = stage.id === currentProgress.level;
@@ -136,7 +128,6 @@ export default function PhonicsLobby({ onBack, studentName = "김철수" }: Phon
         );
       })}
 
-      {/* 우측 하단 상점 & 게임 버튼 */}
       <div style={{ position: 'absolute', bottom: '40px', right: '40px', display: 'flex', gap: '20px', zIndex: 10 }}>
         <button style={{ width: '90px', height: '90px', borderRadius: '24px', backgroundColor: '#ec4899', border: '4px solid #fbcfe8', fontSize: '40px', cursor: 'pointer', boxShadow: '0 10px 20px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
           👗<span style={{ fontSize: '12px', fontWeight: 'bold', marginTop: '4px' }}>캐릭터</span>
@@ -146,18 +137,15 @@ export default function PhonicsLobby({ onBack, studentName = "김철수" }: Phon
         </button>
       </div>
 
-      {/* 중앙 오늘의 탐험 시작 버튼 */}
       <button onClick={() => alert("현재 열려있는 진도로 바로 이동합니다!")} style={{ position: 'absolute', bottom: '40px', left: '50%', transform: 'translateX(-50%)', backgroundColor: '#ffeb3b', color: '#b33939', border: 'none', borderRadius: '50px', padding: '24px 64px', fontSize: '28px', fontWeight: '900', cursor: 'pointer', zIndex: 20, boxShadow: '0 10px 20px rgba(0,0,0,0.2)', borderBottom: '6px solid #f39c12' }}>
         🚀 오늘의 탐험 시작하기!
       </button>
 
-      {/* 섬 클릭 시 나타나는 진도 팝업창 */}
       {selectedLevel && (
         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 3000, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setSelectedLevel(null)}>
           <div style={{ backgroundColor: '#f8fafc', padding: '30px', borderRadius: '32px', width: '900px', height: '600px', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', animation: 'slideUp 0.3s ease-out', position: 'relative', display: 'flex', gap: '30px' }} onClick={(e) => e.stopPropagation()}>
             <button onClick={() => setSelectedLevel(null)} style={{ position: 'absolute', top: '20px', right: '20px', background: 'none', border: 'none', fontSize: '32px', cursor: 'pointer', color: '#94a3b8', zIndex: 10 }}>✖</button>
             
-            {/* 좌측 패널 (Day 리스트) */}
             <div className="no-scrollbar" style={{ width: '300px', backgroundColor: 'white', borderRadius: '24px', padding: '20px', overflowY: 'auto', border: '2px solid #e2e8f0', boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.05)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <h3 style={{ margin: 0, fontSize: '24px', color: '#1e293b' }}>탐험 일지</h3>
@@ -177,7 +165,6 @@ export default function PhonicsLobby({ onBack, studentName = "김철수" }: Phon
               </div>
             </div>
 
-            {/* 우측 패널 (6단계 학습 코스) */}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
               <h2 style={{ margin: '0 0 20px 0', fontSize: '28px', color: '#1e293b' }}>{level1Days.find(d => d.id === selectedDay)?.title} <span style={{ fontSize: '20px', color: '#64748b', fontWeight: 'normal' }}>({level1Days.find(d => d.id === selectedDay)?.target})</span></h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', flex: 1 }}>
