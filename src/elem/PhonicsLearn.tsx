@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { PHONICS_DB } from '../data/phonics_db';
+import { PHONICS_DB } from './data/phonics_db';
 interface PhonicsLearnProps {
   day: number; 
   onBack: () => void;
