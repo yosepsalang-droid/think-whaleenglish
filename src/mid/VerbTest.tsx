@@ -399,9 +399,25 @@ export default function VerbTest({ onBack, studentId = "ST_TEST", studentName = 
           </div>
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={{ display: 'flex', gap: '8px' }}>
-              <input ref={baseRef} name="base" placeholder="원형" value={inputs.base} disabled={isSubmitting} onChange={handleInputChange} onKeyDown={(e) => handleKeyDown(e, pastRef)} style={{...inputStyle, opacity: isSubmitting ? 0.7 : 1}} />
-              <input ref={pastRef} name="past" placeholder="과거형" value={inputs.past} disabled={isSubmitting} onChange={handleInputChange} onKeyDown={(e) => handleKeyDown(e, ppRef)} style={{...inputStyle, opacity: isSubmitting ? 0.7 : 1}} />
-              <input ref={ppRef} name="pp" placeholder="과거분사" value={inputs.pp} disabled={isSubmitting} onChange={handleInputChange} onKeyDown={(e) => handleKeyDown(e, null)} style={{...inputStyle, opacity: isSubmitting ? 0.7 : 1}} />
+              {/* 💡 [핵심] 자동완성, 스펠링 체크, 첫 글자 대문자화 모두 원천 차단된 input */}
+              <input 
+                ref={baseRef} name="base" placeholder="원형" value={inputs.base} 
+                disabled={isSubmitting} onChange={handleInputChange} onKeyDown={(e) => handleKeyDown(e, pastRef)} 
+                style={{...inputStyle, opacity: isSubmitting ? 0.7 : 1}} 
+                autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} data-lpignore="true" list="autocompleteOff"
+              />
+              <input 
+                ref={pastRef} name="past" placeholder="과거형" value={inputs.past} 
+                disabled={isSubmitting} onChange={handleInputChange} onKeyDown={(e) => handleKeyDown(e, ppRef)} 
+                style={{...inputStyle, opacity: isSubmitting ? 0.7 : 1}} 
+                autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} data-lpignore="true" list="autocompleteOff"
+              />
+              <input 
+                ref={ppRef} name="pp" placeholder="과거분사" value={inputs.pp} 
+                disabled={isSubmitting} onChange={handleInputChange} onKeyDown={(e) => handleKeyDown(e, null)} 
+                style={{...inputStyle, opacity: isSubmitting ? 0.7 : 1}} 
+                autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} data-lpignore="true" list="autocompleteOff"
+              />
             </div>
             <button type="submit" disabled={!inputs.base || !inputs.past || !inputs.pp || isSubmitting} style={{ width: '100%', padding: '16px', fontSize: '18px', fontWeight: 'bold', color: 'white', backgroundColor: isSubmitting ? '#a0c4ff' : (isRetestMode ? '#ff3b30' : '#007aff'), border: 'none', borderRadius: '12px', cursor: isSubmitting ? 'not-allowed' : 'pointer' }}>
               {isSubmitting ? '채점 중...' : '정답 확인'}
