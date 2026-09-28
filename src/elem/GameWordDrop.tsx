@@ -124,7 +124,7 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
       setPlayCount(data?.length || 0);
     };
     fetchPlayCount();
-  }, [selectedBook, appPhase]);
+  }, [selectedBook, appPhase, student?.id]);
 
   const handleStart = async () => {
     if (!selectedBook) return alert("교재를 선택해 주세요!");
@@ -214,12 +214,20 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
     setTimeout(() => setHitFlash('none'), 300);
   };
 
+  // 💡 [핵심 수정] 한글 키보드 잔상(꼬리표) 현상 완벽 제거를 위한 blur-focus 트릭 적용
   const forceClearInput = () => {
     clearLockRef.current = true; 
     setInputValue(""); 
-    if (inputRef.current) inputRef.current.value = ""; 
+    
+    if (inputRef.current) {
+      inputRef.current.value = ""; 
+      inputRef.current.blur(); // 스마트폰 키보드의 '한글 조합 상태'를 강제로 깹니다.
+      setTimeout(() => {
+        if (inputRef.current) inputRef.current.focus(); // 0.01초 뒤에 다시 커서를 줍니다.
+      }, 10);
+    }
+    
     setTimeout(() => {
-      if (inputRef.current) inputRef.current.value = "";
       setInputValue("");
       clearLockRef.current = false;
     }, 150); 
@@ -243,15 +251,16 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
       const fw = state.fallingWords[i];
       fw.y += fw.speed * state.speedMultiplier;
 
-      if (fw.y > 82) {
+      // 💡 y가 85 이상(바닥)일 때
+      if (fw.y > 85) {
         if (fw.isCorrect) {
-          lifeLost = true;
+          lifeLost = true; // 진짜 정답이 떨어지면 생명 차감!
           state.fallingWords = []; 
           state.needNewWave = true; 
           state.combo = 0; 
           break; 
         } else {
-          state.fallingWords.splice(i, 1);
+          state.fallingWords.splice(i, 1); // 가짜면 그냥 터져서 사라짐
         }
       }
     }
@@ -300,9 +309,7 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
         forceClearInput(); 
         triggerHitFlash('success'); 
         
-        // 💡 [수정] 1문제당 1m (스펠링 모드는 2m). 콤보 보너스는 마라톤 형평성을 위해 제외
         const baseScore = mode === 'FIND_ENG' ? 2 : 1; 
-        
         state.score += baseScore;
         state.combo += 1;
         state.needNewWave = true; 
@@ -331,9 +338,11 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
     const logDateStr = `${kstNow.getUTCFullYear()}-${String(kstNow.getUTCMonth() + 1).padStart(2, '0')}-${String(kstNow.getUTCDate()).padStart(2, '0')}`;
 
     try {
+      // 💡 [핵심 수정] 랭킹에 무조건 반영되도록 student.grade 추가!
       await supabase.from('learning_logs').insert([{
         student_id: student.id,
         student_name: student.name,
+        grade: student.grade || '초등부', // 학년 꼬리표 추가!
         task_type: `타자게임(${modeText})`,
         book_info: selectedBook,
         score: state.score,
@@ -412,11 +421,11 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <button onClick={() => setMode('FIND_KOR')} style={{ padding: '16px', borderRadius: '12px', fontWeight: '800', fontSize: '15px', border: `2px solid ${mode === 'FIND_KOR' ? '#3b82f6' : '#e2e8f0'}`, backgroundColor: mode === 'FIND_KOR' ? '#eff6ff' : 'white', color: mode === 'FIND_KOR' ? '#2563eb' : '#64748b', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', transition: 'all 0.2s' }}>
                 <span>🟢 영어 제시어 ➡️ <b>한글 뜻 찾기</b></span>
-                <span style={{ fontSize: '13px', color: mode === 'FIND_KOR' ? '#3b82f6' : '#9ca3af' }}>기본 1m 획득</span>
+                <span style={{ fontSize: '13px', color: mode === 'FIND_KOR' ? '#3b82f6' : '#9ca3af' }}>1m 전진</span>
               </button>
               <button onClick={() => setMode('FIND_ENG')} style={{ padding: '16px', borderRadius: '12px', fontWeight: '800', fontSize: '15px', border: `2px solid ${mode === 'FIND_ENG' ? '#ef4444' : '#e2e8f0'}`, backgroundColor: mode === 'FIND_ENG' ? '#fef2f2' : 'white', color: mode === 'FIND_ENG' ? '#dc2626' : '#64748b', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', transition: 'all 0.2s' }}>
                 <span>🔥 한글 제시어 ➡️ <b>영어 스펠링 찾기</b></span>
-                <span style={{ fontSize: '13px', fontWeight: '900', color: '#ef4444' }}>어려움 (2m 획득)</span>
+                <span style={{ fontSize: '13px', fontWeight: '900', color: '#ef4444' }}>어려움 (2m 전진)</span>
               </button>
             </div>
           </div>
@@ -447,7 +456,6 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
           <div style={{ backgroundColor: 'rgba(59, 130, 246, 0.2)', padding: '24px', borderRadius: '16px', border: '2px solid #3b82f6', marginBottom: '32px' }}>
             <div style={{ fontSize: '14px', color: '#93c5fd', fontWeight: 'bold', marginBottom: '4px' }}>마라톤 전진 거리</div>
             <div style={{ fontSize: '42px', fontWeight: '900', color: '#60a5fa' }}>{finalScore} <span style={{ fontSize: '20px' }}>m</span></div>
-            {/* 💡 랭킹 멘트 제거, 마라톤 트랙 멘트로 수정 */}
             <div style={{ fontSize: '12px', color: '#93c5fd', marginTop: '8px', fontWeight: 'bold' }}>완벽한 우주 방어 성공! 마라톤 거리가 누적되었습니다 🏃‍♂️</div>
           </div>
 
@@ -479,7 +487,6 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
           <div style={{ backgroundColor: 'rgba(21, 128, 61, 0.2)', padding: '24px', borderRadius: '16px', border: '2px solid #22c55e', marginBottom: '32px' }}>
             <div style={{ fontSize: '14px', color: '#4ade80', fontWeight: 'bold', marginBottom: '4px' }}>마라톤 전진 거리</div>
             <div style={{ fontSize: '42px', fontWeight: '900', color: '#22c55e' }}>{finalScore} <span style={{ fontSize: '20px' }}>m</span></div>
-            {/* 💡 랭킹 멘트 제거, 마라톤 트랙 멘트로 수정 */}
             <div style={{ fontSize: '12px', color: '#4ade80', marginTop: '8px', fontWeight: 'bold' }}>지금까지 획득한 거리는 마라톤 트랙에 합산됩니다 🏃‍♂️</div>
           </div>
 
@@ -575,7 +582,6 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
         </div>
 
         <div style={{ padding: '20px', backgroundColor: '#020617', zIndex: 10, borderTop: '1px solid #1e293b' }}>
-          {/* 💡 [핵심] 자동완성 및 스펠링 체크 원천 차단 속성 6개 모두 추가! */}
           <input
             ref={inputRef}
             type="text"
