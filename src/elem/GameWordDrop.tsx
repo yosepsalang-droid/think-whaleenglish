@@ -324,11 +324,11 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
     const logDateStr = `${kstNow.getUTCFullYear()}-${String(kstNow.getUTCMonth() + 1).padStart(2, '0')}-${String(kstNow.getUTCDate()).padStart(2, '0')}`;
 
     try {
-      // 💡 [핵심 복구] student.grade (초등부 꼬리표)를 다시 저장하도록 복구했습니다!
+      // 💡 [핵심 수정] DB에 없는 grade를 억지로 보내서 에러가 났던 부분을 삭제했습니다!
+      // 이제 안전하게 점수만 보냅니다. (학년은 Ranking.tsx가 알아서 체크합니다)
       await supabase.from('learning_logs').insert([{
         student_id: student.id,
         student_name: student.name,
-        grade: student.grade || '초등부', // <-- 랭킹 노출을 위한 필수 꼬리표!
         task_type: `타자게임(${modeText})`,
         book_info: selectedBook,
         score: state.score,
