@@ -129,14 +129,28 @@ export default function Ranking({ onBack, studentName = "테스트학생" }: Ran
         const startOfThisMonth = new Date(year, month, 1);
         const startOfLastMonth = new Date(year, month - 1, 1);
 
-        // 💡 [핵심 복구] 예전처럼 다시 깔끔하게 learning_logs 테이블에서만 grade를 가져와 비교합니다!
+        // 💡 1. learning_logs에서는 '에러의 주범'이었던 grade를 빼고 점수만 안전하게 가져옵니다.
         const { data: logsData, error: logsError } = await supabase
           .from('learning_logs')
-          .select('student_name, score, created_at, grade') 
+          .select('student_name, score, created_at') 
           .gte('created_at', startOfLastMonth.toISOString()) 
           .eq('status', '완료'); 
 
         if (logsError) throw logsError;
+
+        // 💡 2. students(학생 명부) 테이블에서 이름과 학년을 싹 다 가져옵니다.
+        const { data: studentsData, error: studentsError } = await supabase
+          .from('students')
+          .select('*');
+
+        if (studentsError) throw studentsError;
+
+        // 💡 3. 이름표(Map)를 만듭니다. (예: "박윤우" -> "초5")
+        const gradeMap = new Map<string, string>();
+        (studentsData || []).forEach(s => {
+          const sName = s.name || s.student_name; // 어떤 컬럼명으로 저장되었든 찾기 위함
+          if (sName) gradeMap.set(sName, s.grade || '');
+        });
 
         const thisMonthMap = new Map<string, number>();
         const lastMonthMap = new Map<string, number>();
@@ -144,8 +158,9 @@ export default function Ranking({ onBack, studentName = "테스트학생" }: Ran
         (logsData || []).forEach(log => {
           if (!log.student_name || typeof log.score !== 'number') return;
           
-          // 💡 학생의 grade 꼬리표에 '초'가 안 들어있으면 랭킹에서 제외!
-          if (!log.grade || !log.grade.includes('초')) return; 
+          // 💡 4. 아까 만든 이름표에서 학년을 꺼내와서 '초'가 안 들어있으면 버립니다.
+          const studentGrade = gradeMap.get(log.student_name) || '';
+          if (!studentGrade.includes('초')) return; 
 
           const logDate = new Date(log.created_at);
 
