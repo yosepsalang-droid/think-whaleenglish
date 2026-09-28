@@ -57,16 +57,13 @@ const parseAcceptableAnswers = (text: string, mode: 'FIND_KOR' | 'FIND_ENG') => 
 export default function GameWordDrop({ student, onBack, onGameComplete }: GameWordDropProps) {
   const [appPhase, setAppPhase] = useState<'SETUP' | 'PLAYING' | 'GAME_OVER' | 'BOOK_CLEAR'>('SETUP');
   const [isLoading, setIsLoading] = useState(false);
-
   const [books, setBooks] = useState<string[]>([]);
   const [selectedBook, setSelectedBook] = useState('');
   const [mode, setMode] = useState<'FIND_KOR' | 'FIND_ENG'>('FIND_KOR');
   const [playCount, setPlayCount] = useState<number>(0);
-  
   const [renderTick, setRenderTick] = useState(0); 
   const [inputValue, setInputValue] = useState("");
   const [finalScore, setFinalScore] = useState(0);
-
   const [hitFlash, setHitFlash] = useState<'none' | 'success' | 'fail'>('none');
 
   const inputRef = useRef<HTMLInputElement>(null); 
@@ -100,7 +97,6 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
     fetchBooks();
   }, []);
 
-  // 💡 [수정] 횟수 체크를 확실한 log_date로 조회하도록 변경!
   useEffect(() => {
     if (!selectedBook || !student?.id) return;
 
@@ -136,7 +132,6 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
       if (error) throw error;
       if (!data || data.length === 0) throw new Error("단어 데이터가 없습니다.");
 
-      // 💡 [핵심 수정] 무작위로 섞은 뒤 딱 30문제만 자르기!
       const shuffledWords = [...data].sort(() => Math.random() - 0.5).slice(0, 30);
 
       gameRef.current = {
@@ -158,7 +153,6 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
       clearLockRef.current = false;
 
       requestRef.current = requestAnimationFrame(gameLoop);
-
     } catch (error) {
       alert("데이터를 불러오지 못했습니다.");
     } finally {
@@ -325,16 +319,16 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
     setAppPhase(isClear ? 'BOOK_CLEAR' : 'GAME_OVER');
 
     const modeText = mode === 'FIND_KOR' ? '뜻찾기' : '스펠링찾기';
-
     const kstOffset = 9 * 60 * 60 * 1000;
     const kstNow = new Date(Date.now() + kstOffset);
     const logDateStr = `${kstNow.getUTCFullYear()}-${String(kstNow.getUTCMonth() + 1).padStart(2, '0')}-${String(kstNow.getUTCDate()).padStart(2, '0')}`;
 
     try {
-      // 💡 [핵심 수정] DB에 없는 grade 컬럼을 몰래 넣던 코드를 삭제! (에러 원인 해결)
+      // 💡 [핵심 복구] student.grade (초등부 꼬리표)를 다시 저장하도록 복구했습니다!
       await supabase.from('learning_logs').insert([{
         student_id: student.id,
         student_name: student.name,
+        grade: student.grade || '초등부', // <-- 랭킹 노출을 위한 필수 꼬리표!
         task_type: `타자게임(${modeText})`,
         book_info: selectedBook,
         score: state.score,
@@ -360,7 +354,6 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
       if (onGameComplete && state.score > 0) {
         onGameComplete(state.score);
       }
-
     } catch (err) {
       console.error("결과 저장 실패", err);
     }
@@ -512,11 +505,6 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
                 <span key={i} style={{ opacity: i < st.lives ? 1 : 0.2, margin: '0 2px', filter: i < st.lives ? 'drop-shadow(0 0 5px red)' : 'none' }}>❤️</span>
               ))}
             </div>
-            {st.combo >= 2 && (
-              <div style={{ fontSize: '18px', fontWeight: '900', color: '#38bdf8', marginTop: '8px', animation: 'pulse 0.5s infinite', textShadow: '0 0 10px rgba(56, 189, 248, 0.8)' }}>
-                {st.combo} COMBO 🔥
-              </div>
-            )}
           </div>
         </div>
 
