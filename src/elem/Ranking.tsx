@@ -8,11 +8,9 @@ interface RankData {
 
 interface RankingProps {
   onBack: () => void; 
-  // 💡 [추가] '나의 위치'를 찾기 위해 현재 접속한 학생 이름을 받습니다.
   studentName?: string; 
 }
 
-// 💡 [추가] 마라톤 점수(m)에 따른 군대 계급 계산 함수
 const getMilitaryRank = (meters: number, rankIndex: number) => {
   if (meters >= 42195) {
     if (rankIndex === 0) return { title: '4성 장군', icon: '⭐⭐⭐⭐' };
@@ -37,7 +35,6 @@ const getMilitaryRank = (meters: number, rankIndex: number) => {
   return { title: '훈련병', icon: '🌱' };
 };
 
-// 💡 지난달 명예의 전당 (Top 3)
 function HonorRollCard({ data, isLoading }: { data: RankData[]; isLoading: boolean }) {
   return (
     <div style={{ backgroundColor: '#fffdf0', border: '2px solid #ffda79', borderRadius: '16px', padding: '16px', marginBottom: '24px' }}>
@@ -68,13 +65,10 @@ function HonorRollCard({ data, isLoading }: { data: RankData[]; isLoading: boole
   );
 }
 
-// 💡 이달의 마라톤 Top 10 (사선 배치 디자인 적용)
 function MarathonRankingCard({ data, isLoading }: { data: RankData[]; isLoading: boolean }) {
   return (
     <div style={{ backgroundColor: '#f0fdf4', border: '2px solid #86efac', borderRadius: '16px', padding: '20px 16px', marginBottom: '20px', position: 'relative', overflow: 'hidden' }}>
-      {/* 배경 트랙 느낌의 선 */}
       <div style={{ position: 'absolute', top: 0, left: '20px', width: '2px', height: '100%', backgroundColor: '#bbf7d0', zIndex: 0 }}></div>
-      
       <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', color: '#15803d', display: 'flex', alignItems: 'center', gap: '6px', position: 'relative', zIndex: 1 }}>
         🏃‍♂️ 이달의 마라톤 Top 10
       </h3>
@@ -87,7 +81,6 @@ function MarathonRankingCard({ data, isLoading }: { data: RankData[]; isLoading:
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', position: 'relative', zIndex: 1 }}>
           {data.map((item, index) => {
             const rankInfo = getMilitaryRank(item.score, index);
-            // 💡 [핵심] 등수가 내려갈수록 왼쪽 여백(marginLeft)을 넓혀서 사선 배치를 만듭니다.
             const shiftRight = index * 14; 
             
             return (
@@ -119,7 +112,6 @@ function MarathonRankingCard({ data, isLoading }: { data: RankData[]; isLoading:
   );
 }
 
-// 💡 메인 랭킹 화면
 export default function Ranking({ onBack, studentName = "테스트학생" }: RankingProps) {
   const [fullThisMonthRankings, setFullThisMonthRankings] = useState<RankData[]>([]);
   const [lastMonthRankings, setLastMonthRankings] = useState<RankData[]>([]);
@@ -137,33 +129,46 @@ export default function Ranking({ onBack, studentName = "테스트학생" }: Ran
         const startOfThisMonth = new Date(year, month, 1);
         const startOfLastMonth = new Date(year, month - 1, 1);
 
-        const { data, error } = await supabase
+        // 💡 [핵심 수정] 에러가 발생하던 grade를 빼고 안전하게 점수만 가져옵니다!
+        const { data: logsData, error: logsError } = await supabase
           .from('learning_logs')
-          .select('student_name, score, created_at, grade') 
+          .select('student_id, student_name, score, created_at') 
           .gte('created_at', startOfLastMonth.toISOString()) 
           .eq('status', '완료'); 
 
-        if (error) throw error;
+        if (logsError) throw logsError;
+
+        // 💡 [추가] 학생 명부를 별도로 가져와서 초등부인지 확인합니다.
+        const { data: studentsData } = await supabase
+          .from('students')
+          .select('student_id, grade');
+
+        const gradeMap = new Map<string, string>();
+        if (studentsData) {
+          studentsData.forEach(s => gradeMap.set(s.student_id, s.grade));
+        }
 
         const thisMonthMap = new Map<string, number>();
         const lastMonthMap = new Map<string, number>();
 
-        (data || []).forEach(log => {
+        (logsData || []).forEach(log => {
           if (!log.student_name || typeof log.score !== 'number') return;
-          if (!log.grade || !log.grade.includes('초')) return; // 중등부 제외
+          
+          // 💡 학생 명부에서 학년을 찾아 초등부가 아니면 제외합니다!
+          const grade = gradeMap.get(log.student_id) || '';
+          if (!grade.includes('초')) return; 
 
           const logDate = new Date(log.created_at);
 
           if (logDate >= startOfThisMonth) {
             const current = thisMonthMap.get(log.student_name) || 0;
-            thisMonthMap.set(log.student_name, current + log.score); // 💡 score를 거리(m)로 그대로 누적
+            thisMonthMap.set(log.student_name, current + log.score); 
           } else {
             const current = lastMonthMap.get(log.student_name) || 0;
             lastMonthMap.set(log.student_name, current + log.score);
           }
         });
 
-        // 이번달 전체 순위 정렬
         const sortedThisMonth = Array.from(thisMonthMap.entries())
           .map(([name, score]) => ({ studentName: name, score }))
           .sort((a, b) => b.score - a.score);
@@ -186,7 +191,6 @@ export default function Ranking({ onBack, studentName = "테스트학생" }: Ran
     fetchRankings();
   }, []);
 
-  // 💡 내 순위 찾기
   const myRankIndex = fullThisMonthRankings.findIndex(r => r.studentName === studentName);
   const myRankData = myRankIndex !== -1 ? fullThisMonthRankings[myRankIndex] : null;
   const myRankInfo = myRankData ? getMilitaryRank(myRankData.score, myRankIndex) : null;
@@ -202,7 +206,6 @@ export default function Ranking({ onBack, studentName = "테스트학생" }: Ran
         <div style={{ width: '80px' }}></div>
       </div>
 
-      {/* 💡 기존 공지 배너 유지 */}
       <div style={{ backgroundColor: '#fffdf0', border: '1px solid #ffda79', borderRadius: '12px', padding: '16px', marginBottom: '24px', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
         <div style={{ fontWeight: '900', color: '#cc8e00', fontSize: '15px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
           📢 [공지] 랭킹 이벤트 10월 연기 안내
@@ -220,11 +223,10 @@ export default function Ranking({ onBack, studentName = "테스트학생" }: Ran
       />
 
       <MarathonRankingCard 
-        data={fullThisMonthRankings.slice(0, 10)} // 💡 Top 10만 잘라서 전달
+        data={fullThisMonthRankings.slice(0, 10)} 
         isLoading={isLoading} 
       />
 
-      {/* 💡 [신규] 하단 고정 내 순위 표시줄 */}
       {!isLoading && (
         <div style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: '500px', backgroundColor: '#111', padding: '16px 20px', boxSizing: 'border-box', borderTopLeftRadius: '20px', borderTopRightRadius: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 -4px 20px rgba(0,0,0,0.15)', zIndex: 100 }}>
           {myRankData && myRankInfo ? (

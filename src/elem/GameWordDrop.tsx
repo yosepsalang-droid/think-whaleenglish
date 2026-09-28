@@ -70,6 +70,7 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
   const [hitFlash, setHitFlash] = useState<'none' | 'success' | 'fail'>('none');
 
   const inputRef = useRef<HTMLInputElement>(null); 
+  const clearLockRef = useRef(false); 
 
   const gameRef = useRef({
     wordsPool: [] as WordData[],
@@ -99,17 +100,14 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
     fetchBooks();
   }, []);
 
+  // 💡 [수정] 횟수 체크를 확실한 log_date로 조회하도록 변경!
   useEffect(() => {
     if (!selectedBook || !student?.id) return;
 
     const fetchPlayCount = async () => {
-      const now = new Date();
       const kstOffset = 9 * 60 * 60 * 1000;
-      const kstNow = new Date(now.getTime() + kstOffset);
-      const startOfDay = new Date(kstNow);
-      startOfDay.setUTCHours(0, 0, 0, 0);
-      const endOfDay = new Date(kstNow);
-      endOfDay.setUTCHours(23, 59, 59, 999);
+      const kstNow = new Date(Date.now() + kstOffset);
+      const logDateStr = `${kstNow.getUTCFullYear()}-${String(kstNow.getUTCMonth() + 1).padStart(2, '0')}-${String(kstNow.getUTCDate()).padStart(2, '0')}`;
 
       const { data } = await supabase
         .from('learning_logs')
@@ -117,8 +115,7 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
         .eq('student_id', student.id)
         .like('task_type', '%타자게임%')
         .eq('book_info', selectedBook)
-        .gte('created_at', getFakeUTCString(startOfDay))
-        .lte('created_at', getFakeUTCString(endOfDay));
+        .eq('log_date', logDateStr);
 
       setPlayCount(data?.length || 0);
     };
@@ -139,7 +136,8 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
       if (error) throw error;
       if (!data || data.length === 0) throw new Error("단어 데이터가 없습니다.");
 
-      const shuffledWords = [...data].sort(() => Math.random() - 0.5);
+      // 💡 [핵심 수정] 무작위로 섞은 뒤 딱 30문제만 자르기!
+      const shuffledWords = [...data].sort(() => Math.random() - 0.5).slice(0, 30);
 
       gameRef.current = {
         wordsPool: data,
@@ -157,6 +155,7 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
 
       setInputValue("");
       setAppPhase('PLAYING');
+      clearLockRef.current = false;
 
       requestRef.current = requestAnimationFrame(gameLoop);
 
@@ -213,14 +212,16 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
   };
 
   const forceClearInput = () => {
+    clearLockRef.current = true;
     setInputValue(""); 
     if (inputRef.current) {
       inputRef.current.value = ""; 
-      inputRef.current.blur(); // 스마트폰 키보드 잔상 완벽 제거용 트릭
+      inputRef.current.blur(); 
       setTimeout(() => {
         if (inputRef.current && !gameRef.current.isGameOver) inputRef.current.focus(); 
       }, 10);
     }
+    setTimeout(() => { clearLockRef.current = false; }, 150);
   };
 
   const gameLoop = () => {
@@ -241,7 +242,6 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
       const fw = state.fallingWords[i];
       fw.y += fw.speed * state.speedMultiplier;
 
-      // 💡 진짜 우주석이 바닥(85%)에 닿았을 때만 생명 차감! 가짜는 그냥 사라짐
       if (fw.y > 85) {
         if (fw.isCorrect) {
           lifeLost = true; 
@@ -269,9 +269,9 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
     requestRef.current = requestAnimationFrame(gameLoop);
   };
 
-  // 💡 [핵심 추가] 엔터나 확인 버튼을 눌렀을 때만 작동하는 진짜 채점 함수!
   const handleSubmitAnswer = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (clearLockRef.current) return;
     
     const state = gameRef.current;
     if (state.isGameOver || !inputValue.trim()) return;
@@ -289,9 +289,9 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
     
     if (matchIndex > -1) {
       if (state.fallingWords[matchIndex].isCorrect) {
-        hitCorrect = true; // 진짜 정답을 맞춤!
+        hitCorrect = true; 
       } else {
-        state.fallingWords.splice(matchIndex, 1); // 가짜 우주석을 침
+        state.fallingWords.splice(matchIndex, 1); 
       }
     }
 
@@ -304,7 +304,6 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
       state.combo += 1;
       state.needNewWave = true; 
     } else {
-      // 💡 [추가 기능] 오답(가짜 우주석이거나 스펠링 틀림) 제출 시 즉시 생명 1 차감!
       state.lives -= 1;
       state.combo = 0; 
       triggerHitFlash('fail'); 
@@ -312,7 +311,6 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
 
     forceClearInput();
 
-    // 💡 생명이 0이 되면 게임 오버 처리
     if (state.lives <= 0) {
       endGame(false);
     }
@@ -328,16 +326,15 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
 
     const modeText = mode === 'FIND_KOR' ? '뜻찾기' : '스펠링찾기';
 
-    const now = new Date();
     const kstOffset = 9 * 60 * 60 * 1000;
-    const kstNow = new Date(now.getTime() + kstOffset);
+    const kstNow = new Date(Date.now() + kstOffset);
     const logDateStr = `${kstNow.getUTCFullYear()}-${String(kstNow.getUTCMonth() + 1).padStart(2, '0')}-${String(kstNow.getUTCDate()).padStart(2, '0')}`;
 
     try {
+      // 💡 [핵심 수정] DB에 없는 grade 컬럼을 몰래 넣던 코드를 삭제! (에러 원인 해결)
       await supabase.from('learning_logs').insert([{
         student_id: student.id,
         student_name: student.name,
-        grade: student.grade || '초등부', 
         task_type: `타자게임(${modeText})`,
         book_info: selectedBook,
         score: state.score,
@@ -399,7 +396,7 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
 
           <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', padding: '12px 16px', borderRadius: '12px', marginBottom: '24px' }}>
             <p style={{ margin: 0, fontSize: '13px', color: '#15803d', fontWeight: 'bold', lineHeight: '1.5' }}>
-              💡 <b>게임 룰:</b> 진짜 정답을 키보드로 치고 <b>[엔터(확인)]</b>를 누르세요! 오답을 내면 즉시 하트가 깎입니다!
+              💡 <b>게임 룰:</b> 진짜 정답을 치고 <b>[엔터(확인)]</b>를 누르세요! 오답을 내면 즉시 하트가 깎입니다!
             </p>
           </div>
           
@@ -446,7 +443,7 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
         <div style={{ background: 'linear-gradient(to bottom, #1e293b, #0f172a)', padding: '40px 30px', borderRadius: '24px', boxShadow: '0 20px 40px rgba(0,0,0,0.5)', maxWidth: '400px', width: '100%', border: '1px solid #3b82f6' }}>
           <div style={{ fontSize: '60px', marginBottom: '16px' }}>🏆</div>
           <h2 style={{ fontSize: '28px', fontWeight: '900', marginBottom: '8px', color: '#f8fafc' }}>STAGE CLEAR!</h2>
-          <p style={{ color: '#94a3b8', marginBottom: '32px', fontSize: '16px', fontWeight: 'bold' }}>[{selectedBook}] 교재의 모든 단어를 마스터했습니다!</p>
+          <p style={{ color: '#94a3b8', marginBottom: '32px', fontSize: '16px', fontWeight: 'bold' }}>[{selectedBook}] 교재 방어전을 성공했습니다!</p>
           
           <div style={{ backgroundColor: 'rgba(59, 130, 246, 0.2)', padding: '24px', borderRadius: '16px', border: '2px solid #3b82f6', marginBottom: '32px' }}>
             <div style={{ fontSize: '14px', color: '#93c5fd', fontWeight: 'bold', marginBottom: '4px' }}>마라톤 전진 거리</div>
@@ -576,7 +573,6 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
           </div>
         </div>
 
-        {/* 💡 [핵심] 폼(Form)을 사용해 엔터키와 확인 버튼을 완벽 연동합니다. */}
         <form onSubmit={handleSubmitAnswer} style={{ display: 'flex', gap: '10px', width: '100%', padding: '20px', backgroundColor: '#020617', zIndex: 10, borderTop: '1px solid #1e293b' }}>
           <input
             ref={inputRef}
