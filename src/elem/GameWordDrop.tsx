@@ -70,7 +70,6 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
   const [hitFlash, setHitFlash] = useState<'none' | 'success' | 'fail'>('none');
 
   const inputRef = useRef<HTMLInputElement>(null); 
-  const clearLockRef = useRef(false); 
 
   const gameRef = useRef({
     wordsPool: [] as WordData[],
@@ -158,7 +157,6 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
 
       setInputValue("");
       setAppPhase('PLAYING');
-      clearLockRef.current = false; 
 
       requestRef.current = requestAnimationFrame(gameLoop);
 
@@ -214,23 +212,15 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
     setTimeout(() => setHitFlash('none'), 300);
   };
 
-  // 💡 [핵심 수정] 한글 키보드 잔상(꼬리표) 현상 완벽 제거를 위한 blur-focus 트릭 적용
   const forceClearInput = () => {
-    clearLockRef.current = true; 
     setInputValue(""); 
-    
     if (inputRef.current) {
       inputRef.current.value = ""; 
-      inputRef.current.blur(); // 스마트폰 키보드의 '한글 조합 상태'를 강제로 깹니다.
+      inputRef.current.blur(); // 스마트폰 키보드 잔상 완벽 제거용 트릭
       setTimeout(() => {
-        if (inputRef.current) inputRef.current.focus(); // 0.01초 뒤에 다시 커서를 줍니다.
+        if (inputRef.current && !gameRef.current.isGameOver) inputRef.current.focus(); 
       }, 10);
     }
-    
-    setTimeout(() => {
-      setInputValue("");
-      clearLockRef.current = false;
-    }, 150); 
   };
 
   const gameLoop = () => {
@@ -251,16 +241,16 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
       const fw = state.fallingWords[i];
       fw.y += fw.speed * state.speedMultiplier;
 
-      // 💡 y가 85 이상(바닥)일 때
+      // 💡 진짜 우주석이 바닥(85%)에 닿았을 때만 생명 차감! 가짜는 그냥 사라짐
       if (fw.y > 85) {
         if (fw.isCorrect) {
-          lifeLost = true; // 진짜 정답이 떨어지면 생명 차감!
+          lifeLost = true; 
           state.fallingWords = []; 
           state.needNewWave = true; 
           state.combo = 0; 
           break; 
         } else {
-          state.fallingWords.splice(i, 1); // 가짜면 그냥 터져서 사라짐
+          state.fallingWords.splice(i, 1); 
         }
       }
     }
@@ -279,46 +269,52 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
     requestRef.current = requestAnimationFrame(gameLoop);
   };
 
-  const handleType = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 💡 [핵심 추가] 엔터나 확인 버튼을 눌렀을 때만 작동하는 진짜 채점 함수!
+  const handleSubmitAnswer = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    
     const state = gameRef.current;
-    if (state.isGameOver) return;
-    if (clearLockRef.current) {
-      e.target.value = "";
-      return;
-    }
+    if (state.isGameOver || !inputValue.trim()) return;
 
-    const val = e.target.value;
-    setInputValue(val);
-
+    const val = inputValue;
     const cleanInput = mode === 'FIND_ENG' 
         ? val.toLowerCase().replace(/[^a-z0-9]/g, '') 
         : val.replace(/[^가-힣a-zA-Z0-9]/g, '');
 
+    let hitCorrect = false;
+
     const matchIndex = state.fallingWords.findIndex(w => 
-      w.acceptableAnswers.some(ans => {
-        if (ans === cleanInput) return true;
-        if (mode === 'FIND_KOR' && cleanInput.length >= 2 && ans.endsWith(cleanInput)) return true;
-        return false;
-      })
+      w.acceptableAnswers.some(ans => ans === cleanInput)
     );
     
     if (matchIndex > -1) {
-      const hitWord = state.fallingWords[matchIndex];
-      if (hitWord.isCorrect) {
-        state.fallingWords = []; 
-        forceClearInput(); 
-        triggerHitFlash('success'); 
-        
-        const baseScore = mode === 'FIND_ENG' ? 2 : 1; 
-        state.score += baseScore;
-        state.combo += 1;
-        state.needNewWave = true; 
+      if (state.fallingWords[matchIndex].isCorrect) {
+        hitCorrect = true; // 진짜 정답을 맞춤!
       } else {
-        state.fallingWords.splice(matchIndex, 1); 
-        forceClearInput();
-        triggerHitFlash('fail'); 
-        state.combo = 0; 
+        state.fallingWords.splice(matchIndex, 1); // 가짜 우주석을 침
       }
+    }
+
+    if (hitCorrect) {
+      state.fallingWords = []; 
+      triggerHitFlash('success'); 
+      
+      const baseScore = mode === 'FIND_ENG' ? 2 : 1; 
+      state.score += baseScore;
+      state.combo += 1;
+      state.needNewWave = true; 
+    } else {
+      // 💡 [추가 기능] 오답(가짜 우주석이거나 스펠링 틀림) 제출 시 즉시 생명 1 차감!
+      state.lives -= 1;
+      state.combo = 0; 
+      triggerHitFlash('fail'); 
+    }
+
+    forceClearInput();
+
+    // 💡 생명이 0이 되면 게임 오버 처리
+    if (state.lives <= 0) {
+      endGame(false);
     }
   };
 
@@ -338,11 +334,10 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
     const logDateStr = `${kstNow.getUTCFullYear()}-${String(kstNow.getUTCMonth() + 1).padStart(2, '0')}-${String(kstNow.getUTCDate()).padStart(2, '0')}`;
 
     try {
-      // 💡 [핵심 수정] 랭킹에 무조건 반영되도록 student.grade 추가!
       await supabase.from('learning_logs').insert([{
         student_id: student.id,
         student_name: student.name,
-        grade: student.grade || '초등부', // 학년 꼬리표 추가!
+        grade: student.grade || '초등부', 
         task_type: `타자게임(${modeText})`,
         book_info: selectedBook,
         score: state.score,
@@ -404,7 +399,7 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
 
           <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', padding: '12px 16px', borderRadius: '12px', marginBottom: '24px' }}>
             <p style={{ margin: 0, fontSize: '13px', color: '#15803d', fontWeight: 'bold', lineHeight: '1.5' }}>
-              💡 <b>게임 룰:</b> 제시된 단어를 보고, 떨어지는 3개의 우주석 중 <b>진짜 정답</b>만 골라서 타자를 쳐주세요! (가짜를 치면 콤보가 끊겨요)
+              💡 <b>게임 룰:</b> 진짜 정답을 키보드로 치고 <b>[엔터(확인)]</b>를 누르세요! 오답을 내면 즉시 하트가 깎입니다!
             </p>
           </div>
           
@@ -581,12 +576,13 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
           </div>
         </div>
 
-        <div style={{ padding: '20px', backgroundColor: '#020617', zIndex: 10, borderTop: '1px solid #1e293b' }}>
+        {/* 💡 [핵심] 폼(Form)을 사용해 엔터키와 확인 버튼을 완벽 연동합니다. */}
+        <form onSubmit={handleSubmitAnswer} style={{ display: 'flex', gap: '10px', width: '100%', padding: '20px', backgroundColor: '#020617', zIndex: 10, borderTop: '1px solid #1e293b' }}>
           <input
             ref={inputRef}
             type="text"
             value={inputValue}
-            onChange={handleType}
+            onChange={(e) => setInputValue(e.target.value)}
             autoFocus
             autoComplete="off" 
             autoCorrect="off" 
@@ -594,14 +590,14 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
             spellCheck={false} 
             data-lpignore="true" 
             list="autocompleteOff"
-            placeholder={mode === 'FIND_KOR' ? "정답인 뜻을 공격(입력)!" : "스펠링을 공격(입력)!"}
+            placeholder={mode === 'FIND_KOR' ? "정답 입력 후 엔터!" : "스펠링 입력 후 엔터!"}
             style={{
-              width: '100%',
-              padding: '20px',
-              fontSize: '22px',
+              flex: 1,
+              padding: '16px',
+              fontSize: '20px',
               fontWeight: '900',
               textAlign: 'center',
-              borderRadius: '16px',
+              borderRadius: '12px',
               border: hitFlash === 'fail' ? '3px solid #ef4444' : '3px solid #3b82f6',
               backgroundColor: '#0f172a',
               color: '#f8fafc',
@@ -611,7 +607,22 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
               transition: 'all 0.1s'
             }}
           />
-        </div>
+          <button 
+            type="submit" 
+            style={{ 
+              padding: '0 24px', 
+              backgroundColor: '#3b82f6', 
+              color: 'white', 
+              border: 'none', 
+              borderRadius: '12px', 
+              fontSize: '18px', 
+              fontWeight: '900', 
+              cursor: 'pointer' 
+            }}
+          >
+            확인
+          </button>
+        </form>
       </div>
     </div>
   );
