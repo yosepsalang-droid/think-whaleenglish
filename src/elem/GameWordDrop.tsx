@@ -300,10 +300,10 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
         forceClearInput(); 
         triggerHitFlash('success'); 
         
-        const baseScore = mode === 'FIND_ENG' ? 20 : 10;
-        const comboBonus = state.combo * 2; 
+        // 💡 [수정] 1문제당 1m (스펠링 모드는 2m). 콤보 보너스는 마라톤 형평성을 위해 제외
+        const baseScore = mode === 'FIND_ENG' ? 2 : 1; 
         
-        state.score += (baseScore + comboBonus);
+        state.score += baseScore;
         state.combo += 1;
         state.needNewWave = true; 
       } else {
@@ -325,7 +325,6 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
 
     const modeText = mode === 'FIND_KOR' ? '뜻찾기' : '스펠링찾기';
 
-    // 💡 누락되었던 log_date(오늘 날짜)와 attempt 생성 로직 추가!
     const now = new Date();
     const kstOffset = 9 * 60 * 60 * 1000;
     const kstNow = new Date(now.getTime() + kstOffset);
@@ -339,8 +338,8 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
         book_info: selectedBook,
         score: state.score,
         status: '완료',
-        attempt: 1, // 💡 랭킹 반영을 위해 필수!
-        log_date: logDateStr // 💡 랭킹 반영을 위해 필수!
+        attempt: 1, 
+        log_date: logDateStr 
       }]);
 
       await fetch(CONFIG.WEB_APP_URL, {
@@ -357,7 +356,6 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
         }),
       });
 
-      // 💡 [핵심] 게임 점수를 메인 화면 랭킹에 실시간 연동
       if (onGameComplete && state.score > 0) {
         onGameComplete(state.score);
       }
@@ -414,11 +412,11 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <button onClick={() => setMode('FIND_KOR')} style={{ padding: '16px', borderRadius: '12px', fontWeight: '800', fontSize: '15px', border: `2px solid ${mode === 'FIND_KOR' ? '#3b82f6' : '#e2e8f0'}`, backgroundColor: mode === 'FIND_KOR' ? '#eff6ff' : 'white', color: mode === 'FIND_KOR' ? '#2563eb' : '#64748b', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', transition: 'all 0.2s' }}>
                 <span>🟢 영어 제시어 ➡️ <b>한글 뜻 찾기</b></span>
-                <span style={{ fontSize: '13px', color: mode === 'FIND_KOR' ? '#3b82f6' : '#9ca3af' }}>기본 10점</span>
+                <span style={{ fontSize: '13px', color: mode === 'FIND_KOR' ? '#3b82f6' : '#9ca3af' }}>기본 1m 획득</span>
               </button>
               <button onClick={() => setMode('FIND_ENG')} style={{ padding: '16px', borderRadius: '12px', fontWeight: '800', fontSize: '15px', border: `2px solid ${mode === 'FIND_ENG' ? '#ef4444' : '#e2e8f0'}`, backgroundColor: mode === 'FIND_ENG' ? '#fef2f2' : 'white', color: mode === 'FIND_ENG' ? '#dc2626' : '#64748b', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', transition: 'all 0.2s' }}>
                 <span>🔥 한글 제시어 ➡️ <b>영어 스펠링 찾기</b></span>
-                <span style={{ fontSize: '13px', fontWeight: '900', color: '#ef4444' }}>어려움 (점수 2배)</span>
+                <span style={{ fontSize: '13px', fontWeight: '900', color: '#ef4444' }}>어려움 (2m 획득)</span>
               </button>
             </div>
           </div>
@@ -447,9 +445,10 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
           <p style={{ color: '#94a3b8', marginBottom: '32px', fontSize: '16px', fontWeight: 'bold' }}>[{selectedBook}] 교재의 모든 단어를 마스터했습니다!</p>
           
           <div style={{ backgroundColor: 'rgba(59, 130, 246, 0.2)', padding: '24px', borderRadius: '16px', border: '2px solid #3b82f6', marginBottom: '32px' }}>
-            <div style={{ fontSize: '14px', color: '#93c5fd', fontWeight: 'bold', marginBottom: '4px' }}>최종 획득 점수</div>
-            <div style={{ fontSize: '42px', fontWeight: '900', color: '#60a5fa' }}>{finalScore} <span style={{ fontSize: '20px' }}>점</span></div>
-            <div style={{ fontSize: '12px', color: '#93c5fd', marginTop: '8px', fontWeight: 'bold' }}>완벽한 우주 방어 성공! 랭킹에 등록되었습니다 🚀</div>
+            <div style={{ fontSize: '14px', color: '#93c5fd', fontWeight: 'bold', marginBottom: '4px' }}>마라톤 전진 거리</div>
+            <div style={{ fontSize: '42px', fontWeight: '900', color: '#60a5fa' }}>{finalScore} <span style={{ fontSize: '20px' }}>m</span></div>
+            {/* 💡 랭킹 멘트 제거, 마라톤 트랙 멘트로 수정 */}
+            <div style={{ fontSize: '12px', color: '#93c5fd', marginTop: '8px', fontWeight: 'bold' }}>완벽한 우주 방어 성공! 마라톤 거리가 누적되었습니다 🏃‍♂️</div>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -478,9 +477,10 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
           <p style={{ color: '#94a3b8', marginBottom: '32px', fontSize: '16px', fontWeight: 'bold' }}>정답 우주석이 기지에 충돌했습니다!</p>
           
           <div style={{ backgroundColor: 'rgba(21, 128, 61, 0.2)', padding: '24px', borderRadius: '16px', border: '2px solid #22c55e', marginBottom: '32px' }}>
-            <div style={{ fontSize: '14px', color: '#4ade80', fontWeight: 'bold', marginBottom: '4px' }}>최종 획득 점수</div>
-            <div style={{ fontSize: '42px', fontWeight: '900', color: '#22c55e' }}>{finalScore} <span style={{ fontSize: '20px' }}>점</span></div>
-            <div style={{ fontSize: '12px', color: '#4ade80', marginTop: '8px', fontWeight: 'bold' }}>이 점수는 랭킹에 합산되었습니다 👑</div>
+            <div style={{ fontSize: '14px', color: '#4ade80', fontWeight: 'bold', marginBottom: '4px' }}>마라톤 전진 거리</div>
+            <div style={{ fontSize: '42px', fontWeight: '900', color: '#22c55e' }}>{finalScore} <span style={{ fontSize: '20px' }}>m</span></div>
+            {/* 💡 랭킹 멘트 제거, 마라톤 트랙 멘트로 수정 */}
+            <div style={{ fontSize: '12px', color: '#4ade80', marginTop: '8px', fontWeight: 'bold' }}>지금까지 획득한 거리는 마라톤 트랙에 합산됩니다 🏃‍♂️</div>
           </div>
 
           <button onClick={() => setAppPhase('SETUP')} style={{ backgroundColor: '#3b82f6', color: 'white', border: 'none', padding: '16px', borderRadius: '16px', fontWeight: '800', fontSize: '16px', width: '100%', cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
@@ -503,7 +503,7 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
       <div style={{ width: '100%', maxWidth: '480px', height: '100vh', maxHeight: '800px', backgroundColor: getBackgroundColor(), backgroundImage: 'radial-gradient(circle at 50% 10%, #1e293b 0%, #0f172a 80%)', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 0 30px rgba(0,0,0,0.8)', transition: 'background-color 0.1s' }}>
         <div style={{ padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', zIndex: 10 }}>
           <div>
-            <div style={{ fontSize: '14px', color: '#94a3b8', fontWeight: 'bold', marginBottom: '4px' }}>SCORE</div>
+            <div style={{ fontSize: '14px', color: '#94a3b8', fontWeight: 'bold', marginBottom: '4px' }}>전진 거리 (m)</div>
             <div style={{ fontSize: '28px', fontWeight: '900', color: '#fbbf24', textShadow: '0 2px 10px rgba(251, 191, 36, 0.5)' }}>{st.score}</div>
           </div>
           <div style={{ textAlign: 'right' }}>
@@ -575,12 +575,19 @@ export default function GameWordDrop({ student, onBack, onGameComplete }: GameWo
         </div>
 
         <div style={{ padding: '20px', backgroundColor: '#020617', zIndex: 10, borderTop: '1px solid #1e293b' }}>
+          {/* 💡 [핵심] 자동완성 및 스펠링 체크 원천 차단 속성 6개 모두 추가! */}
           <input
             ref={inputRef}
             type="text"
             value={inputValue}
             onChange={handleType}
             autoFocus
+            autoComplete="off" 
+            autoCorrect="off" 
+            autoCapitalize="off" 
+            spellCheck={false} 
+            data-lpignore="true" 
+            list="autocompleteOff"
             placeholder={mode === 'FIND_KOR' ? "정답인 뜻을 공격(입력)!" : "스펠링을 공격(입력)!"}
             style={{
               width: '100%',
