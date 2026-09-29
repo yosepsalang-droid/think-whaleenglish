@@ -129,37 +129,66 @@ export default function Ranking({ onBack, studentName = "테스트학생" }: Ran
         const startOfThisMonth = new Date(year, month, 1);
         const startOfLastMonth = new Date(year, month - 1, 1);
 
-        // 💡 1. 여기서 실수로 빼먹었던 student_id 를 다시 추가했습니다! (중요)
-        const { data: logsData, error: logsError } = await supabase
-          .from('learning_logs')
-          .select('student_id, student_name, score, created_at') 
-          .gte('created_at', startOfLastMonth.toISOString()) 
-          .eq('status', '완료')
-          .limit(50000); 
+        // 💡 [핵심] 수파베이스의 1,000개 데이터 제한을 뚫는 싹쓸이(while) 로직 추가!
+        let allLogs: any[] = [];
+        let from = 0;
+        const step = 1000;
+        let isFetchingLogs = true;
 
-        if (logsError) throw logsError;
+        // 데이터가 안 나올 때까지 1000개씩 계속 퍼옵니다.
+        while (isFetchingLogs) {
+          const { data, error } = await supabase
+            .from('learning_logs')
+            .select('student_id, student_name, score, created_at') 
+            .gte('created_at', startOfLastMonth.toISOString()) 
+            .eq('status', '완료')
+            .range(from, from + step - 1); 
 
-        // 💡 2. 학생 명부에서 학년과 아이디를 넉넉하게 불러옵니다.
-        const { data: studentsData, error: studentsError } = await supabase
-          .from('students')
-          .select('student_id, grade')
-          .limit(10000);
+          if (error) throw error;
 
-        if (studentsError) throw studentsError;
+          if (data && data.length > 0) {
+            allLogs = [...allLogs, ...data];
+            from += step;
+            if (data.length < step) isFetchingLogs = false; // 더 이상 가져올 게 없으면 종료
+          } else {
+            isFetchingLogs = false;
+          }
+        }
 
-        // 💡 3. 아이디(student_id)를 열쇠로 써서 학년을 매칭합니다.
+        // 학생 명부도 넉넉하게 싹쓸이해서 가져옵니다.
+        let allStudents: any[] = [];
+        let studentFrom = 0;
+        let isFetchingStudents = true;
+        
+        while (isFetchingStudents) {
+          const { data, error } = await supabase
+            .from('students')
+            .select('student_id, grade')
+            .range(studentFrom, studentFrom + step - 1);
+
+          if (error) throw error;
+
+          if (data && data.length > 0) {
+            allStudents = [...allStudents, ...data];
+            studentFrom += step;
+            if (data.length < step) isFetchingStudents = false;
+          } else {
+            isFetchingStudents = false;
+          }
+        }
+
         const gradeMap = new Map<string, string>();
-        (studentsData || []).forEach(s => {
+        allStudents.forEach(s => {
           if (s.student_id) gradeMap.set(s.student_id, s.grade || '');
         });
 
         const thisMonthMap = new Map<string, number>();
         const lastMonthMap = new Map<string, number>();
 
-        (logsData || []).forEach(log => {
+        allLogs.forEach(log => {
           if (!log.student_name || typeof log.score !== 'number') return;
           
-          // 💡 4. 이제 완벽하게 아이디로 초등부인지 확인합니다!
+          // 초등부인지 확인
           const studentGrade = gradeMap.get(log.student_id) || '';
           if (!studentGrade.includes('초')) return; 
 
