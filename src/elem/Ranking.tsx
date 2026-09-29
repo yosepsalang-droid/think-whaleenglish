@@ -11,6 +11,24 @@ interface RankingProps {
   studentName?: string; 
 }
 
+// 💡 리액트 그래픽으로 직접 그리는 병사 계급장 (작대기 세로 쌓기)
+const renderEnlisted = (count: number) => (
+  <span style={{ display: 'inline-flex', flexDirection: 'column', gap: '3px', alignItems: 'center', verticalAlign: 'middle', margin: '0 4px', transform: 'translateY(-1px)' }}>
+    {Array.from({ length: count }).map((_, i) => (
+      <span key={i} style={{ width: '16px', height: '4px', backgroundColor: '#334155', borderRadius: '1px' }}></span>
+    ))}
+  </span>
+);
+
+// 💡 리액트 그래픽으로 직접 그리는 부사관 계급장 (V자 세로 쌓기)
+const renderNCO = (count: number) => (
+  <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', verticalAlign: 'middle', lineHeight: '0.4', margin: '0 4px', color: '#b45309', fontWeight: '900', fontSize: '15px' }}>
+    {Array.from({ length: count }).map((_, i) => (
+      <span key={i} style={{ transform: 'scale(1.2, 0.8)' }}>V</span>
+    ))}
+  </span>
+);
+
 const getMilitaryRank = (meters: number, rankIndex: number) => {
   if (meters >= 42195) {
     if (rankIndex === 0) return { title: '4성 장군', icon: '⭐⭐⭐⭐' };
@@ -19,19 +37,19 @@ const getMilitaryRank = (meters: number, rankIndex: number) => {
   }
   if (meters >= 35000) return { title: '2성 장군', icon: '⭐⭐' };
   if (meters >= 25000) return { title: '1성 장군', icon: '⭐' };
-  if (meters >= 21097) return { title: '대령', icon: '🦅' };
-  if (meters >= 15000) return { title: '중령', icon: '🦅' };
-  if (meters >= 10000) return { title: '소령', icon: '🦅' };
-  if (meters >= 8500) return { title: '대위', icon: '💎' };
-  if (meters >= 7000) return { title: '중위', icon: '💎' };
+  if (meters >= 21097) return { title: '대령', icon: '💮💮💮' };
+  if (meters >= 15000) return { title: '중령', icon: '💮💮' };
+  if (meters >= 10000) return { title: '소령', icon: '💮' };
+  if (meters >= 8500) return { title: '대위', icon: '💎💎💎' };
+  if (meters >= 7000) return { title: '중위', icon: '💎💎' };
   if (meters >= 5000) return { title: '소위', icon: '💎' };
-  if (meters >= 4000) return { title: '상사', icon: '🏅' };
-  if (meters >= 2500) return { title: '중사', icon: '🏅' };
-  if (meters >= 1000) return { title: '하사', icon: '🏅' };
-  if (meters >= 900) return { title: '병장', icon: '🪖' };
-  if (meters >= 600) return { title: '상병', icon: '🪖' };
-  if (meters >= 300) return { title: '일병', icon: '🪖' };
-  if (meters >= 100) return { title: '이등병', icon: '🪖' };
+  if (meters >= 4000) return { title: '상사', icon: renderNCO(3) };
+  if (meters >= 2500) return { title: '중사', icon: renderNCO(2) };
+  if (meters >= 1000) return { title: '하사', icon: renderNCO(1) };
+  if (meters >= 900) return { title: '병장', icon: renderEnlisted(4) };
+  if (meters >= 600) return { title: '상병', icon: renderEnlisted(3) };
+  if (meters >= 300) return { title: '일병', icon: renderEnlisted(2) };
+  if (meters >= 100) return { title: '이등병', icon: renderEnlisted(1) };
   return { title: '훈련병', icon: '🌱' };
 };
 
@@ -81,13 +99,15 @@ function MarathonRankingCard({ data, isLoading }: { data: RankData[]; isLoading:
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', position: 'relative', zIndex: 1 }}>
           {data.map((item, index) => {
             const rankInfo = getMilitaryRank(item.score, index);
-            const shiftRight = index * 14; 
+            const shiftAmount = index * 14; 
             
             return (
               <div key={index} style={{ 
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
                 padding: '10px 14px', backgroundColor: 'white', borderRadius: '12px', 
-                boxShadow: '0 4px 6px rgba(0,0,0,0.05)', marginLeft: `${shiftRight}px`,
+                boxShadow: '0 4px 6px rgba(0,0,0,0.05)', 
+                // 💡 [핵심 수정] marginLeft를 marginRight로 변경하여 왼쪽 벽에 붙이고 오른쪽으로 뻗어나가게 수정했습니다!
+                marginRight: `${shiftAmount}px`, 
                 border: index === 0 ? '2px solid #fbbf24' : '1px solid #e2e8f0'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -129,13 +149,11 @@ export default function Ranking({ onBack, studentName = "테스트학생" }: Ran
         const startOfThisMonth = new Date(year, month, 1);
         const startOfLastMonth = new Date(year, month - 1, 1);
 
-        // 💡 [핵심] 수파베이스의 1,000개 데이터 제한을 뚫는 싹쓸이(while) 로직 추가!
         let allLogs: any[] = [];
         let from = 0;
         const step = 1000;
         let isFetchingLogs = true;
 
-        // 데이터가 안 나올 때까지 1000개씩 계속 퍼옵니다.
         while (isFetchingLogs) {
           const { data, error } = await supabase
             .from('learning_logs')
@@ -149,13 +167,12 @@ export default function Ranking({ onBack, studentName = "테스트학생" }: Ran
           if (data && data.length > 0) {
             allLogs = [...allLogs, ...data];
             from += step;
-            if (data.length < step) isFetchingLogs = false; // 더 이상 가져올 게 없으면 종료
+            if (data.length < step) isFetchingLogs = false; 
           } else {
             isFetchingLogs = false;
           }
         }
 
-        // 학생 명부도 넉넉하게 싹쓸이해서 가져옵니다.
         let allStudents: any[] = [];
         let studentFrom = 0;
         let isFetchingStudents = true;
@@ -188,7 +205,6 @@ export default function Ranking({ onBack, studentName = "테스트학생" }: Ran
         allLogs.forEach(log => {
           if (!log.student_name || typeof log.score !== 'number') return;
           
-          // 초등부인지 확인
           const studentGrade = gradeMap.get(log.student_id) || '';
           if (!studentGrade.includes('초')) return; 
 
