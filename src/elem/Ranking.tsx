@@ -129,28 +129,28 @@ export default function Ranking({ onBack, studentName = "테스트학생" }: Ran
         const startOfThisMonth = new Date(year, month, 1);
         const startOfLastMonth = new Date(year, month - 1, 1);
 
-        // 💡 [핵심 해결책] .limit(50000)을 추가하여 데이터가 1000개에서 짤리는 현상을 방지합니다!
+        // 💡 1. 여기서 실수로 빼먹었던 student_id 를 다시 추가했습니다! (중요)
         const { data: logsData, error: logsError } = await supabase
           .from('learning_logs')
-          .select('student_name, score, created_at') 
+          .select('student_id, student_name, score, created_at') 
           .gte('created_at', startOfLastMonth.toISOString()) 
           .eq('status', '완료')
           .limit(50000); 
 
         if (logsError) throw logsError;
 
-        // 💡 학생 명부도 넉넉하게 가져옵니다.
+        // 💡 2. 학생 명부에서 학년과 아이디를 넉넉하게 불러옵니다.
         const { data: studentsData, error: studentsError } = await supabase
           .from('students')
-          .select('*')
+          .select('student_id, grade')
           .limit(10000);
 
         if (studentsError) throw studentsError;
 
+        // 💡 3. 아이디(student_id)를 열쇠로 써서 학년을 매칭합니다.
         const gradeMap = new Map<string, string>();
         (studentsData || []).forEach(s => {
-          const sName = s.name || s.student_name; 
-          if (sName) gradeMap.set(sName, s.grade || '');
+          if (s.student_id) gradeMap.set(s.student_id, s.grade || '');
         });
 
         const thisMonthMap = new Map<string, number>();
@@ -159,7 +159,8 @@ export default function Ranking({ onBack, studentName = "테스트학생" }: Ran
         (logsData || []).forEach(log => {
           if (!log.student_name || typeof log.score !== 'number') return;
           
-          const studentGrade = gradeMap.get(log.student_name) || '';
+          // 💡 4. 이제 완벽하게 아이디로 초등부인지 확인합니다!
+          const studentGrade = gradeMap.get(log.student_id) || '';
           if (!studentGrade.includes('초')) return; 
 
           const logDate = new Date(log.created_at);
