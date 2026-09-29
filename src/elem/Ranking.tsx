@@ -83,7 +83,12 @@ function HonorRollCard({ data, isLoading }: { data: RankData[]; isLoading: boole
   );
 }
 
-function MarathonRankingCard({ data, isLoading }: { data: RankData[]; isLoading: boolean }) {
+// 💡 [핵심] 내 순위를 화면 아래쪽에 추가로 그려주는 로직을 넣었습니다.
+function MarathonRankingCard({ 
+  data, isLoading, myRankData, myRankIndex, myRankInfo, studentName 
+}: { 
+  data: RankData[]; isLoading: boolean; myRankData: RankData | null; myRankIndex: number; myRankInfo: any; studentName: string;
+}) {
   return (
     <div style={{ backgroundColor: '#f0fdf4', border: '2px solid #86efac', borderRadius: '16px', padding: '20px 16px', marginBottom: '20px', position: 'relative', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', top: 0, left: '20px', width: '2px', height: '100%', backgroundColor: '#bbf7d0', zIndex: 0 }}></div>
@@ -100,32 +105,71 @@ function MarathonRankingCard({ data, isLoading }: { data: RankData[]; isLoading:
           {data.map((item, index) => {
             const rankInfo = getMilitaryRank(item.score, index);
             const shiftAmount = index * 14; 
+            const isMe = item.studentName === studentName; // 💡 내가 Top 10에 있는지 확인
             
             return (
               <div key={index} style={{ 
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
-                padding: '10px 14px', backgroundColor: 'white', borderRadius: '12px', 
-                boxShadow: '0 4px 6px rgba(0,0,0,0.05)', 
-                // 💡 [핵심 수정] marginLeft를 marginRight로 변경하여 왼쪽 벽에 붙이고 오른쪽으로 뻗어나가게 수정했습니다!
+                padding: '10px 14px', 
+                // 💡 내가 Top 10에 있으면 눈에 띄게 파란색으로 칠해줍니다!
+                backgroundColor: isMe ? '#eff6ff' : 'white', 
+                borderRadius: '12px', 
+                boxShadow: isMe ? '0 4px 12px rgba(59,130,246,0.3)' : '0 4px 6px rgba(0,0,0,0.05)', 
                 marginRight: `${shiftAmount}px`, 
-                border: index === 0 ? '2px solid #fbbf24' : '1px solid #e2e8f0'
+                border: isMe ? '2px solid #3b82f6' : (index === 0 ? '2px solid #fbbf24' : '1px solid #e2e8f0'),
+                position: isMe ? 'relative' : 'static',
+                zIndex: isMe ? 10 : 1
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '16px', fontWeight: '900', color: index < 3 ? '#ea580c' : '#64748b', minWidth: '24px' }}>
+                  <span style={{ fontSize: '16px', fontWeight: '900', color: isMe ? '#2563eb' : (index < 3 ? '#ea580c' : '#64748b'), minWidth: '24px' }}>
                     {index + 1}위
                   </span>
                   <span style={{ fontSize: '18px' }}>{rankInfo.icon}</span>
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span style={{ fontSize: '15px', fontWeight: '800', color: '#111' }}>{item.studentName}</span>
-                    <span style={{ fontSize: '11px', color: '#64748b', fontWeight: '600' }}>{rankInfo.title}</span>
+                    <span style={{ fontSize: '15px', fontWeight: '800', color: isMe ? '#1e3a8a' : '#111' }}>
+                      {item.studentName} {isMe && '(나)'}
+                    </span>
+                    <span style={{ fontSize: '11px', color: isMe ? '#3b82f6' : '#64748b', fontWeight: '600' }}>{rankInfo.title}</span>
                   </div>
                 </div>
-                <div style={{ backgroundColor: '#111', color: '#4ade80', padding: '6px 12px', borderRadius: '8px', fontSize: '15px', fontWeight: '900', fontFamily: 'monospace' }}>
+                <div style={{ backgroundColor: isMe ? '#2563eb' : '#111', color: isMe ? 'white' : '#4ade80', padding: '6px 12px', borderRadius: '8px', fontSize: '15px', fontWeight: '900', fontFamily: 'monospace' }}>
                   {item.score.toLocaleString()}m
                 </div>
               </div>
             );
           })}
+
+          {/* 💡 [핵심] 내가 Top 10 안에 없을 경우, 리스트 맨 아래에 점선(⋮)과 함께 내 순위를 보여줍니다! */}
+          {myRankData && myRankIndex >= 10 && myRankInfo && (
+            <>
+              <div style={{ textAlign: 'center', color: '#94a3b8', margin: '6px 0', fontSize: '20px', fontWeight: '900', lineHeight: '0.8' }}>
+                ⋮
+              </div>
+              <div style={{ 
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+                padding: '10px 14px', backgroundColor: '#eff6ff', borderRadius: '12px', 
+                boxShadow: '0 4px 12px rgba(59,130,246,0.3)', 
+                border: '2px solid #3b82f6',
+                position: 'relative',
+                zIndex: 10
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '16px', fontWeight: '900', color: '#2563eb', minWidth: '24px' }}>
+                    {myRankIndex + 1}위
+                  </span>
+                  <span style={{ fontSize: '18px' }}>{myRankInfo.icon}</span>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span style={{ fontSize: '15px', fontWeight: '800', color: '#1e3a8a' }}>{myRankData.studentName} (나)</span>
+                    <span style={{ fontSize: '11px', color: '#3b82f6', fontWeight: '600' }}>{myRankInfo.title}</span>
+                  </div>
+                </div>
+                <div style={{ backgroundColor: '#2563eb', color: 'white', padding: '6px 12px', borderRadius: '8px', fontSize: '15px', fontWeight: '900', fontFamily: 'monospace' }}>
+                  {myRankData.score.toLocaleString()}m
+                </div>
+              </div>
+            </>
+          )}
+
         </div>
       )}
     </div>
@@ -252,7 +296,7 @@ export default function Ranking({ onBack, studentName = "테스트학생" }: Ran
         <button onClick={onBack} style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #ccc', backgroundColor: 'white', cursor: 'pointer', fontWeight: 'bold' }}>
           ← 뒤로가기
         </button>
-        <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 'bold' }}>통합 마라톤 랭킹전</h2>
+        <h2 style={{ margin: '0 0 12px 0', fontSize: '20px', fontWeight: 'bold' }}>통합 마라톤 랭킹전</h2>
         <div style={{ width: '80px' }}></div>
       </div>
 
@@ -272,11 +316,17 @@ export default function Ranking({ onBack, studentName = "테스트학생" }: Ran
         isLoading={isLoading} 
       />
 
+      {/* 💡 [핵심] 여기에 나의 랭킹 정보를 같이 넘겨줍니다! */}
       <MarathonRankingCard 
         data={fullThisMonthRankings.slice(0, 10)} 
         isLoading={isLoading} 
+        myRankData={myRankData}
+        myRankIndex={myRankIndex}
+        myRankInfo={myRankInfo}
+        studentName={studentName}
       />
 
+      {/* 💡 하단 고정 내 순위바는 화면 스크롤을 내려도 항상 내 위치를 볼 수 있게 유지해 두었습니다! */}
       {!isLoading && (
         <div style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: '500px', backgroundColor: '#111', padding: '16px 20px', boxSizing: 'border-box', borderTopLeftRadius: '20px', borderTopRightRadius: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 -4px 20px rgba(0,0,0,0.15)', zIndex: 100 }}>
           {myRankData && myRankInfo ? (
