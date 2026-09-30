@@ -36,7 +36,7 @@ export default function App() {
   const [loggedInStudent, setLoggedInStudent] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   
-  // 💡 [수정] studentMode에 'phonics' 모드를 추가했습니다.
+  // 💡 studentMode에 'phonics' 모드를 추가했습니다.
   const [studentMode, setStudentMode] = useState<'elementary' | 'middle' | 'phonics' | null>(null);
   
   const [integratedRank, setIntegratedRank] = useState<IntegratedRankingResult & { loading: boolean }>({
@@ -114,7 +114,7 @@ export default function App() {
     }
   };
 
-  // 💡 [수정] phonics 모드도 처리할 수 있게 변경했습니다.
+  // 💡 phonics 모드도 처리할 수 있게 변경했습니다.
   const handleModeSelect = (mode: 'elementary' | 'middle' | 'phonics') => {
     if (!loggedInStudent) {
       setLoggedInStudent({
@@ -141,7 +141,7 @@ export default function App() {
       return <Lms onBack={() => { setIsLoggedIn(false); setIsAdmin(false); setId(''); }} />;
     }
 
-    // 💡 [핵심] 파닉스 모드일 때 PhonicsLobby 화면을 띄워줍니다!
+    // 💡 파닉스 모드일 때 PhonicsLobby 화면을 띄워줍니다!
     if (loggedInStudent && studentMode === 'phonics') {
       return <PhonicsLobby onBack={handleBackToSelect} studentName={loggedInStudent.name} stars={150} />;
     }
@@ -187,7 +187,13 @@ export default function App() {
           
           {currentMenu === 'gameWordDrop' && <GameWordDrop student={loggedInStudent} onBack={() => setCurrentMenu('home')} onGameComplete={handleGameComplete} />}
           
-          {currentMenu === 'ranking' && <Ranking onBack={() => setCurrentMenu('home')} />}
+          {/* 💡 [핵심 해결] Ranking 컴포넌트에 studentName을 넘겨주도록 추가했습니다! */}
+          {currentMenu === 'ranking' && (
+            <Ranking 
+              onBack={() => setCurrentMenu('home')} 
+              studentName={loggedInStudent.name} 
+            />
+          )}
         </div>
       );
     }
@@ -200,7 +206,6 @@ export default function App() {
           <div style={{ fontSize: '32px', fontWeight: '900', color: '#007aff', marginBottom: '8px', letterSpacing: '-1px' }}>생각교육</div>
           <h2 style={{ margin: '0 0 32px 0', fontSize: '22px', fontWeight: '800', color: '#111' }}>어떤 과정으로 입장할까요?</h2>
           
-          {/* 💡 [핵심] 여기에 '파닉스' 버튼을 세 번째로 추가했습니다. */}
           <div style={{ display: 'flex', gap: '20px', justifyContent: 'space-between' }}>
             
             <button onClick={() => handleModeSelect('phonics')} style={{ flex: 1, aspectRatio: '1 / 1', backgroundColor: '#34c759', color: 'white', border: 'none', borderRadius: '24px', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '16px', boxShadow: '0 6px 16px rgba(52, 199, 89, 0.3)', transition: 'all 0.2s ease-in-out' }} onMouseOver={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(52, 199, 89, 0.4)'; }} onMouseOut={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(52, 199, 89, 0.3)'; }}>
