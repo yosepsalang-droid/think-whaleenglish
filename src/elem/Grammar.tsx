@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { CONFIG, withCacheBust } from '../config'; 
+import { CONFIG } from '../config'; 
 import { supabase } from '../lib/supabase'; 
-import { isIntegratedRankingTask } from '../utils/grammarLogRanking'; 
 
 interface RankEntry {
   studentName: string;
@@ -10,7 +9,7 @@ interface RankEntry {
 
 interface GrammarProps {
   onBack: () => void;
-  student?: { name?: string; grade?: string };
+  student?: { name?: string; grade?: string; id?: string };
   totalScore?: number;
   myRank?: number | null;
   rankings?: { thisMonth: RankEntry[]; lastMonth: RankEntry[] };
@@ -21,8 +20,6 @@ interface GrammarProps {
 export default function Grammar({
   onBack,
   student,
-  totalScore: externalTotalScore = 0,
-  myRank: externalMyRank = null,
   onGameComplete,
 }: GrammarProps) {
   const [gameState, setGameState] = useState('LOBBY');
@@ -38,8 +35,8 @@ export default function Grammar({
   const [isDataLoaded, setIsDataLoaded] = useState(false); 
   const [currentQ, setCurrentQ] = useState<any>(null);
 
-  const [myRank, setMyRank] = useState<number | null>(externalMyRank);
-  const [myTotalScore, setMyTotalScore] = useState<number>(externalTotalScore);
+  const [myRank, setMyRank] = useState<number | null>(null);
+  const [myTotalScore, setMyTotalScore] = useState<number>(0);
   const [localRankings, setLocalRankings] = useState<{ thisMonth: RankEntry[]; lastMonth: RankEntry[] }>({ thisMonth: [], lastMonth: [] });
   const [isRankLoading, setIsRankLoading] = useState<boolean>(true);
 
@@ -94,87 +91,106 @@ export default function Grammar({
     fetchSentences();
   }, []);
 
-  const fetchAndCalculateRank = (options?: { delayMs?: number }) => {
+  // 💡 [핵심 수정] 구글 시트가 아닌 수파베이스(Supabase)에서 메인 랭킹과 똑같은 기준으로 데이터를 가져옵니다.
+  const fetchAndCalculateRank = async (options?: { delayMs?: number }) => {
     const { delayMs = 0 } = options ?? {};
-    const logSheetUrl = CONFIG.SHEETS.GRAMMAR_LOG;
+    if (!studentName.trim()) return;
 
-    if (!logSheetUrl || !studentName.trim()) return;
-
-    setIsRankLoading(true);
-
-    const doFetch = () => {
-      fetch(withCacheBust(logSheetUrl))
-      .then(res => res.text())
-      .then(text => {
-        const rows = text.split(/\r?\n/).slice(1);
-        
+    const doFetch = async () => {
+      setIsRankLoading(true);
+      try {
         const now = new Date();
-        const currentYear = now.getFullYear();
-        const currentMonth = now.getMonth() + 1;
-        const lastMonth = currentMonth === 1 ? 12 : currentMonth - 1;
-        const lastMonthYear = currentMonth === 1 ? currentYear - 1 : currentYear;
+        const year = now.getFullYear();
+        const month = now.getMonth(); 
+        const startOfThisMonth = new Date(year, month, 1);
 
-        const thisMonthScores: { [name: string]: number } = {};
-        const lastMonthScores: { [name: string]: number } = {};
+        let allLogs: any[] = [];
+        let from = 0;
+        const step = 1000;
+        let isFetchingLogs = true;
 
-        rows.forEach(row => {
-          const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-          if (cols.length < 6) return;
+        // 이번 달 기록 싹쓸이
+        while (isFetchingLogs) {
+          const { data, error } = await supabase
+            .from('learning_logs')
+            .select('student_id, student_name, score, created_at') 
+            .gte('created_at', startOfThisMonth.toISOString()) 
+            .eq('status', '완료')
+            .range(from, from + step - 1); 
 
-          const dateStr = cols[0]?.replace(/^"|"$/g, '').trim(); 
-          const name = cols[1]?.replace(/^"|"$/g, '').trim();   
-          const grade = cols[2]?.replace(/^"|"$/g, '').trim(); 
-          const scoreVal = parseInt(cols[3]?.replace(/^"|"$/g, '').trim() || '0', 10);
-          const taskType = cols[5]?.replace(/^"|"$/g, '').trim();
+          if (error) throw error;
 
-          if (!name || isNaN(scoreVal) || scoreVal <= 0) return;
-          if (!isIntegratedRankingTask(taskType)) return;
-          if (!grade.includes('초')) return;
-
-          let rowYear = 0;
-          let rowMonth = 0;
-          const match = dateStr.match(/(\d{4})[./-]\s*(\d{1,2})/);
-          if (match) {
-            rowYear = parseInt(match[1], 10);
-            rowMonth = parseInt(match[2], 10);
+          if (data && data.length > 0) {
+            allLogs = [...allLogs, ...data];
+            from += step;
+            if (data.length < step) isFetchingLogs = false; 
+          } else {
+            isFetchingLogs = false;
           }
+        }
 
-          if (rowYear === currentYear && rowMonth === currentMonth) {
-            thisMonthScores[name] = (thisMonthScores[name] || 0) + scoreVal;
-          } else if (rowYear === lastMonthYear && rowMonth === lastMonth) {
-            lastMonthScores[name] = (lastMonthScores[name] || 0) + scoreVal;
+        // 학생 명부 싹쓸이 (초등부 필터링용)
+        let allStudents: any[] = [];
+        let studentFrom = 0;
+        let isFetchingStudents = true;
+        
+        while (isFetchingStudents) {
+          const { data, error } = await supabase
+            .from('students')
+            .select('student_id, grade')
+            .range(studentFrom, studentFrom + step - 1);
+
+          if (error) throw error;
+
+          if (data && data.length > 0) {
+            allStudents = [...allStudents, ...data];
+            studentFrom += step;
+            if (data.length < step) isFetchingStudents = false;
+          } else {
+            isFetchingStudents = false;
           }
+        }
+
+        const gradeMap = new Map<string, string>();
+        allStudents.forEach(s => {
+          if (s.student_id) gradeMap.set(s.student_id, s.grade || '');
         });
 
-        const sortScores = (scoresObj: { [name: string]: number }) => {
-          return Object.entries(scoresObj)
-            .map(([sName, total]) => ({ studentName: sName, score: total }))
-            .sort((a, b) => b.score - a.score);
-        };
+        const thisMonthMap = new Map<string, number>();
 
-        const thisMonthRankings = sortScores(thisMonthScores);
-        const lastMonthRankings = sortScores(lastMonthScores);
+        allLogs.forEach(log => {
+          if (!log.student_name || typeof log.score !== 'number') return;
+          
+          const studentGrade = gradeMap.get(log.student_id) || '';
+          if (!studentGrade.includes('초')) return; 
+
+          const current = thisMonthMap.get(log.student_name) || 0;
+          thisMonthMap.set(log.student_name, current + log.score); 
+        });
+
+        const sortedThisMonth = Array.from(thisMonthMap.entries())
+          .map(([name, total]) => ({ studentName: name, score: total }))
+          .sort((a, b) => b.score - a.score);
 
         setLocalRankings({
-          thisMonth: thisMonthRankings,
-          lastMonth: lastMonthRankings
+          thisMonth: sortedThisMonth,
+          lastMonth: [] 
         });
 
-        const myIdx = thisMonthRankings.findIndex(item => item.studentName === studentName.trim());
+        const myIdx = sortedThisMonth.findIndex(item => item.studentName === studentName.trim());
         if (myIdx !== -1) {
           setMyRank(myIdx + 1);
-          setMyTotalScore(thisMonthRankings[myIdx].score);
+          setMyTotalScore(sortedThisMonth[myIdx].score);
         } else {
           setMyRank(null);
           setMyTotalScore(0);
         }
 
-        setIsRankLoading(false);
-      })
-      .catch(err => {
+      } catch (err) {
         console.error("랭킹 계산 실패:", err);
+      } finally {
         setIsRankLoading(false);
-      });
+      }
     };
 
     if (delayMs > 0) setTimeout(doFetch, delayMs);
@@ -276,7 +292,7 @@ export default function Grammar({
   const handleAnswer = (selectedOption: string) => {
     let newScore = score;
     if (selectedOption === currentQ.answer) {
-      // 💡 [핵심] 남은 시간에 따른 점수 보너스를 제거하고 무조건 1m 전진으로 고정!
+      // 💡 [핵심] 1문제당 1m 전진 고정!
       const earnedPoints = 1; 
       newScore = score + earnedPoints;
       setScore(newScore);
@@ -318,43 +334,51 @@ export default function Grammar({
     }
   };
 
-  const endGame = (finalScore: number) => {
+  const endGame = async (finalScore: number) => {
     setGameState('RESULT');
     setMyTotalScore(prev => prev + finalScore);
     
-    const payload = {
-      type: "saveLog",
-      studentName: studentName.trim(),
-      grade: student?.grade || "미지정",
-      score: finalScore,
-      stage: stage,
-      taskType: "문법게임",
-      sheetName: 'GRAMMAR_LOG',
-    };
+    const now = new Date();
+    const kstOffset = 9 * 60 * 60 * 1000;
+    const kstNow = new Date(now.getTime() + kstOffset);
+    const logDateStr = `${kstNow.getUTCFullYear()}-${String(kstNow.getUTCMonth() + 1).padStart(2, '0')}-${String(kstNow.getUTCDate()).padStart(2, '0')}`;
 
-    const sendLog = () => {
-      return fetch(CONFIG.WEB_APP_URL, {
+    try {
+      // 💡 수파베이스에 안전하게 기록 저장
+      await supabase.from('learning_logs').insert([{
+        student_id: student?.id || '',
+        student_name: studentName.trim(),
+        grade: student?.grade || '초등부', // 초등부 꼬리표
+        task_type: `문법게임`,
+        book_info: `STAGE ${stage}`,
+        score: finalScore,
+        status: '완료',
+        attempt: 1,
+        log_date: logDateStr
+      }]);
+
+      // 구글 시트 백업용
+      const payload = {
+        type: "saveLog",
+        studentName: studentName.trim(),
+        grade: student?.grade || "미지정",
+        score: finalScore,
+        stage: stage,
+        taskType: "문법게임",
+        sheetName: 'GRAMMAR_LOG',
+      };
+
+      await fetch(CONFIG.WEB_APP_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(payload)
       });
-    };
-
-    const refreshAfterSave = () => {
+    } catch (err) {
+      console.error("기록 저장 중 에러 발생:", err);
+    } finally {
       onGameComplete?.(finalScore);
       fetchAndCalculateRank({ delayMs: 1500 }); 
-    };
-
-    sendLog()
-      .then(() => refreshAfterSave())
-      .catch(err => {
-        console.error("1차 저장 실패, 1초 뒤 재시도합니다:", err);
-        setTimeout(() => {
-          sendLog()
-            .then(() => refreshAfterSave())
-            .catch(e => console.error("최종 저장 실패:", e));
-        }, 1000);
-      });
+    }
   };
 
   if (gameState === 'LOBBY') {
@@ -385,7 +409,7 @@ export default function Grammar({
               ) : myRank !== null ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   
-                  {/* 💡 앞사람 (내가 1등이 아닐 때만 표시) */}
+                  {/* 💡 내 앞사람 (내가 1등이 아닐 때만 표시) */}
                   {myRank > 1 && localRankings.thisMonth[myRank - 2] && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontSize: '14px', padding: '8px 12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
                       <span>{myRank - 1}위. {localRankings.thisMonth[myRank - 2].studentName}</span>
@@ -393,13 +417,13 @@ export default function Grammar({
                     </div>
                   )}
 
-                  {/* 💡 나 (하이라이트 강조) */}
+                  {/* 💡 나 자신 (하이라이트 강조) */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#1d4ed8', fontSize: '16px', fontWeight: '900', padding: '12px', backgroundColor: '#eff6ff', borderRadius: '8px', border: '2px solid #bfdbfe' }}>
                     <span>{myRank}위. {studentName} (나)</span>
                     <span style={{ fontSize: '18px' }}>{myTotalScore.toLocaleString()}m</span>
                   </div>
 
-                  {/* 💡 뒷사람 (내 뒤에 누군가 있을 때만 표시) */}
+                  {/* 💡 내 뒷사람 (내 뒤에 누군가 있을 때만 표시) */}
                   {localRankings.thisMonth[myRank] && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontSize: '14px', padding: '8px 12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
                       <span>{myRank + 1}위. {localRankings.thisMonth[myRank].studentName}</span>
