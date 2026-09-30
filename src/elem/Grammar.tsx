@@ -18,28 +18,6 @@ interface GrammarProps {
   onGameComplete?: (addedScore?: number) => void;
 }
 
-function MiniRankingCard({ title, data, isLoading }: { title: string; data: RankEntry[]; isLoading: boolean }) {
-  return (
-    <div style={{ backgroundColor: '#f8fafc', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0', textAlign: 'left' }}>
-      <h3 style={{ margin: '0 0 12px 0', fontSize: '15px', color: '#334155' }}>{title}</h3>
-      {isLoading ? (
-        <p style={{ fontSize: '13px', color: '#94a3b8', margin: 0 }}>데이터를 불러오는 중입니다...</p>
-      ) : data.length === 0 ? (
-        <p style={{ fontSize: '13px', color: '#94a3b8', margin: 0 }}>아직 기록이 없습니다.</p>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          {data.map((item, idx) => (
-            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', backgroundColor: 'white', padding: '8px 12px', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
-              <span style={{ fontWeight: '500', color: '#475569' }}>{idx + 1}위. {item.studentName}</span>
-              <span style={{ fontWeight: 'bold', color: '#2563eb' }}>{item.score.toLocaleString()}점</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function Grammar({
   onBack,
   student,
@@ -74,7 +52,6 @@ export default function Grammar({
         const step = 1000;
 
         while (true) {
-          // 💡 [핵심 수정] 테이블 이름을 'sentence'에서 'sentences'로 변경했습니다!
           const { data, error } = await supabase
             .from('sentences')
             .select('*')
@@ -107,8 +84,6 @@ export default function Grammar({
         }).filter(item => item.eng && item.kor);
         
         setAllData(validData);
-        console.log("✅ 수파베이스 문장 로딩 완료:", validData.length, "개");
-
       } catch (error) {
         console.error("수파베이스 sentences 데이터 불러오기 에러:", error);
       } finally {
@@ -265,7 +240,6 @@ export default function Grammar({
     
     const initialQuestion = generateProblem(allData, 1);
     if (!initialQuestion) { 
-      // 💡 경고창 메시지도 정확한 테이블 이름(sentences)으로 수정했습니다.
       alert("데이터베이스에 1단계 문제 데이터가 부족합니다. 수파베이스 sentences 테이블에 데이터가 있는지 확인해주세요."); 
       return; 
     }
@@ -302,7 +276,8 @@ export default function Grammar({
   const handleAnswer = (selectedOption: string) => {
     let newScore = score;
     if (selectedOption === currentQ.answer) {
-      const earnedPoints = Math.max(1, timeLeft); 
+      // 💡 [핵심] 남은 시간에 따른 점수 보너스를 제거하고 무조건 1m 전진으로 고정!
+      const earnedPoints = 1; 
       newScore = score + earnedPoints;
       setScore(newScore);
       
@@ -402,43 +377,53 @@ export default function Grammar({
           </div>
 
           {studentName && (
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginBottom: '24px', backgroundColor: 'white', padding: '15px 25px', borderRadius: '12px', border: '1px solid #cbd5e1', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 'bold', marginBottom: '4px' }}>🏆 내 랭킹</span>
-                <strong style={{ fontSize: '18px', color: '#d97706' }}>{myRank !== null ? `${myRank}위` : '-'}</strong>
-              </div>
-              <div style={{ width: '1px', backgroundColor: '#e2e8f0' }}></div>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 'bold', marginBottom: '4px' }}>🔥 이번 달 누적 점수</span>
-                <strong style={{ fontSize: '18px', color: '#2563eb' }}>{myTotalScore.toLocaleString()}점</strong>
-              </div>
+            <div style={{ marginBottom: '30px', backgroundColor: 'white', padding: '20px', borderRadius: '16px', border: '1px solid #cbd5e1', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
+              <h3 style={{ margin: '0 0 15px 0', fontSize: '16px', color: '#334155' }}>🏃‍♂️ 나의 마라톤 현재 위치</h3>
+              
+              {isRankLoading ? (
+                <p style={{ fontSize: '14px', color: '#94a3b8', margin: 0 }}>기록을 불러오는 중입니다...</p>
+              ) : myRank !== null ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  
+                  {/* 💡 앞사람 (내가 1등이 아닐 때만 표시) */}
+                  {myRank > 1 && localRankings.thisMonth[myRank - 2] && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontSize: '14px', padding: '8px 12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
+                      <span>{myRank - 1}위. {localRankings.thisMonth[myRank - 2].studentName}</span>
+                      <span>{localRankings.thisMonth[myRank - 2].score.toLocaleString()}m</span>
+                    </div>
+                  )}
+
+                  {/* 💡 나 (하이라이트 강조) */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#1d4ed8', fontSize: '16px', fontWeight: '900', padding: '12px', backgroundColor: '#eff6ff', borderRadius: '8px', border: '2px solid #bfdbfe' }}>
+                    <span>{myRank}위. {studentName} (나)</span>
+                    <span style={{ fontSize: '18px' }}>{myTotalScore.toLocaleString()}m</span>
+                  </div>
+
+                  {/* 💡 뒷사람 (내 뒤에 누군가 있을 때만 표시) */}
+                  {localRankings.thisMonth[myRank] && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontSize: '14px', padding: '8px 12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
+                      <span>{myRank + 1}위. {localRankings.thisMonth[myRank].studentName}</span>
+                      <span>{localRankings.thisMonth[myRank].score.toLocaleString()}m</span>
+                    </div>
+                  )}
+                  
+                </div>
+              ) : (
+                <p style={{ fontSize: '14px', color: '#64748b', margin: 0 }}>아직 이번 달 기록이 없습니다. 달리기를 시작해보세요!</p>
+              )}
             </div>
           )}
-          
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '30px' }}>
-            <MiniRankingCard 
-              title="🏆 지난달 명예의 전당 (TOP 3)"
-              data={localRankings.lastMonth.slice(0, 3)}
-              isLoading={isRankLoading}
-            />
-            <MiniRankingCard 
-              title="🔥 이번달 실시간 랭킹 (TOP 5)"
-              data={localRankings.thisMonth.slice(0, 5)}
-              isLoading={isRankLoading}
-            />
-          </div>
 
           <button 
             onClick={startGame} 
             disabled={!isDataLoaded}
             style={{
               ...styles.startBtn, 
-              marginTop: '20px',
               backgroundColor: isDataLoaded ? '#2563eb' : '#94a3b8',
               cursor: isDataLoaded ? 'pointer' : 'not-allowed'
             }}
           >
-            {isDataLoaded ? '스피드 문법 게임 시작하기' : '문제 데이터를 불러오는 중... ⏳'}
+            {isDataLoaded ? '스피드 문법 게임 시작 🚀' : '문제 데이터를 불러오는 중... ⏳'}
           </button>
         </div>
       </div>
@@ -454,8 +439,8 @@ export default function Grammar({
             대단해요! 이제 조금 더 어려운 <b>STAGE {stage}</b> 문제로 넘어갑니다.
           </p>
           <div style={styles.finalScoreBox}>
-            <span style={{fontSize: '16px', color: '#475569'}}>현재 누적 점수</span>
-            <strong style={{fontSize: '36px', color: '#2563eb', display: 'block'}}>{score.toLocaleString()}점</strong>
+            <span style={{fontSize: '16px', color: '#475569'}}>현재 전진 거리</span>
+            <strong style={{fontSize: '36px', color: '#2563eb', display: 'block'}}>{score.toLocaleString()}m</strong>
           </div>
           <button 
             onClick={() => setGameState('GAME')} 
@@ -479,7 +464,7 @@ export default function Grammar({
           <div style={styles.gameHeader}>
             <span style={styles.badge}>STAGE {stage} ({qCount}/10)</span>
             <span style={styles.timer}>⏳ {timeLeft}초</span>
-            <span style={styles.scoreText}>점수: {score}</span>
+            <span style={styles.scoreText}>전진: {score}m</span>
             <span style={styles.lives}>{"❤️".repeat(lives)}</span>
           </div>
 
@@ -506,11 +491,11 @@ export default function Grammar({
   return (
     <div style={styles.container}>
       <div style={styles.card}>
-        <h1 style={{fontSize: '28px', color: '#1e293b', marginBottom: '10px'}}>🎉 게임 종료!</h1>
-        <p style={{fontSize: '18px', color: '#64748b', marginBottom: '20px'}}>{studentName} 학생의 최종 성적</p>
+        <h1 style={{fontSize: '28px', color: '#1e293b', marginBottom: '10px'}}>🎉 달리기 종료!</h1>
+        <p style={{fontSize: '18px', color: '#64748b', marginBottom: '20px'}}>{studentName} 선수의 최종 기록</p>
         <div style={styles.finalScoreBox}>
-          <span style={{fontSize: '16px', color: '#475569'}}>최종 점수</span>
-          <strong style={{fontSize: '40px', color: '#2563eb', display: 'block'}}>{score.toLocaleString()}점</strong>
+          <span style={{fontSize: '16px', color: '#475569'}}>최종 전진 거리</span>
+          <strong style={{fontSize: '40px', color: '#2563eb', display: 'block'}}>{score.toLocaleString()}m</strong>
           <span style={{fontSize: '14px', color: '#64748b', marginTop: '5px'}}>최고 도달: STAGE {stage}</span>
         </div>
         <button 
