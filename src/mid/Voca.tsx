@@ -50,6 +50,9 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
 
   const taskTypeName = tableName === 'words_high' ? '고등단어' : '중등단어';
 
+  // 💡 [핵심 스위치] 교재 이름에 '필수'나 '숙어'가 들어가거나 고등부인 경우 범위 지정 모드 켜기!
+  const isRangeMode = tableName === 'words_high' || selectedBook.includes('필수') || selectedBook.includes('숙어');
+
   const { realTodayStr } = useMemo(() => {
     const now = new Date();
     const year = now.getFullYear();
@@ -141,27 +144,54 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
     if (!selectedBook) return alert("교재를 선택해주세요.");
     if (!selectedDate) return alert("학습 날짜를 선택해주세요.");
     
-    // 💡 [핵심] 이제 중등부도 반드시 시작/끝 번호를 입력해야 합니다!
-    if (startNo === '' || endNo === '') return alert("학습할 번호를 입력해주세요.");
-    if (startNo > endNo) return alert("끝 번호가 시작 번호보다 작습니다.");
+    // 💡 범위 지정 모드일 때만 번호 입력을 필수로 체크합니다.
+    if (isRangeMode) {
+      if (startNo === '' || endNo === '') return alert("학습할 번호를 입력해주세요.");
+      if (startNo > endNo) return alert("끝 번호가 시작 번호보다 작습니다.");
+    }
 
     let availableWords = allWords.filter(w => w.book === selectedBook);
 
-    // 💡 [핵심] 엑셀에서 Day1, Day2 등 숫자만 추출해서 범위(startNo ~ endNo)로 자릅니다!
-    availableWords = availableWords.filter(w => {
-      const match = w.day?.match(/\d+/);
-      if (!match) return false; // Day 값이 숫자로 안 잡히면 버림
-      const wordNo = parseInt(match[0], 10);
-      return wordNo >= startNo && wordNo <= endNo;
-    });
+    if (isRangeMode) {
+      // 💡 범위 모드: 시작~끝 번호 안의 단어만 완벽하게 가져옵니다 (쿨다운 무시)
+      availableWords = availableWords.filter(w => {
+        const match = w.day?.match(/\d+/);
+        if (!match) return false;
+        const wordNo = parseInt(match[0], 10);
+        return wordNo >= (startNo as number) && wordNo <= (endNo as number);
+      });
+      if (availableWords.length === 0) return alert(`해당 범위에 단어가 없습니다.`);
+    } else {
+      // 💡 기존 모드: 워드타파 등은 예전처럼 '전체에서 2일 쿨다운 적용 후 랜덤 추출'
+      const historyKey = `voca_history_${studentId}`;
+      const history = JSON.parse(localStorage.getItem(historyKey) || '{}');
+      const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
+      const now = Date.now();
 
-    if (availableWords.length === 0) return alert(`해당 범위에 단어가 없습니다.`);
+      const wordsNotRecent = availableWords.filter(w => {
+        const lastTested = history[w.eng];
+        if (!lastTested) return true;
+        return (now - lastTested) > TWO_DAYS_MS; 
+      });
+
+      if (wordsNotRecent.length >= 20) {
+        availableWords = wordsNotRecent;
+      }
+    }
 
     setTestWords(availableWords); 
-    // 지정된 범위의 단어들을 랜덤으로 섞습니다.
-    const shuffledWords = [...availableWords].sort(() => Math.random() - 0.5);
     
-    if (tableName === 'words_high') setCurrentTestMode('고등 2단계 집중 훈련');
+    // 💡 기존 교재(랜덤 모드)일 경우 문제 개수 제한 (150, 30, 100)을 적용합니다. 범위 모드는 지정한 개수 그대로 출제!
+    let maxLimit = availableWords.length;
+    if (!isRangeMode && tableName !== 'words_high') {
+      if (mode === 'eng2kor') maxLimit = 150;
+      else if (mode === 'kor2eng') maxLimit = 30;
+      else if (mode === 'half') maxLimit = 100;
+    }
+
+    const shuffledWords = [...availableWords].sort(() => Math.random() - 0.5).slice(0, maxLimit);
+    
+    if (tableName === 'words_high') setCurrentTestMode(`고등 2단계 집중 (${shuffledWords.length})`);
     else if (mode === 'eng2kor') setCurrentTestMode(`뜻 시험 (${shuffledWords.length})`);
     else if (mode === 'kor2eng') setCurrentTestMode(`스펠링 시험 (${shuffledWords.length})`);
     else setCurrentTestMode(`반반 시험 (${shuffledWords.length})`);
@@ -324,7 +354,7 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
     
     const storageKey = `voca_log_${tableName}_${studentId}`;
     const savedData = JSON.parse(localStorage.getItem(storageKey) || '{"records":{}}');
-    const rangeText = `${startNo}~${endNo}번`; // 항상 범위가 들어감
+    const rangeText = isRangeMode ? `${startNo}~${endNo}번` : '전체 랜덤';
     
     savedData.records[selectedDate] = { date: selectedDate, book: selectedBook, range: rangeText, status: '완료', score: totalQCount, attempt: attemptCount };
     localStorage.setItem(storageKey, JSON.stringify(savedData));
@@ -388,17 +418,19 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
             </select>
           </div>
 
-          {/* 💡 [핵심] 이제 중등/고등 상관없이 무조건 번호 범위를 입력받습니다. */}
-          <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
-            <div style={{ flex: 1, textAlign: 'left' }}>
-              <label style={{ fontSize: '13px', fontWeight: '700', color: '#8e8e93', marginLeft: '4px', marginBottom: '8px', display: 'block' }}>시작 번호 (Day)</label>
-              <input type="number" placeholder="예: 1" value={startNo} onChange={e => setStartNo(e.target.value === '' ? '' : Number(e.target.value))} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '1px solid #d1d1d6', fontSize: '16px', fontWeight: '600', color: '#333', backgroundColor: '#f9f9f9', outline: 'none', boxSizing: 'border-box' }} />
+          {/* 💡 조건부 렌더링: '필수'나 '숙어' 교재일 때만 범위 지정 입력창이 스르륵 나타납니다! */}
+          {isRangeMode && (
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', animation: 'fadeIn 0.3s' }}>
+              <div style={{ flex: 1, textAlign: 'left' }}>
+                <label style={{ fontSize: '13px', fontWeight: '700', color: '#8e8e93', marginLeft: '4px', marginBottom: '8px', display: 'block' }}>시작 번호 (Day)</label>
+                <input type="number" placeholder="예: 1" value={startNo} onChange={e => setStartNo(e.target.value === '' ? '' : Number(e.target.value))} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '1px solid #d1d1d6', fontSize: '16px', fontWeight: '600', color: '#333', backgroundColor: '#f9f9f9', outline: 'none', boxSizing: 'border-box' }} />
+              </div>
+              <div style={{ flex: 1, textAlign: 'left' }}>
+                <label style={{ fontSize: '13px', fontWeight: '700', color: '#8e8e93', marginLeft: '4px', marginBottom: '8px', display: 'block' }}>끝 번호 (Day)</label>
+                <input type="number" placeholder="예: 5" value={endNo} onChange={e => setEndNo(e.target.value === '' ? '' : Number(e.target.value))} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '1px solid #d1d1d6', fontSize: '16px', fontWeight: '600', color: '#333', backgroundColor: '#f9f9f9', outline: 'none', boxSizing: 'border-box' }} />
+              </div>
             </div>
-            <div style={{ flex: 1, textAlign: 'left' }}>
-              <label style={{ fontSize: '13px', fontWeight: '700', color: '#8e8e93', marginLeft: '4px', marginBottom: '8px', display: 'block' }}>끝 번호 (Day)</label>
-              <input type="number" placeholder="예: 5" value={endNo} onChange={e => setEndNo(e.target.value === '' ? '' : Number(e.target.value))} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '1px solid #d1d1d6', fontSize: '16px', fontWeight: '600', color: '#333', backgroundColor: '#f9f9f9', outline: 'none', boxSizing: 'border-box' }} />
-            </div>
-          </div>
+          )}
 
           {tableName === 'words_high' ? (
             <button onClick={() => startGame('high_phase1')} style={{ width: '100%', padding: '18px', background: 'linear-gradient(135deg, #111, #333)', color: 'white', border: 'none', borderRadius: '16px', fontSize: '18px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 6px 16px rgba(0,0,0,0.2)' }}>
