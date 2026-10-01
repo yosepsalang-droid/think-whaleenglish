@@ -31,6 +31,9 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editFormData, setEditFormData] = useState<Problem | null>(null);
 
+  // 💡 저장 중 상태를 표시하기 위한 State 추가
+  const [isSaving, setIsSaving] = useState(false);
+
   useEffect(() => {
     const fetchStudents = async () => {
       const { data } = await supabase.from('students').select('*');
@@ -168,6 +171,33 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     }
   };
 
+  // 💡 [핵심 추가] 데이터베이스에 생성된 문제를 저장하는 함수
+  const handleSaveToDB = async () => {
+    if (generatedProblems.length === 0) return alert("저장할 문제가 없습니다.");
+    
+    const title = prompt("저장할 시험지의 제목을 입력해주세요.\n(예: 24년 9월 고1 모의고사 30번 변형)");
+    if (!title || !title.trim()) return;
+
+    setIsSaving(true);
+    try {
+      // 수파베이스의 'ai_exams' 테이블에 제목과 문제(JSON)를 저장합니다.
+      const { error } = await supabase.from('ai_exams').insert([
+        {
+          title: title.trim(),
+          problems: generatedProblems // JSON 형태 그대로 저장
+        }
+      ]);
+
+      if (error) throw error;
+      alert(`🎉 [${title}] 시험지가 성공적으로 저장되었습니다!`);
+    } catch (err: any) {
+      console.error("저장 에러:", err);
+      alert("저장 중 오류가 발생했습니다.\n수파베이스에 'ai_exams' 테이블이 생성되어 있는지 확인해주세요.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleCopyForReview = () => {
     let textToCopy = `[AI 출제 문제 검토용]\n\n`;
     generatedProblems.forEach((p, idx) => {
@@ -287,7 +317,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
         {`
           .print-only { display: none; }
           
-          /* 💡 [핵심 해결] 프린트 시 쓸데없는 여백이나 숨겨진 유령 요소를 완전히 박멸하는 완벽한 CSS */
           @media print {
             @page {
               size: A4;
@@ -300,12 +329,10 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
               background-color: white !important;
             }
 
-            /* 웹 전용 화면 완전 삭제 (투명화가 아니라 아예 렌더링 트리에서 제거) */
             .no-print { 
               display: none !important; 
             }
             
-            /* 프린트 전용 화면 활성화 (absolute 제거로 문서 흐름 정상화) */
             .print-only { 
               display: block !important; 
               width: 100%; 
@@ -324,15 +351,17 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
               width: 100%;
             }
 
-            /* 💡 inline-block을 사용하여 다단 편집에서 문제 박스가 절반으로 잘리는 현상 100% 방지 */
-            .avoid-break {
+            .problem-box {
+              width: 100%;
+              margin-bottom: 28px;
+              display: block; 
+              break-inside: auto; 
+              page-break-inside: auto;
+            }
+
+            .options-box {
               break-inside: avoid;
               page-break-inside: avoid;
-              -webkit-column-break-inside: avoid;
-              display: inline-block; 
-              width: 100%;
-              margin-bottom: 24px;
-              vertical-align: top;
             }
           }
         `}
@@ -345,6 +374,11 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
           <h1 style={{ margin: 0, fontSize: '20px', fontWeight: '800', color: '#1e293b' }}>🤖 AI 문제 연구소 & 배포 통제실</h1>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
+          {/* 💡 [추가됨] DB 저장 버튼 */}
+          <button disabled={!isGenerated || isGenerating || isSaving} onClick={handleSaveToDB} style={{ padding: '8px 16px', backgroundColor: '#8b5cf6', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (!isGenerated || isGenerating || isSaving) ? 'not-allowed' : 'pointer' }}>
+            {isSaving ? '⏳ 저장 중...' : '💾 시험지 저장'}
+          </button>
+          
           <button disabled={!isGenerated || isGenerating} onClick={handleCopyForReview} style={{ padding: '8px 16px', backgroundColor: '#f1f5f9', color: '#334155', border: '1px solid #cbd5e1', borderRadius: '8px', fontWeight: '700', cursor: (!isGenerated || isGenerating) ? 'not-allowed' : 'pointer' }}>
             📋 외부 검수 복사
           </button>
@@ -509,57 +543,50 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
       <div className="print-only">
         {isGenerated && (
           <div>
-            {problemChunks.map((chunk, pageIdx) => (
-              <div key={pageIdx} className={pageIdx > 0 ? "print-page-break" : ""}>
-                <div style={{ textAlign: 'center', fontSize: '11pt', fontWeight: 'bold', marginBottom: '4px' }}>생각학원</div>
-                <h2 style={{ textAlign: 'center', borderBottom: '2px solid black', paddingBottom: '8px', marginBottom: '16px', fontSize: '15pt' }}>
-                  고래영어 특별 과제 {problemChunks.length > 1 ? `(${pageIdx + 1}p)` : ''}
-                </h2>
-                
-                {/* 💡 [핵심] 여기서부터 문제들이 2단(왼쪽/오른쪽)으로 쫙 갈라집니다! */}
-                <div className="print-col-2">
-                  {chunk.map((prob, idx) => {
-                    const absoluteIdx = pageIdx * 4 + idx;
-                    const isShortOptions = prob.options.every(opt => opt.length < 16) && prob.options.join('').length < 55;
+            <div style={{ textAlign: 'center', fontSize: '11pt', fontWeight: 'bold', marginBottom: '4px' }}>생각학원</div>
+            <h2 style={{ textAlign: 'center', borderBottom: '2px solid black', paddingBottom: '8px', marginBottom: '16px', fontSize: '15pt' }}>
+              고래영어 특별 과제
+            </h2>
+            
+            <div className="print-col-2">
+              {generatedProblems.map((prob, idx) => {
+                const isShortOptions = prob.options.every(opt => opt.length < 16) && prob.options.join('').length < 55;
 
-                    return (
-                      // 💡 [핵심] 이 클래스 덕분에 문제 박스가 중간에 허리 잘리는 일이 발생하지 않습니다.
-                      <div key={idx} className="avoid-break" style={{ width: '100%' }}>
-                        <p style={{ fontWeight: 'bold', fontSize: '10.5pt', marginBottom: '8px', textAlign: 'left' }}>
-                          {absoluteIdx + 1}. {renderTextWithFormatting(prob.question)}
-                        </p>
-                        
-                        <div style={{ border: '1px solid #000', padding: '12px', marginBottom: '10px', fontSize: '10pt', lineHeight: '1.5', wordBreak: 'keep-all', overflowWrap: 'break-word', width: '100%', boxSizing: 'border-box', textAlign: 'left' }}>
-                          {renderTextWithFormatting(prob.passage)}
-                        </div>
-                        
-                        <div style={{
-                          display: 'flex',
-                          flexDirection: isShortOptions ? 'row' : 'column',
-                          flexWrap: isShortOptions ? 'wrap' : 'nowrap',
-                          justifyContent: isShortOptions ? 'space-between' : 'flex-start',
-                          gap: isShortOptions ? '8px' : '5px',
-                          fontSize: '9.5pt',
-                          paddingLeft: '2px',
-                          textAlign: 'left'
+                return (
+                  <div key={idx} className="problem-box">
+                    <p style={{ fontWeight: 'bold', fontSize: '10.5pt', marginBottom: '8px', textAlign: 'left' }}>
+                      {idx + 1}. {renderTextWithFormatting(prob.question)}
+                    </p>
+                    
+                    <div style={{ border: '1px solid #000', padding: '12px', marginBottom: '10px', fontSize: '10pt', lineHeight: '1.5', wordBreak: 'keep-all', overflowWrap: 'break-word', width: '100%', boxSizing: 'border-box', textAlign: 'left' }}>
+                      {renderTextWithFormatting(prob.passage)}
+                    </div>
+                    
+                    <div className="options-box" style={{
+                      display: 'flex',
+                      flexDirection: isShortOptions ? 'row' : 'column',
+                      flexWrap: isShortOptions ? 'wrap' : 'nowrap',
+                      justifyContent: isShortOptions ? 'space-between' : 'flex-start',
+                      gap: isShortOptions ? '8px' : '5px',
+                      fontSize: '9.5pt',
+                      paddingLeft: '2px',
+                      textAlign: 'left'
+                    }}>
+                      {prob.options.map(opt => (
+                        <div key={opt} style={{ 
+                          width: isShortOptions ? '48%' : '100%', 
+                          textAlign: 'left',
+                          display: 'block',
+                          paddingLeft: isShortOptions ? '0' : '0px'
                         }}>
-                          {prob.options.map(opt => (
-                            <div key={opt} style={{ 
-                              width: isShortOptions ? '48%' : '100%', 
-                              textAlign: 'left',
-                              display: 'block',
-                              paddingLeft: isShortOptions ? '0' : '0px'
-                            }}>
-                              {renderTextWithFormatting(opt)}
-                            </div>
-                          ))}
+                          {renderTextWithFormatting(opt)}
                         </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            ))}
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
 
             {/* 해설지 영역 */}
             <div className="print-page-break"></div>
@@ -571,7 +598,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
             
             <div className="print-col-2" style={{ textAlign: 'left' }}>
               {generatedProblems.map((prob, idx) => (
-                <div key={idx} className="avoid-break" style={{ marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px dashed #ccc', textAlign: 'left' }}>
+                <div key={idx} className="problem-box" style={{ marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px dashed #ccc', textAlign: 'left' }}>
                   <h3 style={{ margin: '0 0 6px 0', fontSize: '11pt', color: '#1e3a8a', textAlign: 'left' }}>{idx + 1}번 해설</h3>
                   
                   <div style={{ marginBottom: '6px', fontSize: '10pt', textAlign: 'left' }}>
