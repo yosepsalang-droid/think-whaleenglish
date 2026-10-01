@@ -44,9 +44,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const grades = Array.from(new Set(students.map(s => s.grade))).filter(Boolean).sort();
   const filteredStudents = students.filter(s => s.grade === selectedGrade);
 
-  // 💡 [핵심 해결] AI가 꼼수를 부리지 못하게 6번 강력 제재 조항을 추가했습니다!
-  const formattingGuidelines = `
-  // 💡 [수정된 프롬프트 가이드라인] 환각 현상 및 번호 누락 방지 조항 추가
+  // 💡 [핵심] AI 꼼수 및 환각 방지용 강력 프롬프트 가이드라인 적용
   const formattingGuidelines = `
   [문제 출력 형식 및 텍스트 강조 가이드라인]
   1. 밑줄 사용 절대 금지: 플랫폼 환경상 밑줄(underline, <u>태그 등)은 정상적으로 출력되지 않으므로 절대 사용하지 마세요.
@@ -299,6 +297,14 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     });
   };
 
+  const chunkArray = <T,>(arr: T[], size: number): T[][] => {
+    return Array.from({ length: Math.ceil(arr.length / size) }, (v, i) =>
+      arr.slice(i * size, i * size + size)
+    );
+  };
+
+  const problemChunks = chunkArray(generatedProblems, 4);
+
   return (
     <div className="print-root" style={{ backgroundColor: '#f4f6f8', minHeight: '100vh', fontFamily: 'Pretendard, sans-serif' }}>
       
@@ -306,7 +312,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
         {`
           .print-only { display: none; }
           
-          /* 💡 [핵심 해결] 프린트 시 쓸데없는 여백이나 숨겨진 요소를 완벽 제거하고 물 흐르듯 인쇄되게 만듭니다 */
           @media print {
             @page {
               size: A4;
@@ -345,7 +350,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
               display: block;
             }
 
-            /* 💡 크롬 다단 편집 버그 박멸: break-inside: avoid를 없애서 자연스럽게 잘려 다음 단으로 이어지게 만듭니다 */
             .problem-box {
               width: 100%;
               margin-bottom: 24px;
