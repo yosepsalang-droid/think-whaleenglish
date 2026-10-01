@@ -448,7 +448,8 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
               </div>
               
               <div>
-                <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block' }}>지문 (Passage) - 💡 **강조**, >인용구 허용</label>
+                {/* 💡 [에러 해결] 꺾쇠 기호를 안전하게 &gt; 로 변경했습니다! */}
+                <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block' }}>지문 (Passage) - 💡 **강조**, &gt;인용구 허용</label>
                 <textarea value={editFormData.passage} onChange={e => updateEditForm('passage', e.target.value)} rows={6} style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box', resize: 'vertical' }} />
               </div>
 
@@ -498,7 +499,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
         </div>
       )}
 
-      {/* 🖨️️ 인쇄될 영역 (수능형 2단 레이아웃 + 완벽 줄맞춤 적용) */}
+      {/* 🖨 인쇄될 영역 (수능형 2단 레이아웃 + 완벽 줄맞춤 적용) */}
       <div className="print-only">
         {isGenerated && (
           <div>
