@@ -42,6 +42,22 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const grades = Array.from(new Set(students.map(s => s.grade))).filter(Boolean).sort();
   const filteredStudents = students.filter(s => s.grade === selectedGrade);
 
+  // 💡 [핵심] 원장님께서 제공해주신 서식 가이드라인을 변수로 저장
+  const formattingGuidelines = `
+  [문제 출력 형식 및 텍스트 강조 가이드라인]
+  1. 밑줄 사용 절대 금지: 플랫폼 환경상 밑줄(underline, <u>태그 등)은 정상적으로 출력되지 않으므로 절대 사용하지 마세요.
+  2. 굵은 글씨(Bold) 활용: 어휘, 어법 문제 등에서 특정 단어나 문장을 강조(밑줄 대체)해야 할 경우, 반드시 마크다운 굵기 기호(**)를 사용하세요. 
+     - 예시(O): 다음 글의 **bold** 표시된 부분 중...
+     - 예시(X): 다음 글의 <u>밑줄</u> 친 부분 중...
+  3. 번호와 함께 강조 표기법: 어휘/어법 문제의 지문 내 강조 표시는 '번호 + 띄어쓰기 + **강조단어**' 형태로 통일하세요.
+     - 올바른 출력 예시: "If an item is found ① **that** helps narrow..."
+  4. 보기 구성: 밑줄/강조 문제의 보기를 만들 때는 숫자만 적지 말고, 반드시 해당 단어를 함께 적어주세요.
+     - 올바른 보기 예시: ["① that", "② be used", "③ could appear"]
+  5. 박스 처리(문장 삽입/요약문): 문장 삽입 문제의 [주어진 문장]이나, 요약문 문제의 [요약문]은 본문과 헷갈리지 않게 반드시 인용구(>) 기호를 해당 문장 맨 앞에 넣어서 명확히 구분하세요.
+     - 예시:
+     > 주어진 문장 내용
+  `;
+
   const handleGenerateAI = async (type: 'mid' | 'high') => {
     if (!sourceText) return alert("원본 지문이나 문제를 먼저 입력해주세요!");
     
@@ -64,6 +80,8 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
       2. 문제 제작 유형: 원문 기반 다른 유형 변형(예: 주제/목적 문제 → 어법/어휘/빈칸 문제로 변형) 또는 동일 난이도와 구조의 새로운 유사 지문 생성
       3. 문제는 반드시 5지 선다형 객관식으로 출제하세요.
       4. 절대 다른 설명이나 인삿말을 덧붙이지 말고, 오직 아래의 JSON 배열(Array) 형태로만 출력하세요.
+
+      ${formattingGuidelines}
 
       [출력 JSON 양식]
       [
@@ -91,6 +109,8 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
       [출제 조건]
       1. 문제는 5지 선다형 객관식으로 출제하세요.
       2. 절대 다른 설명이나 인삿말을 덧붙이지 말고, 오직 아래의 JSON 배열(Array) 형태로만 출력하세요.
+
+      ${formattingGuidelines}
 
       [출력 JSON 양식]
       [
@@ -227,6 +247,33 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     }
   };
 
+  // 💡 [핵심] AI가 생성한 **강조** 와 > 인용구(박스) 를 예쁜 HTML로 바꿔주는 마법의 함수!
+  const renderTextWithFormatting = (text: string) => {
+    if (!text) return null;
+    return text.split('\n').map((line, lineIdx) => {
+      const isBlockquote = line.trim().startsWith('>');
+      const cleanLine = isBlockquote ? line.replace(/^>\s*/, '') : line;
+      
+      const parts = cleanLine.split(/(\*\*.*?\*\*)/g);
+      const lineContent = parts.map((part, i) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+          return <strong key={i} style={{ fontWeight: '900', borderBottom: '2px solid #333', paddingBottom: '1px' }}>{part.slice(2, -2)}</strong>;
+        }
+        return part;
+      });
+
+      if (isBlockquote) {
+        return (
+          <div key={lineIdx} style={{ padding: '12px', margin: '12px 0', backgroundColor: '#f8fafc', borderLeft: '4px solid #94a3b8', fontWeight: 'bold', fontSize: '10.5pt', borderRadius: '0 4px 4px 0' }}>
+            {lineContent}
+          </div>
+        );
+      }
+      
+      return <div key={lineIdx} style={{ minHeight: '1em' }}>{lineContent}</div>;
+    });
+  };
+
   const chunkArray = <T,>(arr: T[], size: number): T[][] => {
     return Array.from({ length: Math.ceil(arr.length / size) }, (v, i) =>
       arr.slice(i * size, i * size + size)
@@ -245,7 +292,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
           @media print {
             @page {
               size: A4;
-              margin: 12mm 12mm;
+              margin: 15mm 12mm;
             }
             body * { visibility: hidden; }
             .print-only { 
@@ -262,22 +309,23 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
             .no-print { display: none !important; }
             
             .print-page-break { page-break-before: always; }
-            .avoid-break { page-break-inside: avoid; }
             
-            .print-grid-2 {
-              display: grid;
-              grid-template-columns: 1fr 1fr;
-              column-gap: 12mm;
-              row-gap: 12mm;
-              width: 100%;
-              box-sizing: border-box;
-            }
-
+            /* 💡 [핵심] 지문이 길어도 낭비 없이 2단(수능 포맷)으로 예쁘게 갈라줍니다! */
             .print-col-2 {
               column-count: 2;
-              column-gap: 15mm;
-              column-rule: 1px dashed #ccc;
+              column-gap: 12mm;
               width: 100%;
+            }
+
+            /* 💡 [핵심] 이 클래스가 들어간 박스는 중간에 절대 안 잘리고 다음 단/장으로 통째로 넘어갑니다! */
+            .avoid-break {
+              break-inside: avoid;
+              page-break-inside: avoid;
+              -webkit-column-break-inside: avoid;
+              display: inline-block; 
+              width: 100%;
+              margin-bottom: 24px;
+              vertical-align: top;
             }
           }
         `}
@@ -316,12 +364,15 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
           <div style={{ marginBottom: '16px' }}>
             <label style={{ fontSize: '14px', fontWeight: 'bold', color: '#475569', display: 'block', marginBottom: '8px' }}>생성할 문항 수</label>
             <select value={questionCount} onChange={(e) => setQuestionCount(Number(e.target.value))} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontWeight: 'bold' }}>
-              {[1, 2, 3, 4, 5, 6, 7, 8].map(num => <option key={num} value={num}>{num}문제 생성</option>)}
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => <option key={num} value={num}>{num}문제 생성</option>)}
             </select>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <button onClick={() => handleGenerateAI('high')} disabled={isGenerating} style={{ padding: '12px', backgroundColor: '#475569', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: isGenerating ? 'not-allowed' : 'pointer', opacity: isGenerating ? 0.7 : 1 }}>
               {isGenerating ? 'AI가 출제 중... ⏳' : '📝 고등부 모의고사 출제'}
+            </button>
+            <button onClick={() => handleGenerateAI('mid')} disabled={isGenerating} style={{ padding: '12px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: isGenerating ? 'not-allowed' : 'pointer', opacity: isGenerating ? 0.7 : 1 }}>
+              {isGenerating ? 'AI가 출제 중... ⏳' : '📝 중등부 내신 출제'}
             </button>
           </div>
         </div>
@@ -331,22 +382,21 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
           
           {/* 1. 학생용 문제 뷰 */}
           <div style={{ flex: '1', backgroundColor: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', minHeight: '600px', overflowY: 'auto', maxHeight: '800px' }}>
-            <h3 style={{ margin: '0 0 20px 0', paddingBottom: '12px', borderBottom: '2px solid #e2e8f0', color: '#3b82f6' }}>📄 인쇄 미리보기 (문제)</h3>
+            <h3 style={{ margin: '0 0 20px 0', paddingBottom: '12px', borderBottom: '2px solid #e2e8f0', color: '#3b82f6' }}>📄 화면 미리보기 (문제)</h3>
             {!isGenerated && <div style={{ color: '#94a3b8', textAlign: 'center', marginTop: '100px' }}>왼쪽에서 문제를 생성해주세요.</div>}
             {isGenerated && generatedProblems.map((prob, idx) => (
               <div key={idx} style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid #e2e8f0' }}>
-                
-                {/* 💡 [수정] 문제 제목 옆에 "문제 수정" 버튼 추가! */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                  <div style={{ fontWeight: 'bold' }}>Q{idx + 1}. {prob.question}</div>
+                  <div style={{ fontWeight: 'bold' }}>Q{idx + 1}. {renderTextWithFormatting(prob.question)}</div>
                   <button onClick={() => startEditing(idx)} style={{ padding: '4px 8px', backgroundColor: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', flexShrink: 0, marginLeft: '8px' }}>
                     ✏️ 문제 수정
                   </button>
                 </div>
-
-                <div style={{ fontSize: '13px', color: '#475569', backgroundColor: '#f8fafc', padding: '10px', borderRadius: '6px', marginBottom: '8px', whiteSpace: 'pre-wrap' }}>{prob.passage}</div>
-                <div style={{ fontSize: '13px', color: '#334155' }}>
-                  {prob.options.map((opt, i) => <span key={i} style={{ marginRight: '12px' }}>{opt}</span>)}
+                <div style={{ fontSize: '13.5px', color: '#111', border: '1px solid #cbd5e1', padding: '16px', borderRadius: '8px', marginBottom: '12px', lineHeight: '1.6' }}>
+                  {renderTextWithFormatting(prob.passage)}
+                </div>
+                <div style={{ fontSize: '13.5px', color: '#334155', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {prob.options.map((opt, i) => <span key={i}>{opt}</span>)}
                 </div>
               </div>
             ))}
@@ -360,8 +410,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
               <div key={idx} style={{ marginBottom: '24px', paddingBottom: '20px', borderBottom: '2px dashed #e2e8f0' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                   <h4 style={{ margin: 0, color: '#10b981', fontSize: '16px' }}>Q{idx + 1} 문항 분석</h4>
-                  
-                  {/* 💡 [수정] 여기 있는 버튼도 일관성 있게 '해설 수정'으로 이름 변경 */}
                   <button onClick={() => startEditing(idx)} style={{ padding: '4px 8px', backgroundColor: '#f0fdf4', color: '#10b981', border: '1px solid #bbf7d0', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>
                     ✏️ 해설 수정
                   </button>
@@ -384,7 +432,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
         </div>
       </div>
 
-      {/* 💡 문항 전체 수정 모달창 (여기는 건드릴 필요 없이 완벽합니다!) */}
+      {/* 💡 문항 전체 수정 모달창 */}
       {editingIndex !== null && editFormData && (
         <div className="no-print" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 }}>
           <div style={{ backgroundColor: 'white', width: '800px', maxHeight: '90vh', overflowY: 'auto', borderRadius: '16px', padding: '32px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
@@ -400,7 +448,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
               </div>
               
               <div>
-                <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block' }}>지문 (Passage)</label>
+                <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block' }}>지문 (Passage) - 💡 **강조**, >인용구 허용</label>
                 <textarea value={editFormData.passage} onChange={e => updateEditForm('passage', e.target.value)} rows={6} style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box', resize: 'vertical' }} />
               </div>
 
@@ -450,7 +498,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
         </div>
       )}
 
-      {/* 🖨️ 인쇄될 영역 (생각학원 타이틀, 보기 좌측 정렬 및 줄맞춤 적용) */}
+      {/* 🖨️️ 인쇄될 영역 (수능형 2단 레이아웃 + 완벽 줄맞춤 적용) */}
       <div className="print-only">
         {isGenerated && (
           <div>
@@ -461,19 +509,21 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                   고래영어 특별 과제 {problemChunks.length > 1 ? `(${pageIdx + 1}p)` : ''}
                 </h2>
                 
-                <div className="print-grid-2">
+                {/* 💡 [핵심] 여기서부터 문제들이 2단(왼쪽/오른쪽)으로 쫙 갈라집니다! */}
+                <div className="print-col-2">
                   {chunk.map((prob, idx) => {
                     const absoluteIdx = pageIdx * 4 + idx;
                     const isShortOptions = prob.options.every(opt => opt.length < 16) && prob.options.join('').length < 55;
 
                     return (
+                      // 💡 [핵심] 이 클래스 덕분에 문제 박스가 중간에 허리 잘리는 일이 발생하지 않습니다.
                       <div key={idx} className="avoid-break" style={{ width: '100%' }}>
                         <p style={{ fontWeight: 'bold', fontSize: '10.5pt', marginBottom: '8px', textAlign: 'left' }}>
-                          {absoluteIdx + 1}. {prob.question}
+                          {absoluteIdx + 1}. {renderTextWithFormatting(prob.question)}
                         </p>
                         
-                        <div style={{ border: '1px solid #000', padding: '12px', marginBottom: '10px', fontSize: '10pt', lineHeight: '1.5', wordBreak: 'keep-all', overflowWrap: 'break-word', width: '100%', boxSizing: 'border-box', textAlign: 'left', whiteSpace: 'pre-wrap' }}>
-                          {prob.passage}
+                        <div style={{ border: '1px solid #000', padding: '12px', marginBottom: '10px', fontSize: '10pt', lineHeight: '1.5', wordBreak: 'keep-all', overflowWrap: 'break-word', width: '100%', boxSizing: 'border-box', textAlign: 'left' }}>
+                          {renderTextWithFormatting(prob.passage)}
                         </div>
                         
                         <div style={{
@@ -493,7 +543,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                               display: 'block',
                               paddingLeft: isShortOptions ? '0' : '0px'
                             }}>
-                              {opt}
+                              {renderTextWithFormatting(opt)}
                             </div>
                           ))}
                         </div>
