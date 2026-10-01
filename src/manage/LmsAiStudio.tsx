@@ -42,7 +42,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const grades = Array.from(new Set(students.map(s => s.grade))).filter(Boolean).sort();
   const filteredStudents = students.filter(s => s.grade === selectedGrade);
 
-  // 💡 [핵심] 원장님께서 제공해주신 서식 가이드라인을 변수로 저장
   const formattingGuidelines = `
   [문제 출력 형식 및 텍스트 강조 가이드라인]
   1. 밑줄 사용 절대 금지: 플랫폼 환경상 밑줄(underline, <u>태그 등)은 정상적으로 출력되지 않으므로 절대 사용하지 마세요.
@@ -247,7 +246,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     }
   };
 
-  // 💡 [핵심] AI가 생성한 **강조** 와 > 인용구(박스) 를 예쁜 HTML로 바꿔주는 마법의 함수!
   const renderTextWithFormatting = (text: string) => {
     if (!text) return null;
     return text.split('\n').map((line, lineIdx) => {
@@ -289,35 +287,44 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
         {`
           .print-only { display: none; }
           
+          /* 💡 [핵심 해결] 프린트 시 쓸데없는 여백이나 숨겨진 유령 요소를 완전히 박멸하는 완벽한 CSS */
           @media print {
             @page {
               size: A4;
-              margin: 15mm 12mm;
+              margin: 12mm 10mm;
             }
-            body * { visibility: hidden; }
+            
+            body, html {
+              margin: 0 !important;
+              padding: 0 !important;
+              background-color: white !important;
+            }
+
+            /* 웹 전용 화면 완전 삭제 (투명화가 아니라 아예 렌더링 트리에서 제거) */
+            .no-print { 
+              display: none !important; 
+            }
+            
+            /* 프린트 전용 화면 활성화 (absolute 제거로 문서 흐름 정상화) */
             .print-only { 
-              display: block; 
-              visibility: visible; 
-              position: absolute; 
-              left: 0; top: 0; 
+              display: block !important; 
               width: 100%; 
-              padding: 0; margin: 0;
-              box-sizing: border-box;
-              color: black; 
+              color: black;
+              background: white;
             }
-            .print-only * { visibility: visible; }
-            .no-print { display: none !important; }
+
+            .print-page-break { 
+              page-break-before: always;
+              break-before: page;
+            }
             
-            .print-page-break { page-break-before: always; }
-            
-            /* 💡 [핵심] 지문이 길어도 낭비 없이 2단(수능 포맷)으로 예쁘게 갈라줍니다! */
             .print-col-2 {
               column-count: 2;
               column-gap: 12mm;
               width: 100%;
             }
 
-            /* 💡 [핵심] 이 클래스가 들어간 박스는 중간에 절대 안 잘리고 다음 단/장으로 통째로 넘어갑니다! */
+            /* 💡 inline-block을 사용하여 다단 편집에서 문제 박스가 절반으로 잘리는 현상 100% 방지 */
             .avoid-break {
               break-inside: avoid;
               page-break-inside: avoid;
@@ -448,7 +455,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
               </div>
               
               <div>
-                {/* 💡 [에러 해결] 꺾쇠 기호를 안전하게 &gt; 로 변경했습니다! */}
                 <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block' }}>지문 (Passage) - 💡 **강조**, &gt;인용구 허용</label>
                 <textarea value={editFormData.passage} onChange={e => updateEditForm('passage', e.target.value)} rows={6} style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box', resize: 'vertical' }} />
               </div>
