@@ -392,7 +392,8 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
           </div>
 
           <div style={{ textAlign: 'left', marginBottom: '16px' }}>
-            <label style={{ fontSize: '13px', fontWeight: '700', color: '#8e8e93', marginLeft: '4px', marginBottom: '8px', display: 'block' }}>학습할 날짜 선택 (밀린 퀘스트)</label>
+            {/* 💡 업데이트 확인용 마커 1: 달력 이모티콘 📅 */}
+            <label style={{ fontSize: '13px', fontWeight: '700', color: '#8e8e93', marginLeft: '4px', marginBottom: '8px', display: 'block' }}>📅 학습할 날짜 선택 (밀린 퀘스트)</label>
             <select 
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
@@ -411,7 +412,8 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
           </div>
 
           <div style={{ textAlign: 'left', marginBottom: '16px' }}>
-            <label style={{ fontSize: '13px', fontWeight: '700', color: '#8e8e93', marginLeft: '4px', marginBottom: '8px', display: 'block' }}>교재 선택</label>
+            {/* 💡 업데이트 확인용 마커 2: 책 이모티콘 📚 */}
+            <label style={{ fontSize: '13px', fontWeight: '700', color: '#8e8e93', marginLeft: '4px', marginBottom: '8px', display: 'block' }}>📚 교재 선택</label>
             <select value={selectedBook} onChange={(e) => setSelectedBook(e.target.value)} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '1px solid #d1d1d6', fontSize: '16px', fontWeight: '600', color: '#333', backgroundColor: '#f9f9f9', outline: 'none', boxSizing: 'border-box' }}>
               <option value="">교재를 선택해주세요</option>
               {books.map(b => <option key={b} value={b}>{b}</option>)}
