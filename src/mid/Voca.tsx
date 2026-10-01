@@ -62,7 +62,6 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
   const [pendingDates, setPendingDates] = useState<string[]>([]);
   const [isDateFinished, setIsDateFinished] = useState(false);
 
-  // 💡 주말 제외 + 8월 데이터 무시하는 자동 계산 함수
   const refreshPendingDates = useCallback(() => {
     const pending: string[] = [];
     const now = new Date();
@@ -72,13 +71,9 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
 
     for (let i = 0; i < 30; i++) { 
       const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-      
-      // 💡 [핵심] 9월 1일 이전(8월 등) 날짜는 밀린 목록에서 가차없이 제외!
       if (d < new Date(now.getFullYear(), 8, 1)) continue; 
 
       const dayOfWeek = d.getDay();
-      
-      // 주말(토,일) 제외
       if (dayOfWeek === 0 || dayOfWeek === 6) continue; 
 
       const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -142,47 +137,34 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
     }
   };
 
-  const startGame = (mode: 'eng2kor' | 'kor2eng' | 'half' | 'high_phase1', maxLimit?: number) => {
+  const startGame = (mode: 'eng2kor' | 'kor2eng' | 'half' | 'high_phase1') => {
     if (!selectedBook) return alert("교재를 선택해주세요.");
     if (!selectedDate) return alert("학습 날짜를 선택해주세요.");
     
+    // 💡 [핵심] 이제 중등부도 반드시 시작/끝 번호를 입력해야 합니다!
+    if (startNo === '' || endNo === '') return alert("학습할 번호를 입력해주세요.");
+    if (startNo > endNo) return alert("끝 번호가 시작 번호보다 작습니다.");
+
     let availableWords = allWords.filter(w => w.book === selectedBook);
 
-    if (tableName === 'words_high') {
-      if (startNo === '' || endNo === '') return alert("학습할 번호를 입력해주세요.");
-      if (startNo > endNo) return alert("끝 번호가 시작 번호보다 작습니다.");
-      
-      availableWords = availableWords.filter(w => {
-        const match = w.day?.match(/\d+/);
-        if (!match) return false;
-        const wordNo = parseInt(match[0], 10);
-        return wordNo >= startNo && wordNo <= endNo;
-      });
-      if (availableWords.length === 0) return alert(`해당 범위에 단어가 없습니다.`);
-    } else {
-      const historyKey = `voca_history_${studentId}`;
-      const history = JSON.parse(localStorage.getItem(historyKey) || '{}');
-      const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
-      const now = Date.now();
+    // 💡 [핵심] 엑셀에서 Day1, Day2 등 숫자만 추출해서 범위(startNo ~ endNo)로 자릅니다!
+    availableWords = availableWords.filter(w => {
+      const match = w.day?.match(/\d+/);
+      if (!match) return false; // Day 값이 숫자로 안 잡히면 버림
+      const wordNo = parseInt(match[0], 10);
+      return wordNo >= startNo && wordNo <= endNo;
+    });
 
-      const wordsNotRecent = availableWords.filter(w => {
-        const lastTested = history[w.eng];
-        if (!lastTested) return true;
-        return (now - lastTested) > TWO_DAYS_MS; 
-      });
-
-      if (wordsNotRecent.length >= 20) {
-        availableWords = wordsNotRecent;
-      }
-    }
+    if (availableWords.length === 0) return alert(`해당 범위에 단어가 없습니다.`);
 
     setTestWords(availableWords); 
-    const shuffledWords = [...availableWords].sort(() => Math.random() - 0.5).slice(0, maxLimit || availableWords.length);
+    // 지정된 범위의 단어들을 랜덤으로 섞습니다.
+    const shuffledWords = [...availableWords].sort(() => Math.random() - 0.5);
     
     if (tableName === 'words_high') setCurrentTestMode('고등 2단계 집중 훈련');
-    else if (mode === 'eng2kor') setCurrentTestMode('뜻 시험 (150)');
-    else if (mode === 'kor2eng') setCurrentTestMode('스펠링 시험 (30)');
-    else setCurrentTestMode('반반 시험 (100)');
+    else if (mode === 'eng2kor') setCurrentTestMode(`뜻 시험 (${shuffledWords.length})`);
+    else if (mode === 'kor2eng') setCurrentTestMode(`스펠링 시험 (${shuffledWords.length})`);
+    else setCurrentTestMode(`반반 시험 (${shuffledWords.length})`);
 
     const halfLength = Math.ceil(shuffledWords.length / 2);
     
@@ -342,7 +324,7 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
     
     const storageKey = `voca_log_${tableName}_${studentId}`;
     const savedData = JSON.parse(localStorage.getItem(storageKey) || '{"records":{}}');
-    const rangeText = tableName === 'words_high' ? `${startNo}~${endNo}번` : '전체';
+    const rangeText = `${startNo}~${endNo}번`; // 항상 범위가 들어감
     
     savedData.records[selectedDate] = { date: selectedDate, book: selectedBook, range: rangeText, status: '완료', score: totalQCount, attempt: attemptCount };
     localStorage.setItem(storageKey, JSON.stringify(savedData));
@@ -406,18 +388,17 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
             </select>
           </div>
 
-          {tableName === 'words_high' && (
-            <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
-              <div style={{ flex: 1, textAlign: 'left' }}>
-                <label style={{ fontSize: '13px', fontWeight: '700', color: '#8e8e93', marginLeft: '4px', marginBottom: '8px', display: 'block' }}>시작 번호</label>
-                <input type="number" placeholder="예: 1" value={startNo} onChange={e => setStartNo(e.target.value === '' ? '' : Number(e.target.value))} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '1px solid #d1d1d6', fontSize: '16px', fontWeight: '600', color: '#333', backgroundColor: '#f9f9f9', outline: 'none', boxSizing: 'border-box' }} />
-              </div>
-              <div style={{ flex: 1, textAlign: 'left' }}>
-                <label style={{ fontSize: '13px', fontWeight: '700', color: '#8e8e93', marginLeft: '4px', marginBottom: '8px', display: 'block' }}>끝 번호</label>
-                <input type="number" placeholder="예: 50" value={endNo} onChange={e => setEndNo(e.target.value === '' ? '' : Number(e.target.value))} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '1px solid #d1d1d6', fontSize: '16px', fontWeight: '600', color: '#333', backgroundColor: '#f9f9f9', outline: 'none', boxSizing: 'border-box' }} />
-              </div>
+          {/* 💡 [핵심] 이제 중등/고등 상관없이 무조건 번호 범위를 입력받습니다. */}
+          <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
+            <div style={{ flex: 1, textAlign: 'left' }}>
+              <label style={{ fontSize: '13px', fontWeight: '700', color: '#8e8e93', marginLeft: '4px', marginBottom: '8px', display: 'block' }}>시작 번호 (Day)</label>
+              <input type="number" placeholder="예: 1" value={startNo} onChange={e => setStartNo(e.target.value === '' ? '' : Number(e.target.value))} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '1px solid #d1d1d6', fontSize: '16px', fontWeight: '600', color: '#333', backgroundColor: '#f9f9f9', outline: 'none', boxSizing: 'border-box' }} />
             </div>
-          )}
+            <div style={{ flex: 1, textAlign: 'left' }}>
+              <label style={{ fontSize: '13px', fontWeight: '700', color: '#8e8e93', marginLeft: '4px', marginBottom: '8px', display: 'block' }}>끝 번호 (Day)</label>
+              <input type="number" placeholder="예: 5" value={endNo} onChange={e => setEndNo(e.target.value === '' ? '' : Number(e.target.value))} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '1px solid #d1d1d6', fontSize: '16px', fontWeight: '600', color: '#333', backgroundColor: '#f9f9f9', outline: 'none', boxSizing: 'border-box' }} />
+            </div>
+          </div>
 
           {tableName === 'words_high' ? (
             <button onClick={() => startGame('high_phase1')} style={{ width: '100%', padding: '18px', background: 'linear-gradient(135deg, #111, #333)', color: 'white', border: 'none', borderRadius: '16px', fontSize: '18px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 6px 16px rgba(0,0,0,0.2)' }}>
@@ -425,14 +406,14 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
             </button>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <button onClick={() => startGame('eng2kor', 150)} style={{ width: '100%', padding: '16px', background: 'linear-gradient(135deg, #007aff, #0056b3)', color: 'white', border: 'none', borderRadius: '16px', fontSize: '17px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,122,255,0.2)' }}>
-                🇰🇷 뜻만 시험보기 (150문제)
+              <button onClick={() => startGame('eng2kor')} style={{ width: '100%', padding: '16px', background: 'linear-gradient(135deg, #007aff, #0056b3)', color: 'white', border: 'none', borderRadius: '16px', fontSize: '17px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,122,255,0.2)' }}>
+                🇰🇷 뜻관식(객관식) 시험보기
               </button>
-              <button onClick={() => startGame('kor2eng', 30)} style={{ width: '100%', padding: '16px', background: 'linear-gradient(135deg, #ff9500, #e68a00)', color: 'white', border: 'none', borderRadius: '16px', fontSize: '17px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 4px 12px rgba(255,149,0,0.2)' }}>
-                🇺🇸 영어 스펠링 쓰기 (30문제)
+              <button onClick={() => startGame('kor2eng')} style={{ width: '100%', padding: '16px', background: 'linear-gradient(135deg, #ff9500, #e68a00)', color: 'white', border: 'none', borderRadius: '16px', fontSize: '17px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 4px 12px rgba(255,149,0,0.2)' }}>
+                🇺🇸 영어 스펠링 쓰기 시험
               </button>
-              <button onClick={() => startGame('half', 100)} style={{ width: '100%', padding: '16px', background: 'linear-gradient(135deg, #5856d6, #4a48b8)', color: 'white', border: 'none', borderRadius: '16px', fontSize: '17px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 4px 12px rgba(88,86,214,0.2)' }}>
-                ⚖️ 반반 시험보기 (100문제)
+              <button onClick={() => startGame('half')} style={{ width: '100%', padding: '16px', background: 'linear-gradient(135deg, #5856d6, #4a48b8)', color: 'white', border: 'none', borderRadius: '16px', fontSize: '17px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 4px 12px rgba(88,86,214,0.2)' }}>
+                ⚖️ 반반 섞어서 시험보기
               </button>
             </div>
           )}
