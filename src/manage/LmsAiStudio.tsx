@@ -53,13 +53,8 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   3. 번호와 함께 강조 표기법: 어휘/어법/지칭 추론 문제의 지문 내 강조 표시는 '번호 + 띄어쓰기 + **강조단어**' 형태로 통일하세요. (예: ① **that**)
   4. 보기 구성: 밑줄/강조 문제의 보기를 만들 때는 숫자만 적지 말고, 반드시 해당 단어를 함께 적어주세요.
   5. 박스 처리(문장 삽입/요약문): 문장 삽입 문제의 [주어진 문장]이나, 요약문 문제의 [요약문]은 본문과 헷갈리지 않게 반드시 인용구(>) 기호를 해당 문장 맨 앞에 넣어서 명확히 구분하세요.
-  
-  6. 🚨 [최고 중요] 원본 지문 훼손 및 무단 생략 절대 금지 🚨
-     - AI가 임의로 지문의 길이를 줄이거나, 문단을 날리거나, 마지막 문장을 삭제하는 것을 절대 금지합니다.
-     - 모든 문항의 "passage"에는 당신에게 제공된 [원본 텍스트]의 '첫 단어부터 마지막 단어까지 100% 완벽하게' 포함되어야 합니다.
-     - 어법/어휘 빈칸 변형을 위한 조작 외에는 원본의 쉼표(,) 하나도 마음대로 빼거나 추가하지 마세요.
-  
-  7. 🚨 선지 개수 엄수: 지문 내에 번호를 매기는 문제의 경우, 반드시 지문 안에 ①번부터 ⑤번까지 빠짐없이 존재해야 합니다.
+  6. 🚨 원문 100% 유지 및 한글 삽입 금지: 지문 내용이 아무리 길어도 중간에 '...' 기호 등을 사용하여 임의로 요약하거나 생략하지 마세요. 또한 영어 지문 본문 안에는 어떠한 경우에도 한글 주석이나 설명(예: '생략 없음')을 절대 삽입하지 마세요.
+  7. 🚨 선지 개수 엄수: 지문 내에 번호를 매기는 문제(어휘, 어법, 지칭 추론 등)의 경우, 반드시 지문 안에 ①번부터 ⑤번까지 빠짐없이 마크다운 기호가 존재해야 합니다. AI의 분석 과정이나 내부 메모(예: '[추가 선지 구성을 위한...]')는 절대 출력에 포함하지 마세요.
   `;
 
   const handleGenerateAI = async (type: 'mid' | 'high') => {
@@ -302,14 +297,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     });
   };
 
-  const chunkArray = <T,>(arr: T[], size: number): T[][] => {
-    return Array.from({ length: Math.ceil(arr.length / size) }, (v, i) =>
-      arr.slice(i * size, i * size + size)
-    );
-  };
-
-  const problemChunks = chunkArray(generatedProblems, 4);
-
   return (
     <div className="print-root" style={{ backgroundColor: '#f4f6f8', minHeight: '100vh', fontFamily: 'Pretendard, sans-serif' }}>
       
@@ -494,6 +481,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
               </div>
               
               <div>
+                {/* 💡 [수정완료] 버셀 문법 오류를 일으켰던 기호를 안전한 문자로 고쳤습니다! */}
                 <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block' }}>지문 (Passage) - 💡 **강조**, &gt;인용구 허용</label>
                 <textarea value={editFormData.passage} onChange={e => updateEditForm('passage', e.target.value)} rows={6} style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box', resize: 'vertical' }} />
               </div>
@@ -656,7 +644,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                         <span style={{ fontWeight: 'bold', width: '80px' }}>{student.name}</span>
                         <span style={{ color: '#64748b', fontSize: '13px' }}>({student.student_id})</span>
                       </label>
-                    ))문제 출력 형식 및 텍스트 강조 가이드라인
+                    ))
                   )}
                 </div>
               </div>
