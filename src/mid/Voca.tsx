@@ -181,9 +181,9 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
 
     setTestWords(availableWords); 
     
-    // 💡 기존 교재(랜덤 모드)일 경우 문제 개수 제한 (150, 30, 100)을 적용합니다. 범위 모드는 지정한 개수 그대로 출제!
+    // 💡 [에러 해결 부분] 버셀의 타입스크립트 에러를 방지하기 위해 중복된 조건(tableName !== 'words_high')을 제거했습니다.
     let maxLimit = availableWords.length;
-    if (!isRangeMode && tableName !== 'words_high') {
+    if (!isRangeMode) {
       if (mode === 'eng2kor') maxLimit = 150;
       else if (mode === 'kor2eng') maxLimit = 30;
       else if (mode === 'half') maxLimit = 100;
@@ -392,7 +392,6 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
           </div>
 
           <div style={{ textAlign: 'left', marginBottom: '16px' }}>
-            {/* 💡 업데이트 확인용 마커 1: 달력 이모티콘 📅 */}
             <label style={{ fontSize: '13px', fontWeight: '700', color: '#8e8e93', marginLeft: '4px', marginBottom: '8px', display: 'block' }}>📅 학습할 날짜 선택 (밀린 퀘스트)</label>
             <select 
               value={selectedDate}
@@ -412,7 +411,6 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
           </div>
 
           <div style={{ textAlign: 'left', marginBottom: '16px' }}>
-            {/* 💡 업데이트 확인용 마커 2: 책 이모티콘 📚 */}
             <label style={{ fontSize: '13px', fontWeight: '700', color: '#8e8e93', marginLeft: '4px', marginBottom: '8px', display: 'block' }}>📚 교재 선택</label>
             <select value={selectedBook} onChange={(e) => setSelectedBook(e.target.value)} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '1px solid #d1d1d6', fontSize: '16px', fontWeight: '600', color: '#333', backgroundColor: '#f9f9f9', outline: 'none', boxSizing: 'border-box' }}>
               <option value="">교재를 선택해주세요</option>
