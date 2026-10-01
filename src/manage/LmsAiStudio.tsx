@@ -31,7 +31,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editFormData, setEditFormData] = useState<Problem | null>(null);
 
-  // 💡 저장 중 상태를 표시하기 위한 State 추가
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -45,6 +44,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const grades = Array.from(new Set(students.map(s => s.grade))).filter(Boolean).sort();
   const filteredStudents = students.filter(s => s.grade === selectedGrade);
 
+  // 💡 [핵심 해결] AI가 꼼수를 부리지 못하게 6번 강력 제재 조항을 추가했습니다!
   const formattingGuidelines = `
   [문제 출력 형식 및 텍스트 강조 가이드라인]
   1. 밑줄 사용 절대 금지: 플랫폼 환경상 밑줄(underline, <u>태그 등)은 정상적으로 출력되지 않으므로 절대 사용하지 마세요.
@@ -56,8 +56,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   4. 보기 구성: 밑줄/강조 문제의 보기를 만들 때는 숫자만 적지 말고, 반드시 해당 단어를 함께 적어주세요.
      - 올바른 보기 예시: ["① that", "② be used", "③ could appear"]
   5. 박스 처리(문장 삽입/요약문): 문장 삽입 문제의 [주어진 문장]이나, 요약문 문제의 [요약문]은 본문과 헷갈리지 않게 반드시 인용구(>) 기호를 해당 문장 맨 앞에 넣어서 명확히 구분하세요.
-     - 예시:
-     > 주어진 문장 내용
+  6. 🚨 [매우 중요] 지문 생략 절대 금지: 지문 내용이 아무리 길어도 중간에 '...' 기호 등을 사용하여 임의로 요약하거나 생략하지 마세요. 원본 텍스트 전체를 처음부터 끝까지 빠짐없이 100% 모두 출력해야 합니다.
   `;
 
   const handleGenerateAI = async (type: 'mid' | 'high') => {
@@ -171,7 +170,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     }
   };
 
-  // 💡 [핵심 추가] 데이터베이스에 생성된 문제를 저장하는 함수
   const handleSaveToDB = async () => {
     if (generatedProblems.length === 0) return alert("저장할 문제가 없습니다.");
     
@@ -180,11 +178,10 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
 
     setIsSaving(true);
     try {
-      // 수파베이스의 'ai_exams' 테이블에 제목과 문제(JSON)를 저장합니다.
       const { error } = await supabase.from('ai_exams').insert([
         {
           title: title.trim(),
-          problems: generatedProblems // JSON 형태 그대로 저장
+          problems: generatedProblems 
         }
       ]);
 
@@ -302,31 +299,28 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     });
   };
 
-  const chunkArray = <T,>(arr: T[], size: number): T[][] => {
-    return Array.from({ length: Math.ceil(arr.length / size) }, (v, i) =>
-      arr.slice(i * size, i * size + size)
-    );
-  };
-
-  const problemChunks = chunkArray(generatedProblems, 4);
-
   return (
-    <div style={{ backgroundColor: '#f4f6f8', minHeight: '100vh', fontFamily: 'Pretendard, sans-serif' }}>
+    <div className="print-root" style={{ backgroundColor: '#f4f6f8', minHeight: '100vh', fontFamily: 'Pretendard, sans-serif' }}>
       
       <style>
         {`
           .print-only { display: none; }
           
+          /* 💡 [핵심 해결] 프린트 시 쓸데없는 여백이나 숨겨진 요소를 완벽 제거하고 물 흐르듯 인쇄되게 만듭니다 */
           @media print {
             @page {
               size: A4;
               margin: 12mm 10mm;
             }
             
-            body, html {
+            body, html, .print-root {
               margin: 0 !important;
               padding: 0 !important;
               background-color: white !important;
+              height: auto !important;
+              min-height: auto !important;
+              overflow: visible !important;
+              display: block !important;
             }
 
             .no-print { 
@@ -342,26 +336,29 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
 
             .print-page-break { 
               page-break-before: always;
-              break-before: page;
             }
             
             .print-col-2 {
               column-count: 2;
               column-gap: 12mm;
               width: 100%;
+              display: block;
             }
 
+            /* 💡 크롬 다단 편집 버그 박멸: break-inside: avoid를 없애서 자연스럽게 잘려 다음 단으로 이어지게 만듭니다 */
             .problem-box {
               width: 100%;
-              margin-bottom: 28px;
+              margin-bottom: 24px;
               display: block; 
-              break-inside: auto; 
-              page-break-inside: auto;
+              break-inside: auto !important; 
+              page-break-inside: auto !important;
+              -webkit-column-break-inside: auto !important;
             }
 
             .options-box {
-              break-inside: avoid;
-              page-break-inside: avoid;
+              display: block;
+              break-inside: auto !important;
+              page-break-inside: auto !important;
             }
           }
         `}
@@ -374,7 +371,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
           <h1 style={{ margin: 0, fontSize: '20px', fontWeight: '800', color: '#1e293b' }}>🤖 AI 문제 연구소 & 배포 통제실</h1>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          {/* 💡 [추가됨] DB 저장 버튼 */}
           <button disabled={!isGenerated || isGenerating || isSaving} onClick={handleSaveToDB} style={{ padding: '8px 16px', backgroundColor: '#8b5cf6', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: (!isGenerated || isGenerating || isSaving) ? 'not-allowed' : 'pointer' }}>
             {isSaving ? '⏳ 저장 중...' : '💾 시험지 저장'}
           </button>
@@ -539,7 +535,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
         </div>
       )}
 
-      {/* 🖨 인쇄될 영역 (수능형 2단 레이아웃 + 완벽 줄맞춤 적용) */}
+      {/* 🖨 인쇄될 영역 (수능형 2단 레이아웃 + 자연스러운 흐름 적용) */}
       <div className="print-only">
         {isGenerated && (
           <div>
