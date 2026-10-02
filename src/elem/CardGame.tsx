@@ -36,9 +36,9 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
   const [stage, setStage] = useState(1);
   const [hearts, setHearts] = useState(5);
   const [score, setScore] = useState(0);
-  const [stageBonus, setStageBonus] = useState(0);
-
-  // 💡 [추가] 3초 힌트를 보여주는 중인지 상태 표시
+  
+  // 💡 보너스 점수 대신 스테이지 클리어 점수를 표시하기 위한 상태
+  const [stageClearScore, setStageClearScore] = useState(0); 
   const [isPeeking, setIsPeeking] = useState(false);
 
   useEffect(() => {
@@ -51,7 +51,17 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
         const { data, error } = await query.limit(200);
         
         if (error) throw error;
-        if (data) setAllWordsDb(data);
+        
+        if (data) {
+          // 💡 [핵심 패치 1] 영어 단어 스펠링을 기준으로 중복을 완벽하게 제거합니다!
+          const uniqueWordsMap = new Map<string, Word>();
+          data.forEach(word => {
+            if (word.eng && word.kor) {
+              uniqueWordsMap.set(word.eng.trim().toLowerCase(), word);
+            }
+          });
+          setAllWordsDb(Array.from(uniqueWordsMap.values()));
+        }
       } catch (e) {
         console.error("단어 로딩 실패:", e);
       }
@@ -70,6 +80,8 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
   };
 
   const saveLogToDB = async (finalScore: number, finalStage: number, statusText: string) => {
+    if (finalScore === 0) return; // 점수가 0점이면 굳이 저장하지 않음
+
     const today = new Date();
     const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
     
@@ -93,7 +105,7 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
 
   const startNewGame = () => {
     if (allWordsDb.length < 10) {
-      return alert(`[${currentBook}] 교재의 단어가 부족합니다. (최소 10개 이상 필요)`);
+      return alert(`[${currentBook}] 교재의 고유 단어가 부족합니다. (최소 10개 이상 필요)`);
     }
     setStage(1);
     setHearts(5);
@@ -124,13 +136,12 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
     setMatchedIds([]);
     setGameState('playing');
 
-    // 💡 [핵심 패치 1] 시작할 때 3초(3000ms) 동안 모든 카드를 보여줍니다!
     setIsLocked(true);
     setIsPeeking(true);
-    setFlippedIndices(gameCards.map((_, i) => i)); // 모든 카드 뒤집기
+    setFlippedIndices(gameCards.map((_, i) => i)); 
     
     setTimeout(() => {
-      setFlippedIndices([]); // 3초 뒤 다시 전부 덮기
+      setFlippedIndices([]); 
       setIsLocked(false);
       setIsPeeking(false);
     }, 3000);
@@ -153,7 +164,7 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
       const secondCard = cards[newFlipped[1]];
 
       if (firstCard.wordId === secondCard.wordId) {
-        setScore((prev) => prev + 1);
+        // 💡 [핵심 패치 3] 여기서 점수(1점)가 올라가던 것을 삭제했습니다!
         const newMatched = [...matchedIds, firstCard.wordId];
         setMatchedIds(newMatched);
         setFlippedIndices([]);
@@ -162,10 +173,12 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
         // 스테이지를 전부 맞췄을 때
         if (newMatched.length === cards.length / 2) {
           setTimeout(() => {
-            setStageBonus(hearts);
-            setScore((prev) => prev + hearts);
+            // 💡 [핵심 패치 3] 스테이지 클리어 시에만 '현재 스테이지'만큼의 점수를 부여!
+            const earnedScore = stage; 
+            setStageClearScore(earnedScore);
+            setScore((prev) => prev + earnedScore);
             
-            // 💡 [핵심 패치 2] 스테이지 클리어 보상으로 하트 1개 회복! (최대 5개 유지)
+            // 생명 회복 보너스는 그대로 유지 (아이들의 사기 진작용)
             setHearts((prevHearts) => Math.min(prevHearts + 1, 5));
 
             setGameState('stageClear');
@@ -235,8 +248,8 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
           .card-front {
             background: linear-gradient(135deg, #007aff, #5ac8fa);
             color: white;
-            font-size: 32px;
-            font-weight: 800;
+            font-size: 36px;
+            font-weight: 900;
           }
           .card-back {
             background: white;
@@ -250,9 +263,9 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
           }
           
           @keyframes pulseHint {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
+            0% { transform: translateX(-50%) scale(1); }
+            50% { transform: translateX(-50%) scale(1.05); }
+            100% { transform: translateX(-50%) scale(1); }
           }
         `}
       </style>
@@ -276,8 +289,8 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
             </div>
           )}
           <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '12px', marginBottom: '32px', fontSize: '13px', color: '#334155', fontWeight: '700', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <span>💡 <b>스테이지를 깨면 하트가 1개 회복</b>됩니다!</span>
-            <span>🏆 <b>하트를 아끼면 보너스 점수</b>가 부여됩니다.</span>
+            <span>🔥 <b>스테이지 숫자가 곧 획득 점수</b>입니다! (2단계=2점)</span>
+            <span>💖 <b>스테이지를 깨면 하트가 1개 회복</b>됩니다!</span>
           </div>
           <button onClick={startNewGame} style={{ width: '100%', padding: '18px', background: 'linear-gradient(135deg, #ff3b30, #ff9500)', color: 'white', border: 'none', borderRadius: '16px', fontSize: '18px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 6px 16px rgba(255,59,48,0.2)' }}>
             🎮 서바이벌 시작
@@ -304,7 +317,6 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
             </div>
           </div>
 
-          {/* 💡 3초 힌트 알림창 */}
           {isPeeking && (
             <div style={{ position: 'absolute', top: '100px', left: '50%', transform: 'translateX(-50%)', backgroundColor: 'rgba(0,0,0,0.8)', color: 'white', padding: '12px 24px', borderRadius: '30px', fontWeight: '800', fontSize: '16px', zIndex: 100, animation: 'pulseHint 1s infinite' }}>
               👀 집중! 위치를 기억하세요!
@@ -325,11 +337,13 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
                   <div className="card-inner">
                     <div className="card-front">?</div>
                     <div className="card-back" style={{ border: isMatched ? '3px solid #4caf50' : '2px solid #e2e8f0', backgroundColor: isMatched ? '#f0fdf4' : 'white' }}>
+                      {/* 💡 [핵심 패치 2] 카드 글씨 크기를 대폭 키우고 굵기를 900으로 진하게 적용했습니다! */}
                       <span style={{ 
-                        fontSize: card.type === 'eng' ? (card.text.length > 8 ? '13px' : '15px') : '14px', 
-                        fontWeight: '800', 
+                        fontSize: card.type === 'eng' ? (card.text.length > 8 ? '18px' : '24px') : '22px', 
+                        fontWeight: '900', 
                         color: card.type === 'eng' ? '#007aff' : '#111',
-                        wordBreak: 'keep-all'
+                        wordBreak: 'keep-all',
+                        lineHeight: '1.2'
                       }}>
                         {card.text}
                       </span>
@@ -347,8 +361,8 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
           <div style={{ fontSize: '56px', marginBottom: '16px' }}>✨</div>
           <h2 style={{ fontSize: '26px', fontWeight: '800', margin: '0 0 12px', color: '#111' }}>{stage}단계 클리어!</h2>
           <div style={{ backgroundColor: '#f8fafc', borderRadius: '16px', padding: '20px', marginBottom: '32px' }}>
-            <div style={{ fontSize: '15px', fontWeight: '700', color: '#64748b', marginBottom: '8px' }}>
-              남은 하트 보너스: <b style={{color: '#ff3b30'}}>+{stageBonus}점</b>
+            <div style={{ fontSize: '16px', fontWeight: '800', color: '#64748b', marginBottom: '12px' }}>
+              스테이지 클리어 점수: <b style={{color: '#ff3b30', fontSize: '20px'}}>+{stageClearScore}점</b>
             </div>
             <div style={{ fontSize: '15px', fontWeight: '700', color: '#10b981', marginBottom: '16px' }}>
               💖 보상: 하트 1개 회복!
@@ -358,7 +372,7 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
             </div>
           </div>
           <button onClick={handleNextStage} style={{ width: '100%', padding: '18px', background: 'linear-gradient(135deg, #007aff, #0056b3)', color: 'white', border: 'none', borderRadius: '16px', fontSize: '18px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 6px 16px rgba(0,122,255,0.2)' }}>
-            다음 단계 도전하기 ➡️
+            다음 단계 도전하기 ➡️️
           </button>
         </div>
       )}
@@ -373,7 +387,7 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
             <span style={{ fontSize: '14px', fontWeight: '800', color: '#991b1b', display: 'block', marginBottom: '8px' }}>최종 기록</span>
             <div style={{ fontSize: '20px', fontWeight: '800', color: '#b91c1c', marginBottom: '4px' }}>도달 단계: STAGE {stage}</div>
             <div style={{ fontSize: '32px', fontWeight: '900', color: '#ef4444' }}>{score}점</div>
-            <div style={{ marginTop: '12px', fontSize: '13px', color: '#ef4444', fontWeight: 'bold' }}>✅ 점수가 랭킹에 무사히 반영되었습니다!</div>
+            {score > 0 && <div style={{ marginTop: '12px', fontSize: '13px', color: '#ef4444', fontWeight: 'bold' }}>✅ 점수가 랭킹에 무사히 반영되었습니다!</div>}
           </div>
           
           <div style={{ display: 'flex', gap: '12px' }}>
