@@ -60,11 +60,13 @@ export default function TypingGame({ onBack, studentId, studentName, currentBook
 
   // 💡 [핵심] 줄다리기 실시간 타이머 (상어가 계속 당깁니다)
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    // 👇 NodeJS.Timeout 대신 아래 코드로 변경했습니다!
+    let timer: ReturnType<typeof setInterval>; 
+    
     if (gameState === 'playing') {
       timer = setInterval(() => {
         setTension((prev) => {
-          const next = prev - 1; // 상어가 0.4초마다 1%씩 당김 (약 20초 안에 아무것도 안하면 짐)
+          const next = prev - 1; // 상어가 0.4초마다 1%씩 당김
           if (next <= 0) {
             handleLostTugOfWar();
             return 50; // 리셋
