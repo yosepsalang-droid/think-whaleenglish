@@ -37,7 +37,6 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
   const [hearts, setHearts] = useState(5);
   const [score, setScore] = useState(0);
   
-  // 💡 보너스 점수 대신 스테이지 클리어 점수를 표시하기 위한 상태
   const [stageClearScore, setStageClearScore] = useState(0); 
   const [isPeeking, setIsPeeking] = useState(false);
 
@@ -53,7 +52,6 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
         if (error) throw error;
         
         if (data) {
-          // 💡 [핵심 패치 1] 영어 단어 스펠링을 기준으로 중복을 완벽하게 제거합니다!
           const uniqueWordsMap = new Map<string, Word>();
           data.forEach(word => {
             if (word.eng && word.kor) {
@@ -80,7 +78,7 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
   };
 
   const saveLogToDB = async (finalScore: number, finalStage: number, statusText: string) => {
-    if (finalScore === 0) return; // 점수가 0점이면 굳이 저장하지 않음
+    if (finalScore === 0) return; 
 
     const today = new Date();
     const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
@@ -104,8 +102,8 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
   };
 
   const startNewGame = () => {
-    if (allWordsDb.length < 10) {
-      return alert(`[${currentBook}] 교재의 고유 단어가 부족합니다. (최소 10개 이상 필요)`);
+    if (allWordsDb.length < 5) {
+      return alert(`[${currentBook}] 교재의 단어가 부족합니다. (최소 5개 이상 필요)`);
     }
     setStage(1);
     setHearts(5);
@@ -114,7 +112,11 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
   };
 
   const generateStage = (targetStage: number, currentScore: number) => {
-    const wordCountForStage = targetStage * 2;
+    // 💡 [핵심 난이도 패치] 스테이지 숫자 = 불러올 단어 개수
+    // 1단계: 단어 1개 (카드 2장)
+    // 2단계: 단어 2개 (카드 4장)
+    // 3단계: 단어 3개 (카드 6장) ...
+    const wordCountForStage = targetStage;
     
     if (wordCountForStage > allWordsDb.length) {
        setGameState('result');
@@ -164,21 +166,17 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
       const secondCard = cards[newFlipped[1]];
 
       if (firstCard.wordId === secondCard.wordId) {
-        // 💡 [핵심 패치 3] 여기서 점수(1점)가 올라가던 것을 삭제했습니다!
         const newMatched = [...matchedIds, firstCard.wordId];
         setMatchedIds(newMatched);
         setFlippedIndices([]);
         setIsLocked(false);
 
-        // 스테이지를 전부 맞췄을 때
         if (newMatched.length === cards.length / 2) {
           setTimeout(() => {
-            // 💡 [핵심 패치 3] 스테이지 클리어 시에만 '현재 스테이지'만큼의 점수를 부여!
             const earnedScore = stage; 
             setStageClearScore(earnedScore);
             setScore((prev) => prev + earnedScore);
             
-            // 생명 회복 보너스는 그대로 유지 (아이들의 사기 진작용)
             setHearts((prevHearts) => Math.min(prevHearts + 1, 5));
 
             setGameState('stageClear');
@@ -206,9 +204,15 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
     setStage((prev) => prev + 1);
   };
 
+  // 💡 [배열 패치] 카드 개수에 맞춰 화면이 찌그러지지 않고 예쁘게 나오도록 수정
   const getGridColumns = () => {
-    if (cards.length <= 4) return 'repeat(2, 1fr)';
-    return 'repeat(4, 1fr)';
+    const totalCards = cards.length;
+    if (totalCards === 2) return 'repeat(2, 1fr)'; // 1단계: 2장
+    if (totalCards === 4) return 'repeat(2, 1fr)'; // 2단계: 4장
+    if (totalCards === 6) return 'repeat(3, 1fr)'; // 3단계: 6장
+    if (totalCards === 8) return 'repeat(4, 1fr)'; // 4단계: 8장
+    if (totalCards === 10) return 'repeat(5, 1fr)'; // 5단계: 10장
+    return 'repeat(4, 1fr)'; // 그 이상은 4칸씩 줄바꿈
   };
 
   return (
@@ -220,6 +224,9 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
             perspective: 1000px;
             cursor: pointer;
             aspect-ratio: 3 / 4;
+            max-width: 150px;
+            margin: 0 auto;
+            width: 100%;
           }
           .card-inner {
             position: relative;
@@ -337,9 +344,8 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
                   <div className="card-inner">
                     <div className="card-front">?</div>
                     <div className="card-back" style={{ border: isMatched ? '3px solid #4caf50' : '2px solid #e2e8f0', backgroundColor: isMatched ? '#f0fdf4' : 'white' }}>
-                      {/* 💡 [핵심 패치 2] 카드 글씨 크기를 대폭 키우고 굵기를 900으로 진하게 적용했습니다! */}
                       <span style={{ 
-                        fontSize: card.type === 'eng' ? (card.text.length > 8 ? '18px' : '24px') : '22px', 
+                        fontSize: card.type === 'eng' ? (card.text.length > 8 ? '16px' : '20px') : '18px', 
                         fontWeight: '900', 
                         color: card.type === 'eng' ? '#007aff' : '#111',
                         wordBreak: 'keep-all',
@@ -372,7 +378,7 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
             </div>
           </div>
           <button onClick={handleNextStage} style={{ width: '100%', padding: '18px', background: 'linear-gradient(135deg, #007aff, #0056b3)', color: 'white', border: 'none', borderRadius: '16px', fontSize: '18px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 6px 16px rgba(0,122,255,0.2)' }}>
-            다음 단계 도전하기 ➡️️
+            다음 단계 도전하기 ➡
           </button>
         </div>
       )}
