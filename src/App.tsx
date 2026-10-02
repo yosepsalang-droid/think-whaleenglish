@@ -11,6 +11,7 @@ import Grammar from './elem/Grammar';
 import WordMaster from './elem/WordMaster';
 import Ranking from './elem/Ranking'; 
 import GameWordDrop from './elem/GameWordDrop'; 
+import CardGame from './elem/CardGame'; // 💡 [추가] 카드게임 불러오기
 
 // 📘 중·고등부 학습 컴포넌트
 import MidHome from './mid/MidHome';
@@ -36,7 +37,6 @@ export default function App() {
   const [loggedInStudent, setLoggedInStudent] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   
-  // 💡 studentMode에 'phonics' 모드를 추가했습니다.
   const [studentMode, setStudentMode] = useState<'elementary' | 'middle' | 'phonics' | null>(null);
   
   const [integratedRank, setIntegratedRank] = useState<IntegratedRankingResult & { loading: boolean }>({
@@ -114,7 +114,6 @@ export default function App() {
     }
   };
 
-  // 💡 phonics 모드도 처리할 수 있게 변경했습니다.
   const handleModeSelect = (mode: 'elementary' | 'middle' | 'phonics') => {
     if (!loggedInStudent) {
       setLoggedInStudent({
@@ -141,7 +140,6 @@ export default function App() {
       return <Lms onBack={() => { setIsLoggedIn(false); setIsAdmin(false); setId(''); }} />;
     }
 
-    // 💡 파닉스 모드일 때 PhonicsLobby 화면을 띄워줍니다!
     if (loggedInStudent && studentMode === 'phonics') {
       return <PhonicsLobby onBack={handleBackToSelect} studentName={loggedInStudent.name} stars={150} />;
     }
@@ -187,7 +185,16 @@ export default function App() {
           
           {currentMenu === 'gameWordDrop' && <GameWordDrop student={loggedInStudent} onBack={() => setCurrentMenu('home')} onGameComplete={handleGameComplete} />}
           
-          {/* 💡 [핵심 해결] Ranking 컴포넌트에 studentName을 넘겨주도록 추가했습니다! */}
+          {/* 💡 [핵심 추가] 카드게임 메뉴 등록 (ElementaryHome에서 onNavigate('cardGame') 호출 시 렌더링됨) */}
+          {currentMenu === 'cardGame' && (
+            <CardGame 
+              onBack={() => setCurrentMenu('home')} 
+              studentId={loggedInStudent.id} 
+              studentName={loggedInStudent.name} 
+              onGameComplete={handleGameComplete} 
+            />
+          )}
+
           {currentMenu === 'ranking' && (
             <Ranking 
               onBack={() => setCurrentMenu('home')} 
@@ -207,22 +214,20 @@ export default function App() {
           <h2 style={{ margin: '0 0 32px 0', fontSize: '22px', fontWeight: '800', color: '#111' }}>어떤 과정으로 입장할까요?</h2>
           
           <div style={{ display: 'flex', gap: '20px', justifyContent: 'space-between' }}>
-            
-            <button onClick={() => handleModeSelect('phonics')} style={{ flex: 1, aspectRatio: '1 / 1', backgroundColor: '#34c759', color: 'white', border: 'none', borderRadius: '24px', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '16px', boxShadow: '0 6px 16px rgba(52, 199, 89, 0.3)', transition: 'all 0.2s ease-in-out' }} onMouseOver={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(52, 199, 89, 0.4)'; }} onMouseOut={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(52, 199, 89, 0.3)'; }}>
+            <button onClick={() => handleModeSelect('phonics')} style={{ flex: 1, aspectRatio: '1 / 1', backgroundColor: '#34c759', color: 'white', border: 'none', borderRadius: '24px', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '16px', boxShadow: '0 6px 16px rgba(52, 199, 89, 0.3)', transition: 'all 0.2s ease-in-out' }}>
               <span style={{ fontSize: '56px', lineHeight: '1' }}>🐣</span>
               <span style={{ fontSize: '22px', fontWeight: '800', wordBreak: 'keep-all', lineHeight: '1.3' }}>파닉스<br/>입장</span>
             </button>
 
-            <button onClick={() => handleModeSelect('elementary')} style={{ flex: 1, aspectRatio: '1 / 1', backgroundColor: '#ff9500', color: 'white', border: 'none', borderRadius: '24px', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '16px', boxShadow: '0 6px 16px rgba(255, 149, 0, 0.3)', transition: 'all 0.2s ease-in-out' }} onMouseOver={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(255, 149, 0, 0.4)'; }} onMouseOut={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(255, 149, 0, 0.3)'; }}>
+            <button onClick={() => handleModeSelect('elementary')} style={{ flex: 1, aspectRatio: '1 / 1', backgroundColor: '#ff9500', color: 'white', border: 'none', borderRadius: '24px', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '16px', boxShadow: '0 6px 16px rgba(255, 149, 0, 0.3)', transition: 'all 0.2s ease-in-out' }}>
               <span style={{ fontSize: '56px', lineHeight: '1' }}>🐋</span>
               <span style={{ fontSize: '22px', fontWeight: '800', wordBreak: 'keep-all', lineHeight: '1.3' }}>초등부<br/>입장</span>
             </button>
             
-            <button onClick={() => handleModeSelect('middle')} style={{ flex: 1, aspectRatio: '1 / 1', backgroundColor: '#007aff', color: 'white', border: 'none', borderRadius: '24px', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '16px', boxShadow: '0 6px 16px rgba(0, 122, 255, 0.3)', transition: 'all 0.2s ease-in-out' }} onMouseOver={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 122, 255, 0.4)'; }} onMouseOut={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(0, 122, 255, 0.3)'; }}>
+            <button onClick={() => handleModeSelect('middle')} style={{ flex: 1, aspectRatio: '1 / 1', backgroundColor: '#007aff', color: 'white', border: 'none', borderRadius: '24px', cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '16px', boxShadow: '0 6px 16px rgba(0, 122, 255, 0.3)', transition: 'all 0.2s ease-in-out' }}>
               <span style={{ fontSize: '56px', lineHeight: '1' }}>📘</span>
               <span style={{ fontSize: '22px', fontWeight: '800', wordBreak: 'keep-all', lineHeight: '1.3' }}>중·고등부<br/>입장</span>
             </button>
-
           </div>
         </div>
       </div>
@@ -245,7 +250,7 @@ export default function App() {
         <h1 style={{ margin: '0', fontSize: '28px', fontWeight: '800' }}>고래영어</h1>
         <input placeholder="학생 ID를 입력하세요" value={id} onChange={(e) => setId(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleLogin()} style={{ width: '100%', padding: '16px', margin: '32px 0 16px', borderRadius: '12px', border: '2px solid #111', boxSizing: 'border-box' }} />
         <button onClick={handleLogin} style={{ width: '100%', padding: '16px', backgroundColor: '#007aff', color: 'white', border: 'none', borderRadius: '12px', fontWeight: '700', cursor: 'pointer' }}>학습 시작하기</button>
-        <button onClick={() => setShowTestLogin(true)} style={{ width: '100%', padding: '16px', marginTop: '16px', backgroundColor: '#333', color: 'white', border: 'none', borderRadius: '12px', fontWeight: '700', cursor: 'pointer' }}>🛠️ (테스트) 새로운 수파베이스 로그인 열기</button>
+        <button onClick={() => setShowTestLogin(true)} style={{ width: '100%', padding: '16px', marginTop: '16px', backgroundColor: '#333', color: 'white', border: 'none', borderRadius: '12px', fontWeight: '700', cursor: 'pointer' }}>🛠️️ (테스트) 새로운 수파베이스 로그인 열기</button>
       </div>
     </div>
   );

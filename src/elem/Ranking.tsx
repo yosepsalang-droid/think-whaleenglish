@@ -11,7 +11,6 @@ interface RankingProps {
   studentName?: string; 
 }
 
-// 💡 리액트 그래픽으로 직접 그리는 병사 계급장 (작대기 세로 쌓기)
 const renderEnlisted = (count: number) => (
   <span style={{ display: 'inline-flex', flexDirection: 'column', gap: '3px', alignItems: 'center', verticalAlign: 'middle', margin: '0 4px', transform: 'translateY(-1px)' }}>
     {Array.from({ length: count }).map((_, i) => (
@@ -20,7 +19,6 @@ const renderEnlisted = (count: number) => (
   </span>
 );
 
-// 💡 리액트 그래픽으로 직접 그리는 부사관 계급장 (V자 세로 쌓기)
 const renderNCO = (count: number) => (
   <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', verticalAlign: 'middle', lineHeight: '0.4', margin: '0 4px', color: '#b45309', fontWeight: '900', fontSize: '15px' }}>
     {Array.from({ length: count }).map((_, i) => (
@@ -83,7 +81,6 @@ function HonorRollCard({ data, isLoading }: { data: RankData[]; isLoading: boole
   );
 }
 
-// 💡 [핵심] 내 순위를 화면 아래쪽에 추가로 그려주는 로직을 넣었습니다.
 function MarathonRankingCard({ 
   data, isLoading, myRankData, myRankIndex, myRankInfo, studentName 
 }: { 
@@ -105,13 +102,12 @@ function MarathonRankingCard({
           {data.map((item, index) => {
             const rankInfo = getMilitaryRank(item.score, index);
             const shiftAmount = index * 14; 
-            const isMe = item.studentName === studentName; // 💡 내가 Top 10에 있는지 확인
+            const isMe = item.studentName === studentName;
             
             return (
               <div key={index} style={{ 
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
                 padding: '10px 14px', 
-                // 💡 내가 Top 10에 있으면 눈에 띄게 파란색으로 칠해줍니다!
                 backgroundColor: isMe ? '#eff6ff' : 'white', 
                 borderRadius: '12px', 
                 boxShadow: isMe ? '0 4px 12px rgba(59,130,246,0.3)' : '0 4px 6px rgba(0,0,0,0.05)', 
@@ -139,7 +135,6 @@ function MarathonRankingCard({
             );
           })}
 
-          {/* 💡 [핵심] 내가 Top 10 안에 없을 경우, 리스트 맨 아래에 점선(⋮)과 함께 내 순위를 보여줍니다! */}
           {myRankData && myRankIndex >= 10 && myRankInfo && (
             <>
               <div style={{ textAlign: 'center', color: '#94a3b8', margin: '6px 0', fontSize: '20px', fontWeight: '900', lineHeight: '0.8' }}>
@@ -169,7 +164,6 @@ function MarathonRankingCard({
               </div>
             </>
           )}
-
         </div>
       )}
     </div>
@@ -199,11 +193,13 @@ export default function Ranking({ onBack, studentName = "테스트학생" }: Ran
         let isFetchingLogs = true;
 
         while (isFetchingLogs) {
+          // 🚨 [점수 오류 해결 핵심] order('created_at')을 추가하여 데이터가 랜덤으로 섞이거나 누락되는 것을 막았습니다.
           const { data, error } = await supabase
             .from('learning_logs')
             .select('student_id, student_name, score, created_at') 
             .gte('created_at', startOfLastMonth.toISOString()) 
             .eq('status', '완료')
+            .order('created_at', { ascending: false }) 
             .range(from, from + step - 1); 
 
           if (error) throw error;
@@ -222,9 +218,11 @@ export default function Ranking({ onBack, studentName = "테스트학생" }: Ran
         let isFetchingStudents = true;
         
         while (isFetchingStudents) {
+          // 🚨 [점수 오류 해결 핵심] 학생 데이터도 순서대로 불려오도록 고정
           const { data, error } = await supabase
             .from('students')
             .select('student_id, grade')
+            .order('student_id', { ascending: true })
             .range(studentFrom, studentFrom + step - 1);
 
           if (error) throw error;
@@ -316,7 +314,6 @@ export default function Ranking({ onBack, studentName = "테스트학생" }: Ran
         isLoading={isLoading} 
       />
 
-      {/* 💡 [핵심] 여기에 나의 랭킹 정보를 같이 넘겨줍니다! */}
       <MarathonRankingCard 
         data={fullThisMonthRankings.slice(0, 10)} 
         isLoading={isLoading} 
@@ -326,7 +323,6 @@ export default function Ranking({ onBack, studentName = "테스트학생" }: Ran
         studentName={studentName}
       />
 
-      {/* 💡 하단 고정 내 순위바는 화면 스크롤을 내려도 항상 내 위치를 볼 수 있게 유지해 두었습니다! */}
       {!isLoading && (
         <div style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: '500px', backgroundColor: '#111', padding: '16px 20px', boxSizing: 'border-box', borderTopLeftRadius: '20px', borderTopRightRadius: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 -4px 20px rgba(0,0,0,0.15)', zIndex: 100 }}>
           {myRankData && myRankInfo ? (
