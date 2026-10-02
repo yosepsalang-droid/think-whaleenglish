@@ -35,7 +35,6 @@ export default function ElementaryHome({ student, onNavigate, onLogout, onBackTo
           </div>
         </div>
 
-        {/* ⭐️ 이전 버전의 '학습 교재' 영역 완벽 복구 */}
         <div style={{ background: '#007aff', borderRadius: '20px', padding: '24px', color: 'white', marginBottom: '32px', textAlign: 'center', boxShadow: '0 8px 20px rgba(0,122,255,0.25)' }}>
           <div style={{ fontSize: '13px', fontWeight: '800', opacity: 0.9, marginBottom: '12px', letterSpacing: '1px' }}>TODAY'S MISSION 📖</div>
           <div style={{ fontSize: '22px', fontWeight: '800', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px' }}>
@@ -69,7 +68,6 @@ export default function ElementaryHome({ student, onNavigate, onLogout, onBackTo
     );
   }
 
-  // ⭐️ 1. 진도 학습 하위 메뉴
   if (currentView === 'progress') {
     return (
       <div style={{ padding: '24px', maxWidth: '500px', margin: '0 auto', fontFamily: 'Pretendard, sans-serif' }}>
@@ -85,7 +83,6 @@ export default function ElementaryHome({ student, onNavigate, onLogout, onBackTo
     );
   }
 
-  // ⭐️ 2. 오늘의 숙제 하위 메뉴 (WhaleChat 연결)
   if (currentView === 'homework') {
     return (
       <div style={{ padding: '24px', maxWidth: '500px', margin: '0 auto', fontFamily: 'Pretendard, sans-serif' }}>
@@ -94,13 +91,11 @@ export default function ElementaryHome({ student, onNavigate, onLogout, onBackTo
         
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <button onClick={() => onNavigate('chat')} style={subButtonStyle}>🤖 AI 고래 대화</button>
-          {/* 추후 영어 일기 쓰기 등이 추가될 수 있는 자리입니다 */}
         </div>
       </div>
     );
   }
 
-  // ⭐️ 3. 영어 게임 하위 메뉴 (Grammar, WordMaster, GameWordDrop, Ranking 연결)
   if (currentView === 'game') {
     return (
       <div style={{ padding: '24px', maxWidth: '500px', margin: '0 auto', fontFamily: 'Pretendard, sans-serif' }}>
@@ -110,9 +105,12 @@ export default function ElementaryHome({ student, onNavigate, onLogout, onBackTo
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <button onClick={() => onNavigate('grammar')} style={subButtonStyle}>⚡ 스피드 문법</button>
           <button onClick={() => onNavigate('wordMaster')} style={subButtonStyle}>⌨️ Word Master</button>
-          
-          {/* 💡 새로운 Word Drop 게임 버튼 추가 완료! */}
           <button onClick={() => onNavigate('gameWordDrop')} style={subButtonStyle}>☄️ Word Drop</button>
+          
+          {/* 💡 [추가 완료] Word Drop 바로 아래에 새로운 서바이벌 게임 버튼을 쏙 넣었습니다! */}
+          <button onClick={() => onNavigate('cardGame')} style={{ ...subButtonStyle, border: '2px solid #ff2d55', color: '#ff2d55' }}>
+            🃏 서바이벌 카드 짝맞추기
+          </button>
           
           <button onClick={() => onNavigate('ranking')} style={subButtonStyle}>🏆 랭킹전 확인하기</button>
         </div>
@@ -123,4 +121,15 @@ export default function ElementaryHome({ student, onNavigate, onLogout, onBackTo
   return null;
 }
 
-const subButtonStyle = { width: '100%', padding: '18px 20px', background: 'white', border: '2px solid #eaeaea', borderRadius: '16px', fontSize: '18px', fontWeight: '800' as const, textAlign: 'left' as const, cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' };
+const subButtonStyle = { 
+  width: '100%', 
+  padding: '18px 20px', 
+  background: 'white', 
+  border: '2px solid #eaeaea', 
+  borderRadius: '16px', 
+  fontSize: '18px', 
+  fontWeight: '800' as const, 
+  textAlign: 'left' as const, 
+  cursor: 'pointer', 
+  boxShadow: '0 4px 12px rgba(0,0,0,0.02)' 
+};
