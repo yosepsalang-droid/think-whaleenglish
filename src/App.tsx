@@ -11,7 +11,8 @@ import Grammar from './elem/Grammar';
 import WordMaster from './elem/WordMaster';
 import Ranking from './elem/Ranking'; 
 import GameWordDrop from './elem/GameWordDrop'; 
-import CardGame from './elem/CardGame'; // 💡 [추가] 카드게임 불러오기
+import CardGame from './elem/CardGame'; 
+import TypingGame from './elem/TypingGame'; // 💡 [새로 추가된 파일 불러오기]
 
 // 📘 중·고등부 학습 컴포넌트
 import MidHome from './mid/MidHome';
@@ -185,14 +186,25 @@ export default function App() {
           
           {currentMenu === 'gameWordDrop' && <GameWordDrop student={loggedInStudent} onBack={() => setCurrentMenu('home')} onGameComplete={handleGameComplete} />}
           
-          {/* 💡 [핵심 추가] 카드게임 메뉴 등록 및 현재 교재 정보(currentBook) 전달 */}
           {currentMenu === 'cardGame' && (
             <CardGame 
               onBack={() => setCurrentMenu('home')} 
               studentId={loggedInStudent.id} 
               studentName={loggedInStudent.name} 
               currentBook={loggedInStudent.currentBook} 
-              tableName="words" /* 🚨 중요: 수파베이스 초등 단어 테이블명으로 필요시 수정 (예: words, voca_ele 등) */
+              tableName="words" 
+              onGameComplete={handleGameComplete} 
+            />
+          )}
+
+          {/* 💡 [새로 추가된 부분] 3단 진화 타이핑 게임 연결! (학생 교재도 완벽하게 넘겨줍니다) */}
+          {currentMenu === 'typingGame' && (
+            <TypingGame 
+              onBack={() => setCurrentMenu('home')} 
+              studentId={loggedInStudent.id} 
+              studentName={loggedInStudent.name} 
+              currentBook={loggedInStudent.currentBook} // 현재 교재 연동 완료!
+              tableName="words" 
               onGameComplete={handleGameComplete} 
             />
           )}
@@ -208,6 +220,7 @@ export default function App() {
     }
   }
 
+  // ... (이하 SchoolSelect 및 TestLogin 부분은 기존과 동일)
   if (showSchoolSelect) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f9f9f9', fontFamily: 'Pretendard' }}>

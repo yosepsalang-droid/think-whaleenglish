@@ -107,9 +107,13 @@ export default function ElementaryHome({ student, onNavigate, onLogout, onBackTo
           <button onClick={() => onNavigate('wordMaster')} style={subButtonStyle}>⌨️ Word Master</button>
           <button onClick={() => onNavigate('gameWordDrop')} style={subButtonStyle}>☄️ Word Drop</button>
           
-          {/* 💡 [추가 완료] Word Drop 바로 아래에 새로운 서바이벌 게임 버튼을 쏙 넣었습니다! */}
           <button onClick={() => onNavigate('cardGame')} style={{ ...subButtonStyle, border: '2px solid #ff2d55', color: '#ff2d55' }}>
             🃏 서바이벌 카드 짝맞추기
+          </button>
+          
+          {/* 💡 [여기에 추가되었습니다!] 3단 진화 타이핑 게임 입장 버튼 */}
+          <button onClick={() => onNavigate('typingGame')} style={{ ...subButtonStyle, border: '2px solid #8b5cf6', color: '#8b5cf6' }}>
+            ⌨️ 3단 진화 스펠링 마스터
           </button>
           
           <button onClick={() => onNavigate('ranking')} style={subButtonStyle}>🏆 랭킹전 확인하기</button>
