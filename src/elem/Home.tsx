@@ -55,7 +55,6 @@ export default function Home({ student, onNavigate, onLogout, onUpdateStudent, o
     }
   };
 
-  // 💡 메뉴 목록에 Word Drop 게임 추가 완료!
   const menus = [
     { id: 'word', title: '📝 단어 Test', desc: '오늘의 필수 어휘 마스터하기', color: '#4ea8de' },
     { id: 'sentence', title: '🧩 문장 배열 게임', desc: '어순 감각을 키우는 덩어리 학습', color: '#56cfe1' },
@@ -66,7 +65,7 @@ export default function Home({ student, onNavigate, onLogout, onUpdateStudent, o
   ];
 
   return (
-    <div style={{ fontFamily: 'sans-serif', padding: '15px', maxWidth: '500px', margin: '0 auto' }}>
+    <div style={{ fontFamily: 'sans-serif', padding: '15px', maxWidth: '500px', margin: '0 auto', paddingBottom: '40px' }}>
       
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '12px', border: '1px solid #eee' }}>
         <div>
@@ -113,7 +112,9 @@ export default function Home({ student, onNavigate, onLogout, onUpdateStudent, o
       </div>
 
       <h4 style={{ color: '#666', marginBottom: '15px' }}>오늘의 학습 메뉴</h4>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+      
+      {/* 💡 기존 메뉴 그리드 */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
         {menus.map((menu) => (
           <div 
             key={menu.id} 
@@ -130,6 +131,55 @@ export default function Home({ student, onNavigate, onLogout, onUpdateStudent, o
           </div>
         ))}
       </div>
+
+      {/* 💡 [추가됨] 눈에 띄는 스페셜 게임 입장 버튼! */}
+      <button 
+        onClick={() => onNavigate('cardGame')} 
+        style={{ 
+          width: '100%', 
+          padding: '18px', 
+          background: 'linear-gradient(135deg, #ff2d55, #ff3b30)', 
+          color: 'white', 
+          border: 'none', 
+          borderRadius: '16px', 
+          fontSize: '18px', 
+          fontWeight: '800', 
+          cursor: 'pointer', 
+          boxShadow: '0 6px 16px rgba(255,45,85,0.2)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: '8px',
+          marginTop: '8px'
+        }}
+      >
+        🃏 서바이벌 카드 짝맞추기 게임
+      </button>
+
+      {/* 💡 통합 랭킹전 버튼 (기존에 onNavigate('ranking') 용 버튼이 없다면 아래 코드가 유용합니다. 원치 않으시면 삭제하셔도 됩니다.) */}
+      <button 
+        onClick={() => onNavigate('ranking')} 
+        style={{ 
+          width: '100%', 
+          padding: '18px', 
+          background: 'linear-gradient(135deg, #111, #333)', 
+          color: 'white', 
+          border: 'none', 
+          borderRadius: '16px', 
+          fontSize: '18px', 
+          fontWeight: '800', 
+          cursor: 'pointer', 
+          boxShadow: '0 6px 16px rgba(0,0,0,0.2)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: '8px',
+          marginTop: '15px'
+        }}
+      >
+        🏆 명예의 전당 (통합 마라톤 랭킹)
+      </button>
+
     </div>
   );
 }
