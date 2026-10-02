@@ -5,8 +5,9 @@ interface CardGameProps {
   onBack: () => void;
   studentId: string;
   studentName: string;
+  currentBook?: string; // 💡 학생의 현재 교재를 받아옵니다
   tableName?: string;
-  onGameComplete?: () => void; // 💡 게임 종료 후 전역 점수 업데이트 트리거
+  onGameComplete?: () => void; 
 }
 
 interface Word {
@@ -22,7 +23,7 @@ interface Card {
   type: 'eng' | 'kor'; 
 }
 
-export default function CardGame({ onBack, studentId, studentName, tableName = 'words_ele', onGameComplete }: CardGameProps) {
+export default function CardGame({ onBack, studentId, studentName, currentBook, tableName = 'words', onGameComplete }: CardGameProps) {
   const [allWordsDb, setAllWordsDb] = useState<Word[]>([]);
   const [gameState, setGameState] = useState<'intro' | 'playing' | 'stageClear' | 'gameOver' | 'result'>('intro');
   
@@ -37,10 +38,19 @@ export default function CardGame({ onBack, studentId, studentName, tableName = '
   const [score, setScore] = useState(0);
   const [stageBonus, setStageBonus] = useState(0);
 
+  // 💡 [핵심] 학생의 currentBook에 해당하는 단어만 불러오도록 쿼리 수정
   useEffect(() => {
     const fetchWords = async () => {
       try {
-        const { data, error } = await supabase.from(tableName).select('id, eng, kor').limit(200);
+        let query = supabase.from(tableName).select('id, eng, kor');
+        
+        // currentBook 정보가 있으면 해당 교재 단어만 필터링 (컬럼명이 다를 경우 'book'을 알맞게 수정하세요)
+        if (currentBook) {
+          query = query.eq('book', currentBook); 
+        }
+
+        const { data, error } = await query.limit(200);
+        
         if (error) throw error;
         if (data) setAllWordsDb(data);
       } catch (e) {
@@ -48,7 +58,7 @@ export default function CardGame({ onBack, studentId, studentName, tableName = '
       }
     };
     fetchWords();
-  }, [tableName]);
+  }, [tableName, currentBook]);
 
   const speakText = (text: string) => {
     if ('speechSynthesis' in window) {
@@ -60,7 +70,6 @@ export default function CardGame({ onBack, studentId, studentName, tableName = '
     }
   };
 
-  // 💡 [핵심 연동] 무조건 '완료' 상태로 저장하여 랭킹판에서 점수가 즉각 합산되도록 변경
   const saveLogToDB = async (finalScore: number, finalStage: number, statusText: string) => {
     const today = new Date();
     const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
@@ -72,12 +81,11 @@ export default function CardGame({ onBack, studentId, studentName, tableName = '
         task_type: '단어 카드게임',
         book_info: `Stage ${finalStage} (${statusText})`,
         score: finalScore,
-        status: '완료', // 🚨 랭킹판이 가져가도록 무조건 '완료'로 세팅
+        status: '완료', 
         attempt: 1,
         log_date: dateStr
       }]);
       
-      // 저장 직후 메인 App.tsx에 신호를 보내서 랭킹 스코어 즉시 새로고침!
       if (onGameComplete) onGameComplete();
     } catch (err) {
       console.error("DB 점수 저장 오류:", err);
@@ -85,7 +93,9 @@ export default function CardGame({ onBack, studentId, studentName, tableName = '
   };
 
   const startNewGame = () => {
-    if (allWordsDb.length < 10) return alert("단어 데이터가 부족합니다. (최소 10개 이상 필요)");
+    if (allWordsDb.length < 10) {
+      return alert(`[${currentBook}] 교재의 단어가 부족합니다. (최소 10개 이상 필요)\n수파베이스 테이블명과 단어 개수를 확인해주세요!`);
+    }
     setStage(1);
     setHearts(5);
     setScore(0);
@@ -239,6 +249,11 @@ export default function CardGame({ onBack, studentId, studentName, tableName = '
           <p style={{ fontSize: '15px', color: '#64748b', marginBottom: '12px', lineHeight: '1.5' }}>
             {studentName} 학생, 목숨(하트)은 단 5개뿐입니다!<br/>틀릴 때마다 하트가 사라지니 신중하게 기억하세요.
           </p>
+          {currentBook && (
+            <div style={{ display: 'inline-block', background: '#e0f2fe', color: '#0284c7', padding: '4px 12px', borderRadius: '20px', fontSize: '13px', fontWeight: '800', marginBottom: '20px' }}>
+              현재 교재: {currentBook}
+            </div>
+          )}
           <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '12px', marginBottom: '32px', fontSize: '13px', color: '#334155', fontWeight: '700' }}>
             🏆 하트를 아끼면 보너스 점수가 부여됩니다.
           </div>

@@ -185,12 +185,14 @@ export default function App() {
           
           {currentMenu === 'gameWordDrop' && <GameWordDrop student={loggedInStudent} onBack={() => setCurrentMenu('home')} onGameComplete={handleGameComplete} />}
           
-          {/* 💡 [핵심 추가] 카드게임 메뉴 등록 (ElementaryHome에서 onNavigate('cardGame') 호출 시 렌더링됨) */}
+          {/* 💡 [핵심 추가] 카드게임 메뉴 등록 및 현재 교재 정보(currentBook) 전달 */}
           {currentMenu === 'cardGame' && (
             <CardGame 
               onBack={() => setCurrentMenu('home')} 
               studentId={loggedInStudent.id} 
               studentName={loggedInStudent.name} 
+              currentBook={loggedInStudent.currentBook} 
+              tableName="words" /* 🚨 중요: 수파베이스 초등 단어 테이블명으로 필요시 수정 (예: words, voca_ele 등) */
               onGameComplete={handleGameComplete} 
             />
           )}
@@ -250,7 +252,7 @@ export default function App() {
         <h1 style={{ margin: '0', fontSize: '28px', fontWeight: '800' }}>고래영어</h1>
         <input placeholder="학생 ID를 입력하세요" value={id} onChange={(e) => setId(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleLogin()} style={{ width: '100%', padding: '16px', margin: '32px 0 16px', borderRadius: '12px', border: '2px solid #111', boxSizing: 'border-box' }} />
         <button onClick={handleLogin} style={{ width: '100%', padding: '16px', backgroundColor: '#007aff', color: 'white', border: 'none', borderRadius: '12px', fontWeight: '700', cursor: 'pointer' }}>학습 시작하기</button>
-        <button onClick={() => setShowTestLogin(true)} style={{ width: '100%', padding: '16px', marginTop: '16px', backgroundColor: '#333', color: 'white', border: 'none', borderRadius: '12px', fontWeight: '700', cursor: 'pointer' }}>🛠️️ (테스트) 새로운 수파베이스 로그인 열기</button>
+        <button onClick={() => setShowTestLogin(true)} style={{ width: '100%', padding: '16px', marginTop: '16px', backgroundColor: '#333', color: 'white', border: 'none', borderRadius: '12px', fontWeight: '700', cursor: 'pointer' }}>🛠 (테스트) 새로운 수파베이스 로그인 열기</button>
       </div>
     </div>
   );
