@@ -39,6 +39,8 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
   
   const [stageClearScore, setStageClearScore] = useState(0); 
   const [isPeeking, setIsPeeking] = useState(false);
+  
+  const [peekSeconds, setPeekSeconds] = useState(3);
 
   useEffect(() => {
     const fetchWords = async () => {
@@ -112,10 +114,6 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
   };
 
   const generateStage = (targetStage: number, currentScore: number) => {
-    // 💡 [핵심 난이도 패치] 스테이지 숫자 = 불러올 단어 개수
-    // 1단계: 단어 1개 (카드 2장)
-    // 2단계: 단어 2개 (카드 4장)
-    // 3단계: 단어 3개 (카드 6장) ...
     const wordCountForStage = targetStage;
     
     if (wordCountForStage > allWordsDb.length) {
@@ -138,6 +136,15 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
     setMatchedIds([]);
     setGameState('playing');
 
+    // 💡 [원장님 황금 밸런스 룰 적용]
+    // 1~3단계: 3초 / 4단계: 5초 / 그 이후: 1초씩 증가
+    let calculatedSeconds = 3;
+    if (targetStage >= 4) {
+      calculatedSeconds = 5 + (targetStage - 4); 
+    }
+    
+    setPeekSeconds(calculatedSeconds);
+
     setIsLocked(true);
     setIsPeeking(true);
     setFlippedIndices(gameCards.map((_, i) => i)); 
@@ -146,7 +153,7 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
       setFlippedIndices([]); 
       setIsLocked(false);
       setIsPeeking(false);
-    }, 3000);
+    }, calculatedSeconds * 1000); 
   };
 
   const handleCardClick = (index: number) => {
@@ -204,15 +211,14 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
     setStage((prev) => prev + 1);
   };
 
-  // 💡 [배열 패치] 카드 개수에 맞춰 화면이 찌그러지지 않고 예쁘게 나오도록 수정
   const getGridColumns = () => {
     const totalCards = cards.length;
-    if (totalCards === 2) return 'repeat(2, 1fr)'; // 1단계: 2장
-    if (totalCards === 4) return 'repeat(2, 1fr)'; // 2단계: 4장
-    if (totalCards === 6) return 'repeat(3, 1fr)'; // 3단계: 6장
-    if (totalCards === 8) return 'repeat(4, 1fr)'; // 4단계: 8장
-    if (totalCards === 10) return 'repeat(5, 1fr)'; // 5단계: 10장
-    return 'repeat(4, 1fr)'; // 그 이상은 4칸씩 줄바꿈
+    if (totalCards === 2) return 'repeat(2, 1fr)'; 
+    if (totalCards === 4) return 'repeat(2, 1fr)'; 
+    if (totalCards === 6) return 'repeat(3, 1fr)'; 
+    if (totalCards === 8) return 'repeat(4, 1fr)'; 
+    if (totalCards === 10) return 'repeat(5, 1fr)'; 
+    return 'repeat(4, 1fr)'; 
   };
 
   return (
@@ -288,7 +294,7 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
           <h2 style={{ margin: '0 0 8px', fontSize: '28px', fontWeight: '800', color: '#111' }}>서바이벌 단어 짝맞추기</h2>
           <p style={{ fontSize: '15px', color: '#64748b', marginBottom: '12px', lineHeight: '1.5' }}>
             {studentName} 학생, 목숨(하트)은 5개로 시작합니다!<br/>
-            시작 전 <b>3초 동안 위치를 보여주니</b> 집중해서 외워주세요.
+            시작 전 <b>카드 개수에 맞춰 외울 시간</b>을 줍니다.
           </p>
           {currentBook && (
             <div style={{ display: 'inline-block', background: '#e0f2fe', color: '#0284c7', padding: '4px 12px', borderRadius: '20px', fontSize: '13px', fontWeight: '800', marginBottom: '20px' }}>
@@ -325,8 +331,8 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
           </div>
 
           {isPeeking && (
-            <div style={{ position: 'absolute', top: '100px', left: '50%', transform: 'translateX(-50%)', backgroundColor: 'rgba(0,0,0,0.8)', color: 'white', padding: '12px 24px', borderRadius: '30px', fontWeight: '800', fontSize: '16px', zIndex: 100, animation: 'pulseHint 1s infinite' }}>
-              👀 집중! 위치를 기억하세요!
+            <div style={{ position: 'absolute', top: '100px', left: '50%', transform: 'translateX(-50%)', backgroundColor: 'rgba(0,0,0,0.8)', color: 'white', padding: '12px 24px', borderRadius: '30px', fontWeight: '800', fontSize: '16px', zIndex: 100, animation: 'pulseHint 1s infinite', whiteSpace: 'nowrap' }}>
+              👀 집중! {peekSeconds}초 동안 위치를 기억하세요!
             </div>
           )}
 
@@ -345,7 +351,7 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
                     <div className="card-front">?</div>
                     <div className="card-back" style={{ border: isMatched ? '3px solid #4caf50' : '2px solid #e2e8f0', backgroundColor: isMatched ? '#f0fdf4' : 'white' }}>
                       <span style={{ 
-                        fontSize: card.type === 'eng' ? (card.text.length > 8 ? '16px' : '20px') : '18px', 
+                        fontSize: card.type === 'eng' ? (card.text.length > 8 ? '18px' : '24px') : '22px', 
                         fontWeight: '900', 
                         color: card.type === 'eng' ? '#007aff' : '#111',
                         wordBreak: 'keep-all',
