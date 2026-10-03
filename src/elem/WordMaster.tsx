@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { CONFIG, withCacheBust } from '../config'; 
-import { isIntegratedRankingTask } from '../utils/grammarLogRanking'; 
+import { supabase } from '../lib/supabase'; // 💡 구글 시트 대신 수파베이스 연동!
 
-// 📝 구글 시트에서 불러올 단어 데이터 타입
+// 📝 수파베이스에서 불러올 단어 데이터 타입
 interface WordItem {
   book: string;
   lesson?: string;
@@ -11,9 +10,10 @@ interface WordItem {
   kor: string;
 }
 
-// 📝 부모 컴포넌트(Home 또는 App)로부터 받을 정보
+// 📝 부모 컴포넌트(App)로부터 받을 정보
 interface WordMasterProps {
   onBack: () => void;
+  studentId?: string; // 💡 DB 저장을 위해 ID 추가
   studentName?: string;
   grade?: string;
   totalScore?: number;
@@ -24,24 +24,26 @@ interface WordMasterProps {
 
 export default function WordMaster({
   onBack,
+  studentId = 'ST_TEST',
   studentName = '테스트학생',
   grade = '초5',
-  totalScore: externalTotalScore = 0,
-  myRank: externalMyRank = null,
-  loadingRank: externalLoadingRank = false,
+  totalScore = 0,
+  myRank = null,
+  loadingRank = false,
   onGameComplete,
 }: WordMasterProps) {
+  
   // --- 상태 관리 (State) ---
   const [allWords, setAllWords] = useState<WordItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // 🏆 자체적으로 내 랭킹과 내 점수를 계산하기 위한 state
-  const [myRank, setMyRank] = useState<number | null>(externalMyRank);
-  const [myTotalScore, setMyTotalScore] = useState<number>(externalTotalScore);
-  const [loadingRank, setLoadingRank] = useState<boolean>(true);
-
   const [gameState, setGameState] = useState<'SELECT_BOOK' | 'PLAYING' | 'RESULT'>('SELECT_BOOK');
   const [selectedBook, setSelectedBook] = useState<string>('');
+  
+  // 💡 드롭다운 상태 관리
+  const [selectedSeries, setSelectedSeries] = useState<string>(''); // 예: 240, 520
+  const [selectedVol, setSelectedVol] = useState<string>('');       // 예: 1, 2, 3
+
   const [gameWords, setGameWords] = useState<WordItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
 
@@ -57,32 +59,46 @@ export default function WordMaster({
   const inputRef = useRef<HTMLInputElement>(null);
   const currentWord = gameWords[currentIndex];
 
-  // 1️⃣ 구글 시트(ELEM_WORD)에서 실시간 단어 데이터 가져오기
+  // 1️⃣ 💡 [핵심 패치] 수파베이스 'words' 테이블에서 1000개 단위로 모두 불러오기 (구글 시트 제거)
   useEffect(() => {
     const fetchWords = async () => {
       try {
-        const response = await fetch(CONFIG.SHEETS.ELEM_WORD);
-        const csvText = await response.text();
-        const rows = csvText.split(/\r?\n/).slice(1); 
+        let allFetchedData: any[] = [];
+        let from = 0;
+        const step = 1000;
 
-        const parsed: WordItem[] = rows
-          .map((row) => {
-            const cells = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-            return {
-              book: cells[0]?.replace(/^"|"$/g, '').trim() || '',
-              lesson: cells[1]?.replace(/^"|"$/g, '').trim() || '',
-              day: cells[2]?.replace(/^"|"$/g, '').trim() || '',
-              eng: cells[3]?.replace(/^"|"$/g, '').trim() || '',
-              kor: cells[4]?.replace(/^"|"$/g, '').trim() || '',
-            };
-          })
+        while (true) {
+          const { data, error } = await supabase
+            .from('words')
+            .select('book, unit, day, eng, kor')
+            .range(from, from + step - 1);
+
+          if (error) throw error;
+          
+          if (data && data.length > 0) {
+            allFetchedData = [...allFetchedData, ...data];
+            if (data.length < step) break; // 1000개 미만이면 마지막 페이지
+            from += step;
+          } else {
+            break;
+          }
+        }
+
+        const parsed: WordItem[] = allFetchedData
+          .map((row) => ({
+            book: String(row.book || '').trim(),
+            lesson: String(row.unit || '').trim(),
+            day: String(row.day || '').trim(),
+            eng: String(row.eng || '').trim(),
+            kor: String(row.kor || '').trim(),
+          }))
           .filter((w) => w.eng && w.kor && w.book);
 
         setAllWords(parsed);
         setIsLoading(false);
       } catch (error) {
         console.error('단어 리스트 로딩 실패:', error);
-        alert('구글 시트에서 단어 데이터를 가져오지 못했습니다.');
+        alert('수파베이스에서 단어 데이터를 가져오지 못했습니다.');
         setIsLoading(false);
       }
     };
@@ -90,108 +106,28 @@ export default function WordMaster({
     fetchWords();
   }, []);
 
-  // 🏆 이번 달 모든 게임 점수 합산 로직 (D열 기준)
-  const fetchAndCalculateMyRank = (options?: { delayMs?: number }) => {
-    const { delayMs = 0 } = options ?? {};
-    const logSheetUrl = CONFIG.SHEETS.GRAMMAR_LOG;
-
-    if (!logSheetUrl || !studentName.trim()) return;
-
-    setLoadingRank(true);
-
-    const doFetch = () => {
-      fetch(withCacheBust(logSheetUrl))
-      .then(res => res.text())
-      .then(text => {
-        const rows = text.split(/\r?\n/).slice(1);
-        
-        const now = new Date();
-        const currentYear = now.getFullYear();
-        const currentMonth = now.getMonth() + 1;
-
-        const thisMonthScores: { [name: string]: number } = {};
-
-        rows.forEach(row => {
-          const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-          
-          // 💡 [수정 완료] taskType을 읽어오기 위해 6번째 열(F열)까지 확인합니다.
-          if (cols.length < 6) return;
-
-          const dateStr = cols[0]?.replace(/^"|"$/g, '').trim(); 
-          const name = cols[1]?.replace(/^"|"$/g, '').trim();   
-          const scoreVal = parseInt(cols[3]?.replace(/^"|"$/g, '').trim() || '0', 10);
-          
-          // 💡 [수정 완료] 여기서 taskType 변수를 정상적으로 선언합니다.
-          const taskType = cols[5]?.replace(/^"|"$/g, '').trim(); 
-
-          // ✨ '단어게임'과 '문법게임' 점수만 완벽하게 합산합니다.
-          if (!name || isNaN(scoreVal) || scoreVal <= 0) return;
-          if (!isIntegratedRankingTask(taskType)) return;
-
-          let rowYear = 0;
-          let rowMonth = 0;
-          const match = dateStr.match(/(\d{4})[./-]\s*(\d{1,2})/);
-          if (match) {
-            rowYear = parseInt(match[1], 10);
-            rowMonth = parseInt(match[2], 10);
-          }
-
-          if (rowYear === currentYear && rowMonth === currentMonth) {
-            thisMonthScores[name] = (thisMonthScores[name] || 0) + scoreVal;
-          }
-        });
-
-        const sortedList = Object.entries(thisMonthScores)
-          .map(([name, total]) => ({ name, total }))
-          .sort((a, b) => b.total - a.total);
-
-        const myIdx = sortedList.findIndex(item => item.name === studentName.trim());
-        if (myIdx !== -1) {
-          setMyRank(myIdx + 1);
-          setMyTotalScore((prev) => Math.max(prev, sortedList[myIdx].total));
-        }
-
-        setLoadingRank(false);
-      })
-      .catch(err => {
-        console.error("내 랭킹 계산 실패:", err);
-        setLoadingRank(false);
-      });
-    };
-
-    if (delayMs > 0) {
-      setTimeout(doFetch, delayMs);
-    } else {
-      doFetch();
-    }
-  };
-
-  useEffect(() => {
-    fetchAndCalculateMyRank();
-  }, [studentName]);
-
-  const bookList = useMemo(() => {
-    const unique = Array.from(new Set(allWords.map((w) => w.book))).filter(Boolean);
-    const seriesOrder = ['240', '520', '860', '1240', '1680'];
-
-    return unique.sort((a, b) => {
-      const seriesA = a.match(/\d+/)?.[0] || '';
-      const seriesB = b.match(/\d+/)?.[0] || '';
-      const idxA = seriesOrder.indexOf(seriesA);
-      const idxB = seriesOrder.indexOf(seriesB);
-      const posA = idxA === -1 ? 9999 : idxA;
-      const posB = idxB === -1 ? 9999 : idxB;
-
-      if (posA !== posB) return posA - posB;
-
-      const volA = parseInt(a.replace(/[^0-9]/g, '').replace(seriesA, '') || '0', 10);
-      const volB = parseInt(b.replace(/[^0-9]/g, '').replace(seriesB, '') || '0', 10);
-      
-      if (volA !== volB) return volA - volB;
-
-      return a.localeCompare(b);
+  // 💡 드롭다운용 시리즈(예: 240, 520) 추출
+  const seriesList = useMemo(() => {
+    const uniqueSeries = new Set<string>();
+    allWords.forEach(w => {
+      const match = w.book.match(/(\d+)/);
+      if (match) uniqueSeries.add(match[1]);
     });
+    return Array.from(uniqueSeries).sort((a, b) => parseInt(a) - parseInt(b));
   }, [allWords]);
+
+  // 💡 특정 시리즈를 골랐을 때 그에 해당하는 호수(1~6) 추출
+  const volumeList = useMemo(() => {
+    if (!selectedSeries) return [];
+    const uniqueVols = new Set<string>();
+    allWords.forEach(w => {
+      if (w.book.startsWith(selectedSeries)) {
+        const match = w.book.match(/_(\d+)/);
+        if (match) uniqueVols.add(match[1]);
+      }
+    });
+    return Array.from(uniqueVols).sort((a, b) => parseInt(a) - parseInt(b));
+  }, [selectedSeries, allWords]);
 
   useEffect(() => {
     if (gameState === 'PLAYING' && inputRef.current) {
@@ -199,13 +135,19 @@ export default function WordMaster({
     }
   }, [gameState, currentIndex]);
 
-  const startGame = (bookName: string) => {
-    setSelectedBook(bookName);
-    const filtered = allWords.filter((w) => w.book === bookName);
+  const startGame = () => {
+    if (!selectedSeries || !selectedVol) {
+      return alert("교재 시리즈와 호수를 모두 선택해주세요!");
+    }
+
+    const fullBookName = `${selectedSeries}_${selectedVol}`;
+    setSelectedBook(fullBookName);
+
+    const filtered = allWords.filter((w) => w.book === fullBookName);
     const shuffled = [...filtered].sort(() => Math.random() - 0.5).slice(0, 20);
 
     if (shuffled.length === 0) {
-      alert('해당 교재에 등록된 단어 데이터가 없습니다!');
+      alert(`[${fullBookName}] 교재에 등록된 단어 데이터가 없습니다!`);
       return;
     }
 
@@ -292,7 +234,7 @@ export default function WordMaster({
 
       const praises = ['Perfect! ✨', 'Awesome! 🔥', 'Great Job! 👍', 'Unbelievable! 🚀'];
       const randomPraise = praises[Math.floor(Math.random() * praises.length)];
-      const penaltyNote = showHalfHint ? ' (50% 힌트 감점 적용)' : '';
+      const penaltyNote = showHalfHint ? ' (50% 감점)' : '';
       setFeedback({ isCorrect: true, msg: `${randomPraise} (+${earnedPoints}점)${penaltyNote}` });
 
       moveToNextQuestion(nextScore, 1300);
@@ -306,10 +248,10 @@ export default function WordMaster({
         setShowHalfHint(true);
         setFeedback({
           isCorrect: false,
-          msg: '💡 3번 틀렸어요! 50% 힌트가 열렸습니다. (정답 시 50% 감점)',
+          msg: '💡 50% 힌트가 열렸습니다. (정답 시 50% 감점)',
         });
       } else {
-        setFeedback({ isCorrect: false, msg: 'Oops! 다시 한번 타이핑 해보세요! 🔍' });
+        setFeedback({ isCorrect: false, msg: 'Oops! 다시 타이핑 해보세요! 🔍' });
       }
 
       if (inputRef.current) {
@@ -323,7 +265,7 @@ export default function WordMaster({
     if (!currentWord || feedback?.isCorrect) return;
 
     setCombo(0);
-    setFeedback({ isCorrect: false, msg: '⏩ 패스! 0점 처리 후 다음 문제로 이동합니다.' });
+    setFeedback({ isCorrect: false, msg: '⏩ 패스! 0점 처리 후 이동합니다.' });
     moveToNextQuestion(score, 600);
   };
 
@@ -331,79 +273,101 @@ export default function WordMaster({
     handleFinishGame(score);
   };
 
-  const handleFinishGame = (finalScore: number) => {
+  // 💡 [핵심 패치] 수파베이스 'learning_logs' 에 다이렉트로 점수 저장 (웹앱 통신 제거)
+  const handleFinishGame = async (finalScore: number) => {
     setGameState('RESULT');
-    setMyTotalScore((prev) => prev + finalScore);
+    
+    if (finalScore === 0) return;
 
-    const payload = {
-      type: 'saveLog',
-      taskType: '단어게임',
-      studentName: studentName.trim(),
-      grade: grade,
-      score: finalScore,
-      stage: selectedBook,
-      sheetName: 'GRAMMAR_LOG',
-    };
-
-    const sendLog = () => {
-      return fetch(CONFIG.WEB_APP_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(payload),
-      });
-    };
-
-    const refreshAfterSave = () => {
-      onGameComplete?.(finalScore);
-      fetchAndCalculateMyRank({ delayMs: 1500 });
-    };
-
-    sendLog()
-      .then(() => refreshAfterSave())
-      .catch((err) => {
-        console.error('1차 저장 통신 실패, 1초 뒤 재시도:', err);
-        setTimeout(() => {
-          sendLog()
-            .then(() => refreshAfterSave())
-            .catch((e) => console.error('최종 저장 실패:', e));
-        }, 1000);
-      });
+    const today = new Date();
+    const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    
+    try {
+      await supabase.from('learning_logs').insert([{
+        student_id: studentId,
+        student_name: studentName,
+        task_type: '단어게임', 
+        book_info: selectedBook,
+        score: finalScore,
+        status: '완료', 
+        attempt: 1,
+        log_date: dateStr
+      }]);
+      
+      // DB 저장 후 랭킹 새로고침 신호 전송
+      if (onGameComplete) onGameComplete(finalScore);
+    } catch (err) {
+      console.error("DB 점수 저장 오류:", err);
+    }
   };
 
-  if (isLoading) {
+  if (isLoading || loadingRank) {
     return (
       <div style={styles.container}>
-        <h2 style={{ color: '#64748b' }}>🐋 실시간 단어장을 불러오는 중입니다...</h2>
+        <h2 style={{ color: '#64748b' }}>데이터를 불러오는 중입니다... 🚀</h2>
       </div>
     );
   }
 
   if (gameState === 'SELECT_BOOK') {
     const myRankText = myRank !== null ? `${myRank}위` : '-';
+    
     return (
       <div style={styles.container}>
         <button onClick={onBack} style={styles.backBtn}>⬅ 돌아가기</button>
         <div style={styles.card}>
-          <h1 style={styles.title}>⌨️ Word Master 스피드 타자</h1>
-          <p style={styles.subtitle}>{studentName} ({grade}) 학생, 도전할 고래영어 교재를 선택하세요!</p>
+          <h1 style={styles.title}>⌨️ Word Master</h1>
+          <p style={styles.subtitle}>{studentName} 학생, 도전할 고래영어 교재를 선택하세요!</p>
+          
           <div style={styles.myStatsContainer}>
             <div style={styles.statCol}>
-              <span style={styles.statLabel}>🏅 내 랭킹</span>
+              <span style={styles.statLabel}>🏅 통합 랭킹</span>
               <strong style={styles.statRankValue}>{myRankText}</strong>
             </div>
             <div style={styles.statDivider} />
             <div style={styles.statCol}>
               <span style={styles.statLabel}>🔥 총 합산 점수</span>
-              <strong style={styles.statScoreValue}>{`${myTotalScore.toLocaleString()}점`}</strong>
+              <strong style={styles.statScoreValue}>{`${totalScore.toLocaleString()}점`}</strong>
             </div>
           </div>
-          <div style={styles.bookGrid}>
-            {bookList.map((b) => (
-              <button key={b} onClick={() => startGame(b)} style={styles.bookBtn} title={`${b} 도전 (20문제)`}>
-                📘 {b}
-              </button>
-            ))}
+
+          <div style={{ width: '100%', marginBottom: '20px', padding: '16px', backgroundColor: '#f8f9fa', borderRadius: '12px', border: '1px solid #e9ecef', boxSizing: 'border-box' }}>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <select 
+                value={selectedSeries} 
+                onChange={(e) => { setSelectedSeries(e.target.value); setSelectedVol(''); }} 
+                style={styles.selectBox}
+              >
+                <option value="">시리즈 선택</option>
+                {seriesList.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+              
+              <select 
+                value={selectedVol} 
+                onChange={(e) => setSelectedVol(e.target.value)} 
+                disabled={!selectedSeries} 
+                style={styles.selectBox}
+              >
+                <option value="">호수 선택</option>
+                {volumeList.map(v => <option key={v} value={v}>{v}호</option>)}
+              </select>
+            </div>
+
+            <button 
+              onClick={startGame} 
+              disabled={!selectedSeries || !selectedVol}
+              style={{
+                width: '100%', marginTop: '12px', padding: '14px', borderRadius: '12px',
+                fontSize: '16px', fontWeight: 'bold', border: 'none',
+                backgroundColor: (!selectedSeries || !selectedVol) ? '#cbd5e1' : '#333',
+                color: 'white', cursor: (!selectedSeries || !selectedVol) ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              도전 시작하기 🚀
+            </button>
           </div>
+
         </div>
       </div>
     );
@@ -419,7 +383,7 @@ export default function WordMaster({
             <span style={{ fontSize: '16px', color: '#166534', fontWeight: 'bold' }}>최종 획득 점수</span>
             <strong style={{ fontSize: '48px', color: '#166534', display: 'block', margin: '10px 0' }}>{score}점</strong>
           </div>
-          <button onClick={() => { setGameState('SELECT_BOOK'); onGameComplete?.(); fetchAndCalculateMyRank(); }} style={styles.finishBtn}>다른 교재 도전하기 🚀</button>
+          <button onClick={() => setGameState('SELECT_BOOK')} style={styles.finishBtn}>다른 교재 도전하기 🚀</button>
           <button onClick={onBack} style={{ ...styles.finishBtn, backgroundColor: '#64748b', marginTop: '10px' }}>홈으로 돌아가기</button>
         </div>
       </div>
@@ -489,12 +453,7 @@ export default function WordMaster({
             정답 제출 ↵
           </button>
         </form>
-        <button
-          type="button"
-          onClick={handleSkipQuestion}
-          disabled={feedback?.isCorrect === true}
-          style={styles.skipBtn}
-        >
+        <button type="button" onClick={handleSkipQuestion} disabled={feedback?.isCorrect === true} style={styles.skipBtn}>
           ⏩ 다음 문제로 넘어가기 (0점)
         </button>
         <div style={styles.footerRow}>
@@ -526,8 +485,9 @@ const styles: { [key: string]: React.CSSProperties } = {
   statRankValue: { fontSize: '17px', color: '#d97706', fontWeight: '800' },
   statScoreValue: { fontSize: '17px', color: '#2563eb', fontWeight: '800' },
   statDivider: { width: '1px', height: '28px', backgroundColor: '#e2e8f0' },
-  bookGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', boxSizing: 'border-box', width: '100%', maxHeight: '55vh', overflowY: 'auto', paddingRight: '2px' },
-  bookBtn: { padding: '10px 6px', backgroundColor: '#f8fafc', border: '2px solid #e2e8f0', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold', color: '#334155', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', boxSizing: 'border-box' },
+  
+  selectBox: { width: '50%', padding: '12px', borderRadius: '10px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '15px', fontWeight: 'bold', backgroundColor: 'white', color: '#1e293b' },
+
   gameHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '12px', fontSize: '15px', fontWeight: 'bold' },
   badge: { backgroundColor: '#e0f2fe', color: '#0369a1', padding: '6px 14px', borderRadius: '20px', fontSize: '14px' },
   scoreText: { color: '#d97706', fontSize: '18px' },
