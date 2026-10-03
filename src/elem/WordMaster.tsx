@@ -14,6 +14,10 @@ interface WordMasterProps {
   studentId?: string; 
   studentName?: string;
   grade?: string;
+  // 💡 [핵심 복구] 부모(App.tsx)로부터 통합 랭킹 정보를 다시 받아옵니다!
+  totalScore?: number;
+  myRank?: number | null;
+  loadingRank?: boolean;
   onGameComplete?: (addedScore?: number) => void;
 }
 
@@ -22,17 +26,14 @@ export default function WordMaster({
   studentId = 'ST_TEST',
   studentName = '테스트학생',
   grade = '초5',
+  totalScore = 0,
+  myRank = null,
+  loadingRank = false,
   onGameComplete,
 }: WordMasterProps) {
   
-  // --- 상태 관리 ---
   const [allWords, setAllWords] = useState<WordItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-
-  // 💡 [핵심 패치 1] 자체적으로 수파베이스에서 내 랭킹을 불러옵니다!
-  const [myRank, setMyRank] = useState<number | null>(null);
-  const [myTotalScore, setMyTotalScore] = useState<number>(0);
-  const [loadingRank, setLoadingRank] = useState<boolean>(true);
 
   const [gameState, setGameState] = useState<'SELECT_BOOK' | 'PLAYING' | 'RESULT'>('SELECT_BOOK');
   const [selectedBook, setSelectedBook] = useState<string>('');
@@ -55,62 +56,6 @@ export default function WordMaster({
   const inputRef = useRef<HTMLInputElement>(null);
   const currentWord = gameWords[currentIndex];
 
-  // 🏆 1. 내 랭킹 및 합산 점수 가져오기 (수파베이스 연동)
-  const fetchMyRank = async () => {
-    try {
-      setLoadingRank(true);
-      const now = new Date();
-      const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-
-      let allLogs: any[] = [];
-      let from = 0;
-      const step = 1000;
-
-      while (true) {
-        const { data, error } = await supabase
-          .from('learning_logs')
-          .select('student_name, score')
-          .gte('created_at', startOfThisMonth)
-          .eq('status', '완료')
-          .range(from, from + step - 1);
-
-        if (error) throw error;
-        if (data && data.length > 0) {
-          allLogs = [...allLogs, ...data];
-          if (data.length < step) break;
-          from += step;
-        } else {
-          break;
-        }
-      }
-
-      const scoresMap = new Map<string, number>();
-      allLogs.forEach(log => {
-        if (log.student_name && typeof log.score === 'number') {
-          scoresMap.set(log.student_name, (scoresMap.get(log.student_name) || 0) + log.score);
-        }
-      });
-
-      const sortedList = Array.from(scoresMap.entries())
-        .map(([name, total]) => ({ name, total }))
-        .sort((a, b) => b.total - a.total);
-
-      const myIdx = sortedList.findIndex(item => item.name === studentName.trim());
-      if (myIdx !== -1) {
-        setMyRank(myIdx + 1);
-        setMyTotalScore(sortedList[myIdx].total);
-      } else {
-        setMyRank(null);
-        setMyTotalScore(0);
-      }
-    } catch (err) {
-      console.error("랭킹 계산 실패:", err);
-    } finally {
-      setLoadingRank(false);
-    }
-  };
-
-  // 2. 단어장 데이터 가져오기
   useEffect(() => {
     const fetchWords = async () => {
       try {
@@ -154,8 +99,7 @@ export default function WordMaster({
     };
 
     fetchWords();
-    fetchMyRank(); // 랭킹도 같이 불러옵니다.
-  }, [studentName]);
+  }, []);
 
   const seriesList = useMemo(() => {
     const uniqueSeries = new Set<string>();
@@ -268,7 +212,7 @@ export default function WordMaster({
     speakWord(currentWord.eng);
 
     if (isCorrect) {
-      // 💡 [핵심 패치 2] 1문제당 깔끔하게 1점으로 밸런스 조정 완료!
+      // 1단어 정답 시 1점으로 밸런스 조정 유지!
       const earnedPoints = 1; 
       const nextScore = score + earnedPoints;
 
@@ -335,8 +279,8 @@ export default function WordMaster({
         log_date: dateStr
       }]);
       
+      // DB 저장 후 랭킹 새로고침 신호 전송
       if (onGameComplete) onGameComplete(finalScore);
-      fetchMyRank(); // DB 저장 후 랭킹 즉시 새로고침
     } catch (err) {
       console.error("DB 점수 저장 오류:", err);
     }
@@ -368,7 +312,7 @@ export default function WordMaster({
             <div style={styles.statDivider} />
             <div style={styles.statCol}>
               <span style={styles.statLabel}>🔥 총 합산 점수</span>
-              <strong style={styles.statScoreValue}>{`${myTotalScore.toLocaleString()}점`}</strong>
+              <strong style={styles.statScoreValue}>{`${totalScore.toLocaleString()}점`}</strong>
             </div>
           </div>
 
@@ -526,9 +470,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   statRankValue: { fontSize: '17px', color: '#d97706', fontWeight: '800' },
   statScoreValue: { fontSize: '17px', color: '#2563eb', fontWeight: '800' },
   statDivider: { width: '1px', height: '28px', backgroundColor: '#e2e8f0' },
-  
   selectBox: { width: '50%', padding: '12px', borderRadius: '10px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '15px', fontWeight: 'bold', backgroundColor: 'white', color: '#1e293b' },
-
   gameHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '12px', fontSize: '15px', fontWeight: 'bold' },
   badge: { backgroundColor: '#e0f2fe', color: '#0369a1', padding: '6px 14px', borderRadius: '20px', fontSize: '14px' },
   scoreText: { color: '#d97706', fontSize: '18px' },
