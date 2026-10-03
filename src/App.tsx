@@ -182,7 +182,7 @@ export default function App() {
           {currentMenu === 'chat' && <WhaleChat onBack={() => setCurrentMenu('home')} currentBook={loggedInStudent.currentBook} />}
           
           {currentMenu === 'grammar' && <Grammar student={loggedInStudent} onBack={() => setCurrentMenu('home')} totalScore={integratedRank.totalScore} myRank={integratedRank.myRank} rankings={{ thisMonth: integratedRank.thisMonth, lastMonth: integratedRank.lastMonth }} loadingRank={integratedRank.loading} onGameComplete={handleGameComplete} />}
-          {currentMenu === 'wordMaster' && <WordMaster studentName={loggedInStudent.name} grade={loggedInStudent.grade} onBack={() => setCurrentMenu('home')} totalScore={integratedRank.totalScore} myRank={integratedRank.myRank} loadingRank={integratedRank.loading} onGameComplete={handleGameComplete} />}
+          {currentMenu === 'wordMaster' && <WordMaster studentId={loggedInStudent.id} studentName={loggedInStudent.name} grade={loggedInStudent.grade} onBack={() => setCurrentMenu('home')} onGameComplete={handleGameComplete} />}
           
           {currentMenu === 'gameWordDrop' && <GameWordDrop student={loggedInStudent} onBack={() => setCurrentMenu('home')} onGameComplete={handleGameComplete} />}
           
