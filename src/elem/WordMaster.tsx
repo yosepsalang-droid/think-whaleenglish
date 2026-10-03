@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { supabase } from '../lib/supabase'; // 💡 구글 시트 대신 수파베이스 연동!
+import { supabase } from '../lib/supabase';
 
-// 📝 수파베이스에서 불러올 단어 데이터 타입
 interface WordItem {
   book: string;
   lesson?: string;
@@ -10,15 +9,11 @@ interface WordItem {
   kor: string;
 }
 
-// 📝 부모 컴포넌트(App)로부터 받을 정보
 interface WordMasterProps {
   onBack: () => void;
-  studentId?: string; // 💡 DB 저장을 위해 ID 추가
+  studentId?: string; 
   studentName?: string;
   grade?: string;
-  totalScore?: number;
-  myRank?: number | null;
-  loadingRank?: boolean;
   onGameComplete?: (addedScore?: number) => void;
 }
 
@@ -27,22 +22,23 @@ export default function WordMaster({
   studentId = 'ST_TEST',
   studentName = '테스트학생',
   grade = '초5',
-  totalScore = 0,
-  myRank = null,
-  loadingRank = false,
   onGameComplete,
 }: WordMasterProps) {
   
-  // --- 상태 관리 (State) ---
+  // --- 상태 관리 ---
   const [allWords, setAllWords] = useState<WordItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  // 💡 [핵심 패치 1] 자체적으로 수파베이스에서 내 랭킹을 불러옵니다!
+  const [myRank, setMyRank] = useState<number | null>(null);
+  const [myTotalScore, setMyTotalScore] = useState<number>(0);
+  const [loadingRank, setLoadingRank] = useState<boolean>(true);
 
   const [gameState, setGameState] = useState<'SELECT_BOOK' | 'PLAYING' | 'RESULT'>('SELECT_BOOK');
   const [selectedBook, setSelectedBook] = useState<string>('');
   
-  // 💡 드롭다운 상태 관리
-  const [selectedSeries, setSelectedSeries] = useState<string>(''); // 예: 240, 520
-  const [selectedVol, setSelectedVol] = useState<string>('');       // 예: 1, 2, 3
+  const [selectedSeries, setSelectedSeries] = useState<string>('');
+  const [selectedVol, setSelectedVol] = useState<string>('');
 
   const [gameWords, setGameWords] = useState<WordItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
@@ -59,7 +55,62 @@ export default function WordMaster({
   const inputRef = useRef<HTMLInputElement>(null);
   const currentWord = gameWords[currentIndex];
 
-  // 1️⃣ 💡 [핵심 패치] 수파베이스 'words' 테이블에서 1000개 단위로 모두 불러오기 (구글 시트 제거)
+  // 🏆 1. 내 랭킹 및 합산 점수 가져오기 (수파베이스 연동)
+  const fetchMyRank = async () => {
+    try {
+      setLoadingRank(true);
+      const now = new Date();
+      const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+      let allLogs: any[] = [];
+      let from = 0;
+      const step = 1000;
+
+      while (true) {
+        const { data, error } = await supabase
+          .from('learning_logs')
+          .select('student_name, score')
+          .gte('created_at', startOfThisMonth)
+          .eq('status', '완료')
+          .range(from, from + step - 1);
+
+        if (error) throw error;
+        if (data && data.length > 0) {
+          allLogs = [...allLogs, ...data];
+          if (data.length < step) break;
+          from += step;
+        } else {
+          break;
+        }
+      }
+
+      const scoresMap = new Map<string, number>();
+      allLogs.forEach(log => {
+        if (log.student_name && typeof log.score === 'number') {
+          scoresMap.set(log.student_name, (scoresMap.get(log.student_name) || 0) + log.score);
+        }
+      });
+
+      const sortedList = Array.from(scoresMap.entries())
+        .map(([name, total]) => ({ name, total }))
+        .sort((a, b) => b.total - a.total);
+
+      const myIdx = sortedList.findIndex(item => item.name === studentName.trim());
+      if (myIdx !== -1) {
+        setMyRank(myIdx + 1);
+        setMyTotalScore(sortedList[myIdx].total);
+      } else {
+        setMyRank(null);
+        setMyTotalScore(0);
+      }
+    } catch (err) {
+      console.error("랭킹 계산 실패:", err);
+    } finally {
+      setLoadingRank(false);
+    }
+  };
+
+  // 2. 단어장 데이터 가져오기
   useEffect(() => {
     const fetchWords = async () => {
       try {
@@ -77,7 +128,7 @@ export default function WordMaster({
           
           if (data && data.length > 0) {
             allFetchedData = [...allFetchedData, ...data];
-            if (data.length < step) break; // 1000개 미만이면 마지막 페이지
+            if (data.length < step) break; 
             from += step;
           } else {
             break;
@@ -95,18 +146,17 @@ export default function WordMaster({
           .filter((w) => w.eng && w.kor && w.book);
 
         setAllWords(parsed);
-        setIsLoading(false);
       } catch (error) {
         console.error('단어 리스트 로딩 실패:', error);
-        alert('수파베이스에서 단어 데이터를 가져오지 못했습니다.');
+      } finally {
         setIsLoading(false);
       }
     };
 
     fetchWords();
-  }, []);
+    fetchMyRank(); // 랭킹도 같이 불러옵니다.
+  }, [studentName]);
 
-  // 💡 드롭다운용 시리즈(예: 240, 520) 추출
   const seriesList = useMemo(() => {
     const uniqueSeries = new Set<string>();
     allWords.forEach(w => {
@@ -116,7 +166,6 @@ export default function WordMaster({
     return Array.from(uniqueSeries).sort((a, b) => parseInt(a) - parseInt(b));
   }, [allWords]);
 
-  // 💡 특정 시리즈를 골랐을 때 그에 해당하는 호수(1~6) 추출
   const volumeList = useMemo(() => {
     if (!selectedSeries) return [];
     const uniqueVols = new Set<string>();
@@ -211,13 +260,6 @@ export default function WordMaster({
     }
   };
 
-  const calculateEarnedPoints = (withHalfHint: boolean) => {
-    const baseScore = Math.max(10, 50 - attempts * 10);
-    const comboBonus = combo * 5;
-    const rawPoints = baseScore + comboBonus;
-    return withHalfHint ? Math.floor(rawPoints * 0.5) : rawPoints;
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentWord || !userAnswer.trim() || feedback?.isCorrect) return;
@@ -226,7 +268,8 @@ export default function WordMaster({
     speakWord(currentWord.eng);
 
     if (isCorrect) {
-      const earnedPoints = calculateEarnedPoints(showHalfHint);
+      // 💡 [핵심 패치 2] 1문제당 깔끔하게 1점으로 밸런스 조정 완료!
+      const earnedPoints = 1; 
       const nextScore = score + earnedPoints;
 
       setScore(nextScore);
@@ -234,10 +277,9 @@ export default function WordMaster({
 
       const praises = ['Perfect! ✨', 'Awesome! 🔥', 'Great Job! 👍', 'Unbelievable! 🚀'];
       const randomPraise = praises[Math.floor(Math.random() * praises.length)];
-      const penaltyNote = showHalfHint ? ' (50% 감점)' : '';
-      setFeedback({ isCorrect: true, msg: `${randomPraise} (+${earnedPoints}점)${penaltyNote}` });
+      setFeedback({ isCorrect: true, msg: `${randomPraise} (+1점)` });
 
-      moveToNextQuestion(nextScore, 1300);
+      moveToNextQuestion(nextScore, 1000);
     } else {
       const nextWrongCount = wrongCount + 1;
       setWrongCount(nextWrongCount);
@@ -248,7 +290,7 @@ export default function WordMaster({
         setShowHalfHint(true);
         setFeedback({
           isCorrect: false,
-          msg: '💡 50% 힌트가 열렸습니다. (정답 시 50% 감점)',
+          msg: '💡 50% 힌트가 열렸습니다. (침착하게 써보세요)',
         });
       } else {
         setFeedback({ isCorrect: false, msg: 'Oops! 다시 타이핑 해보세요! 🔍' });
@@ -273,7 +315,6 @@ export default function WordMaster({
     handleFinishGame(score);
   };
 
-  // 💡 [핵심 패치] 수파베이스 'learning_logs' 에 다이렉트로 점수 저장 (웹앱 통신 제거)
   const handleFinishGame = async (finalScore: number) => {
     setGameState('RESULT');
     
@@ -294,8 +335,8 @@ export default function WordMaster({
         log_date: dateStr
       }]);
       
-      // DB 저장 후 랭킹 새로고침 신호 전송
       if (onGameComplete) onGameComplete(finalScore);
+      fetchMyRank(); // DB 저장 후 랭킹 즉시 새로고침
     } catch (err) {
       console.error("DB 점수 저장 오류:", err);
     }
@@ -327,7 +368,7 @@ export default function WordMaster({
             <div style={styles.statDivider} />
             <div style={styles.statCol}>
               <span style={styles.statLabel}>🔥 총 합산 점수</span>
-              <strong style={styles.statScoreValue}>{`${totalScore.toLocaleString()}점`}</strong>
+              <strong style={styles.statScoreValue}>{`${myTotalScore.toLocaleString()}점`}</strong>
             </div>
           </div>
 
@@ -403,7 +444,7 @@ export default function WordMaster({
           <div style={{ ...styles.progressBar, width: `${progressPercent}%` }} />
         </div>
         <div style={{ minHeight: '30px', margin: '10px 0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {combo >= 2 && <span style={styles.comboBadge}>🔥 {combo} COMBO (+{combo * 5}점 보너스!)</span>}
+          {combo >= 2 && <span style={styles.comboBadge}>🔥 {combo} COMBO !</span>}
         </div>
         <div style={styles.questionBox}>
           <h2 style={styles.korText}>{currentWord?.kor}</h2>
@@ -464,7 +505,7 @@ export default function WordMaster({
           </div>
           {!showHint && !showHalfHint && !feedback?.isCorrect && (
             <button type="button" onClick={() => { setShowHint(true); setAttempts((p) => p + 1); }} style={styles.hintBtn}>
-              💡 첫 글자 힌트 보기 (-10점)
+              💡 첫 글자 힌트 보기
             </button>
           )}
         </div>
