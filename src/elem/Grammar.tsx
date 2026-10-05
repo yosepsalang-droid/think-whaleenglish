@@ -91,7 +91,6 @@ export default function Grammar({
     fetchSentences();
   }, []);
 
-  // 💡 [핵심 수정] 구글 시트가 아닌 수파베이스(Supabase)에서 메인 랭킹과 똑같은 기준으로 데이터를 가져옵니다.
   const fetchAndCalculateRank = async (options?: { delayMs?: number }) => {
     const { delayMs = 0 } = options ?? {};
     if (!studentName.trim()) return;
@@ -109,7 +108,6 @@ export default function Grammar({
         const step = 1000;
         let isFetchingLogs = true;
 
-        // 이번 달 기록 싹쓸이
         while (isFetchingLogs) {
           const { data, error } = await supabase
             .from('learning_logs')
@@ -129,7 +127,6 @@ export default function Grammar({
           }
         }
 
-        // 학생 명부 싹쓸이 (초등부 필터링용)
         let allStudents: any[] = [];
         let studentFrom = 0;
         let isFetchingStudents = true;
@@ -292,7 +289,6 @@ export default function Grammar({
   const handleAnswer = (selectedOption: string) => {
     let newScore = score;
     if (selectedOption === currentQ.answer) {
-      // 💡 [핵심] 1문제당 1m 전진 고정!
       const earnedPoints = 1; 
       newScore = score + earnedPoints;
       setScore(newScore);
@@ -344,11 +340,10 @@ export default function Grammar({
     const logDateStr = `${kstNow.getUTCFullYear()}-${String(kstNow.getUTCMonth() + 1).padStart(2, '0')}-${String(kstNow.getUTCDate()).padStart(2, '0')}`;
 
     try {
-      // 💡 수파베이스에 안전하게 기록 저장
+      // 💡 [핵심 패치] 에러의 원인이었던 'grade' 컬럼 전송을 삭제했습니다! 이제 완벽하게 DB에 저장됩니다.
       await supabase.from('learning_logs').insert([{
         student_id: student?.id || '',
         student_name: studentName.trim(),
-        grade: student?.grade || '초등부', // 초등부 꼬리표
         task_type: `문법게임`,
         book_info: `STAGE ${stage}`,
         score: finalScore,
@@ -409,7 +404,6 @@ export default function Grammar({
               ) : myRank !== null ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   
-                  {/* 💡 내 앞사람 (내가 1등이 아닐 때만 표시) */}
                   {myRank > 1 && localRankings.thisMonth[myRank - 2] && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontSize: '14px', padding: '8px 12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
                       <span>{myRank - 1}위. {localRankings.thisMonth[myRank - 2].studentName}</span>
@@ -417,13 +411,11 @@ export default function Grammar({
                     </div>
                   )}
 
-                  {/* 💡 나 자신 (하이라이트 강조) */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#1d4ed8', fontSize: '16px', fontWeight: '900', padding: '12px', backgroundColor: '#eff6ff', borderRadius: '8px', border: '2px solid #bfdbfe' }}>
                     <span>{myRank}위. {studentName} (나)</span>
                     <span style={{ fontSize: '18px' }}>{myTotalScore.toLocaleString()}m</span>
                   </div>
 
-                  {/* 💡 내 뒷사람 (내 뒤에 누군가 있을 때만 표시) */}
                   {localRankings.thisMonth[myRank] && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontSize: '14px', padding: '8px 12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
                       <span>{myRank + 1}위. {localRankings.thisMonth[myRank].studentName}</span>
