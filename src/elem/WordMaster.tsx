@@ -1,6 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
+// 💡 랭킹 관리를 위한 타입 추가
+interface RankEntry {
+  studentName: string;
+  score: number;
+}
+
 interface WordItem {
   book: string;
   lesson?: string;
@@ -14,7 +20,6 @@ interface WordMasterProps {
   studentId?: string; 
   studentName?: string;
   grade?: string;
-  // 💡 [핵심 복구] 부모(App.tsx)로부터 통합 랭킹 정보를 다시 받아옵니다!
   totalScore?: number;
   myRank?: number | null;
   loadingRank?: boolean;
@@ -26,14 +31,17 @@ export default function WordMaster({
   studentId = 'ST_TEST',
   studentName = '테스트학생',
   grade = '초5',
-  totalScore = 0,
-  myRank = null,
-  loadingRank = false,
   onGameComplete,
 }: WordMasterProps) {
   
   const [allWords, setAllWords] = useState<WordItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  // 💡 [핵심 패치] 스피드 문법과 동일하게 자체 랭킹 상태를 관리합니다.
+  const [myRank, setMyRank] = useState<number | null>(null);
+  const [myTotalScore, setMyTotalScore] = useState<number>(0);
+  const [localRankings, setLocalRankings] = useState<{ thisMonth: RankEntry[] }>({ thisMonth: [] });
+  const [isRankLoading, setIsRankLoading] = useState<boolean>(true);
 
   const [gameState, setGameState] = useState<'SELECT_BOOK' | 'PLAYING' | 'RESULT'>('SELECT_BOOK');
   const [selectedBook, setSelectedBook] = useState<string>('');
@@ -55,6 +63,109 @@ export default function WordMaster({
 
   const inputRef = useRef<HTMLInputElement>(null);
   const currentWord = gameWords[currentIndex];
+
+  // 🏆 [랭킹 로직 이식] 스피드 문법과 완벽히 동일한 방식으로 랭킹을 가져옵니다.
+  const fetchAndCalculateRank = async (options?: { delayMs?: number }) => {
+    const { delayMs = 0 } = options ?? {};
+    if (!studentName.trim()) return;
+
+    const doFetch = async () => {
+      setIsRankLoading(true);
+      try {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth(); 
+        const startOfThisMonth = new Date(year, month, 1);
+
+        let allLogs: any[] = [];
+        let from = 0;
+        const step = 1000;
+        let isFetchingLogs = true;
+
+        while (isFetchingLogs) {
+          const { data, error } = await supabase
+            .from('learning_logs')
+            .select('student_id, student_name, score, created_at') 
+            .gte('created_at', startOfThisMonth.toISOString()) 
+            .eq('status', '완료')
+            .range(from, from + step - 1); 
+
+          if (error) throw error;
+
+          if (data && data.length > 0) {
+            allLogs = [...allLogs, ...data];
+            from += step;
+            if (data.length < step) isFetchingLogs = false; 
+          } else {
+            isFetchingLogs = false;
+          }
+        }
+
+        let allStudents: any[] = [];
+        let studentFrom = 0;
+        let isFetchingStudents = true;
+        
+        while (isFetchingStudents) {
+          const { data, error } = await supabase
+            .from('students')
+            .select('student_id, grade')
+            .range(studentFrom, studentFrom + step - 1);
+
+          if (error) throw error;
+
+          if (data && data.length > 0) {
+            allStudents = [...allStudents, ...data];
+            studentFrom += step;
+            if (data.length < step) isFetchingStudents = false;
+          } else {
+            isFetchingStudents = false;
+          }
+        }
+
+        const gradeMap = new Map<string, string>();
+        allStudents.forEach(s => {
+          if (s.student_id) gradeMap.set(s.student_id, s.grade || '');
+        });
+
+        const thisMonthMap = new Map<string, number>();
+
+        allLogs.forEach(log => {
+          if (!log.student_name || typeof log.score !== 'number') return;
+          
+          const studentGrade = gradeMap.get(log.student_id) || '';
+          if (!studentGrade.includes('초')) return; 
+
+          const current = thisMonthMap.get(log.student_name) || 0;
+          thisMonthMap.set(log.student_name, current + log.score); 
+        });
+
+        const sortedThisMonth = Array.from(thisMonthMap.entries())
+          .map(([name, total]) => ({ studentName: name, score: total }))
+          .sort((a, b) => b.score - a.score);
+
+        setLocalRankings({
+          thisMonth: sortedThisMonth,
+        });
+
+        const myIdx = sortedThisMonth.findIndex(item => item.studentName === studentName.trim());
+        if (myIdx !== -1) {
+          setMyRank(myIdx + 1);
+          setMyTotalScore(sortedThisMonth[myIdx].score);
+        } else {
+          setMyRank(null);
+          setMyTotalScore(0);
+        }
+
+      } catch (err) {
+        console.error("랭킹 계산 실패:", err);
+      } finally {
+        setIsRankLoading(false);
+      }
+    };
+
+    if (delayMs > 0) setTimeout(doFetch, delayMs);
+    else doFetch();
+  };
 
   useEffect(() => {
     const fetchWords = async () => {
@@ -99,7 +210,8 @@ export default function WordMaster({
     };
 
     fetchWords();
-  }, []);
+    fetchAndCalculateRank(); // 💡 초기 로딩 시 랭킹 불러오기
+  }, [studentName]);
 
   const seriesList = useMemo(() => {
     const uniqueSeries = new Set<string>();
@@ -279,14 +391,15 @@ export default function WordMaster({
         log_date: dateStr
       }]);
       
-      // DB 저장 후 랭킹 새로고침 신호 전송
       if (onGameComplete) onGameComplete(finalScore);
+      // 💡 [핵심] 게임 종료 후 랭킹 즉시 새로고침 (딜레이 약간 주어 DB 반영 확인)
+      fetchAndCalculateRank({ delayMs: 1500 });
     } catch (err) {
       console.error("DB 점수 저장 오류:", err);
     }
   };
 
-  if (isLoading || loadingRank) {
+  if (isLoading || isRankLoading) {
     return (
       <div style={styles.container}>
         <h2 style={{ color: '#64748b' }}>데이터를 불러오는 중입니다... 🚀</h2>
@@ -295,8 +408,6 @@ export default function WordMaster({
   }
 
   if (gameState === 'SELECT_BOOK') {
-    const myRankText = myRank !== null ? `${myRank}위` : '-';
-    
     return (
       <div style={styles.container}>
         <button onClick={onBack} style={styles.backBtn}>⬅ 돌아가기</button>
@@ -304,17 +415,42 @@ export default function WordMaster({
           <h1 style={styles.title}>⌨️ Word Master</h1>
           <p style={styles.subtitle}>{studentName} 학생, 도전할 고래영어 교재를 선택하세요!</p>
           
-          <div style={styles.myStatsContainer}>
-            <div style={styles.statCol}>
-              <span style={styles.statLabel}>🏅 통합 랭킹</span>
-              <strong style={styles.statRankValue}>{myRankText}</strong>
+          {/* 💡 [랭킹 UI 완벽 이식] 스피드 문법과 똑같은 디자인! */}
+          {studentName && (
+            <div style={{ marginBottom: '30px', backgroundColor: 'white', padding: '20px', borderRadius: '16px', border: '1px solid #cbd5e1', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
+              <h3 style={{ margin: '0 0 15px 0', fontSize: '16px', color: '#334155' }}>🏃‍♂️ 나의 통합 랭킹 위치</h3>
+              
+              {myRank !== null ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  
+                  {/* 💡 내 앞사람 */}
+                  {myRank > 1 && localRankings.thisMonth[myRank - 2] && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontSize: '14px', padding: '8px 12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
+                      <span>{myRank - 1}위. {localRankings.thisMonth[myRank - 2].studentName}</span>
+                      <span>{localRankings.thisMonth[myRank - 2].score.toLocaleString()}점</span>
+                    </div>
+                  )}
+
+                  {/* 💡 나 자신 */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#1d4ed8', fontSize: '16px', fontWeight: '900', padding: '12px', backgroundColor: '#eff6ff', borderRadius: '8px', border: '2px solid #bfdbfe' }}>
+                    <span>{myRank}위. {studentName} (나)</span>
+                    <span style={{ fontSize: '18px' }}>{myTotalScore.toLocaleString()}점</span>
+                  </div>
+
+                  {/* 💡 내 뒷사람 */}
+                  {localRankings.thisMonth[myRank] && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontSize: '14px', padding: '8px 12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
+                      <span>{myRank + 1}위. {localRankings.thisMonth[myRank].studentName}</span>
+                      <span>{localRankings.thisMonth[myRank].score.toLocaleString()}점</span>
+                    </div>
+                  )}
+                  
+                </div>
+              ) : (
+                <p style={{ fontSize: '14px', color: '#64748b', margin: 0 }}>아직 이번 달 기록이 없습니다. 달리기를 시작해보세요!</p>
+              )}
             </div>
-            <div style={styles.statDivider} />
-            <div style={styles.statCol}>
-              <span style={styles.statLabel}>🔥 총 합산 점수</span>
-              <strong style={styles.statScoreValue}>{`${totalScore.toLocaleString()}점`}</strong>
-            </div>
-          </div>
+          )}
 
           <div style={{ width: '100%', marginBottom: '20px', padding: '16px', backgroundColor: '#f8f9fa', borderRadius: '12px', border: '1px solid #e9ecef', boxSizing: 'border-box' }}>
             <div style={{ display: 'flex', gap: '10px' }}>
@@ -344,7 +480,7 @@ export default function WordMaster({
               style={{
                 width: '100%', marginTop: '12px', padding: '14px', borderRadius: '12px',
                 fontSize: '16px', fontWeight: 'bold', border: 'none',
-                backgroundColor: (!selectedSeries || !selectedVol) ? '#cbd5e1' : '#333',
+                backgroundColor: (!selectedSeries || !selectedVol) ? '#cbd5e1' : '#2563eb', // 스피드문법 파란 버튼 디자인으로 통일!
                 color: 'white', cursor: (!selectedSeries || !selectedVol) ? 'not-allowed' : 'pointer',
                 transition: 'all 0.2s'
               }}
@@ -464,12 +600,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   backBtn: { position: 'absolute', top: '20px', left: '20px', padding: '10px 15px', borderRadius: '10px', background: '#e2e8f0', color: '#0f172a', border: 'none', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' },
   title: { fontSize: '26px', fontWeight: '800', color: '#1e293b', margin: '10px 0 10px 0', wordBreak: 'keep-all' },
   subtitle: { fontSize: '15px', color: '#64748b', marginBottom: '20px', wordBreak: 'keep-all' },
-  myStatsContainer: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: '15px', backgroundColor: '#f8fafc', padding: '12px 20px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '20px', width: '100%', boxSizing: 'border-box' },
-  statCol: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', minWidth: '90px' },
-  statLabel: { fontSize: '12px', color: '#64748b', fontWeight: 'bold' },
-  statRankValue: { fontSize: '17px', color: '#d97706', fontWeight: '800' },
-  statScoreValue: { fontSize: '17px', color: '#2563eb', fontWeight: '800' },
-  statDivider: { width: '1px', height: '28px', backgroundColor: '#e2e8f0' },
   selectBox: { width: '50%', padding: '12px', borderRadius: '10px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '15px', fontWeight: 'bold', backgroundColor: 'white', color: '#1e293b' },
   gameHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '12px', fontSize: '15px', fontWeight: 'bold' },
   badge: { backgroundColor: '#e0f2fe', color: '#0369a1', padding: '6px 14px', borderRadius: '20px', fontSize: '14px' },
@@ -486,5 +616,5 @@ const styles: { [key: string]: React.CSSProperties } = {
   footerRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: '10px', minHeight: '30px' },
   hintBtn: { background: 'transparent', border: 'none', color: '#64748b', fontSize: '13px', cursor: 'pointer', textDecoration: 'underline', fontWeight: '600', padding: '4px 0', whiteSpace: 'nowrap' },
   scoreBox: { backgroundColor: '#f0fdf4', border: '2px solid #bbf7d0', padding: '25px', borderRadius: '20px', width: '100%', margin: '20px 0', boxSizing: 'border-box' },
-  finishBtn: { width: '100%', padding: '16px', backgroundColor: '#10b981', color: '#ffffff', border: 'none', borderRadius: '14px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 12px rgba(16,185,129,0.2)', boxSizing: 'border-box' }
+  finishBtn: { width: '100%', padding: '16px', backgroundColor: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '14px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 12px rgba(37,99,235,0.2)', boxSizing: 'border-box' }
 };
