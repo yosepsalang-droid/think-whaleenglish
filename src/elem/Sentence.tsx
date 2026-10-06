@@ -46,7 +46,6 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
     return match ? parseInt(match[0], 10) : -1;
   };
 
-  // ⭐️ 1,000개 제한 돌파! 데이터가 끝날 때까지 이어달리기(Pagination)로 모두 가져옵니다.
   useEffect(() => {
     const fetchSupabaseSentences = async () => {
       try {
@@ -59,13 +58,12 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
           const { data, error } = await supabase
             .from('sentences')
             .select('*')
-            .range(from, from + step - 1); // 0~999, 1000~1999 식으로 쪼개서 가져옴
+            .range(from, from + step - 1); 
 
           if (error) throw error;
           
           if (data && data.length > 0) {
             allFetchedData = [...allFetchedData, ...data];
-            // 가져온 데이터가 1000개 미만이면 마지막 페이지라는 뜻이므로 종료
             if (data.length < step) break; 
             from += step;
           } else {
@@ -195,30 +193,49 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
     }
   }, [currentSentenceList, currentIndex]);
 
+  // 💡 발음 및 목소리 최적화 패치
   const speakWord = (text: string) => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
-      const cleanText = text.replace(/[^a-zA-Z\s-.,?!']/g, ''); 
+      
+      let cleanText = text.replace(/[^a-zA-Z\s-.,?!']/g, ''); 
+      
+      // 💡 [핵심] 'I'나 'a' 같은 단일 알파벳이 씹히거나 이상하게 발음되는 현상 방지
+      if (cleanText.toLowerCase() === 'i' || cleanText.toLowerCase() === 'a') {
+        cleanText += '.'; 
+      }
+
       const utterance = new SpeechSynthesisUtterance(cleanText);
       
+      // 영어 발음 강제 지정
       utterance.lang = 'en-US';
       utterance.rate = 0.85; 
       utterance.pitch = 1.0; 
 
       const voices = window.speechSynthesis.getVoices();
-      const englishVoices = voices.filter(v => v.lang.startsWith('en'));
-      const preferredVoices = ['Google US English', 'Samantha', 'Alex', 'Microsoft Zira'];
+      
+      // 💡 파파고와 가장 유사한 또렷한 여성 목소리 우선순위 탐색
+      const preferredVoices = [
+        'Google US English', // 크롬 브라우저 기본 최상급 여성음
+        'Samantha',          // 맥(Mac)/아이패드 기본 여성음
+        'Microsoft Zira',    // 윈도우 기본 여성음
+        'Victoria'
+      ];
       
       let selectedVoice = null;
       for (const pref of preferredVoices) {
-        selectedVoice = englishVoices.find(v => v.name.includes(pref));
+        selectedVoice = voices.find(v => v.name.includes(pref));
         if (selectedVoice) break;
       }
 
       if (selectedVoice) {
         utterance.voice = selectedVoice;
-      } else if (englishVoices.length > 0) {
-        utterance.voice = englishVoices[0]; 
+      } else {
+        // 선호하는 목소리가 없으면, 무조건 영어를 지원하는 첫 번째 목소리로 강제 지정
+        const englishVoices = voices.filter(v => v.lang.startsWith('en'));
+        if (englishVoices.length > 0) {
+          utterance.voice = englishVoices[0]; 
+        }
       }
 
       window.speechSynthesis.speak(utterance);
@@ -324,7 +341,6 @@ export default function Sentence({ onBack, studentId = "ST_TEST", studentName = 
     }, 2000);
   };
 
-  // ⭐️ 로딩 문구 완전히 변경 완료!
   if (isLoading) {
     return (
       <div style={{ textAlign: 'center', marginTop: '100px', fontFamily: 'Pretendard, sans-serif' }}>
