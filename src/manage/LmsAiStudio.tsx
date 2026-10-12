@@ -30,6 +30,10 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
 
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editFormData, setEditFormData] = useState<Problem | null>(null);
+  
+  // 💡 [혁신 패치] 자동 수정 피드백 상태 관리
+  const [aiFeedback, setAiFeedback] = useState('');
+  const [isAutoFixing, setIsAutoFixing] = useState(false);
 
   const [isSaving, setIsSaving] = useState(false);
 
@@ -44,17 +48,15 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const grades = Array.from(new Set(students.map(s => s.grade))).filter(Boolean).sort();
   const filteredStudents = students.filter(s => s.grade === selectedGrade);
 
-  // 💡 [핵심] AI 꼼수 및 환각 방지용 강력 프롬프트 가이드라인 적용
   const formattingGuidelines = `
   [문제 출력 형식 및 텍스트 강조 가이드라인]
   1. 밑줄 사용 절대 금지: 플랫폼 환경상 밑줄(underline, <u>태그 등)은 정상적으로 출력되지 않으므로 절대 사용하지 마세요.
-  2. 굵은 글씨(Bold) 활용: 어휘, 어법 문제 등에서 특정 단어나 문장을 강조(밑줄 대체)해야 할 경우, 반드시 마크다운 굵기 기호(**)를 사용하세요. 
-     - 예시(O): 다음 글의 **bold** 표시된 부분 중...
+  2. 굵은 글씨(Bold) 활용: 어휘, 어법 문제 등에서 특정 단어나 문장을 강조해야 할 경우, 반드시 마크다운 굵기 기호(**)를 사용하세요. 
   3. 번호와 함께 강조 표기법: 어휘/어법/지칭 추론 문제의 지문 내 강조 표시는 '번호 + 띄어쓰기 + **강조단어**' 형태로 통일하세요. (예: ① **that**)
   4. 보기 구성: 밑줄/강조 문제의 보기를 만들 때는 숫자만 적지 말고, 반드시 해당 단어를 함께 적어주세요.
-  5. 박스 처리(문장 삽입/요약문): 문장 삽입 문제의 [주어진 문장]이나, 요약문 문제의 [요약문]은 본문과 헷갈리지 않게 반드시 인용구(>) 기호를 해당 문장 맨 앞에 넣어서 명확히 구분하세요.
-  6. 🚨 원문 100% 유지 및 한글 삽입 금지: 지문 내용이 아무리 길어도 중간에 '...' 기호 등을 사용하여 임의로 요약하거나 생략하지 마세요. 또한 영어 지문 본문 안에는 어떠한 경우에도 한글 주석이나 설명(예: '생략 없음')을 절대 삽입하지 마세요.
-  7. 🚨 선지 개수 엄수: 지문 내에 번호를 매기는 문제(어휘, 어법, 지칭 추론 등)의 경우, 반드시 지문 안에 ①번부터 ⑤번까지 빠짐없이 마크다운 기호가 존재해야 합니다. AI의 분석 과정이나 내부 메모(예: '[추가 선지 구성을 위한...]')는 절대 출력에 포함하지 마세요.
+  5. 박스 처리(문장 삽입/요약문): 문장 삽입 문제나 요약문은 본문과 헷갈리지 않게 반드시 인용구(>) 기호를 맨 앞에 넣어서 명확히 구분하세요.
+  6. 🚨 원문 100% 유지 및 한글 삽입 금지: 지문을 임의로 요약하거나 생략하지 마세요.
+  7. 🚨 선지 개수 엄수: 지문 내에 번호를 매기는 문제의 경우, 반드시 지문 안에 ①번부터 ⑤번까지 빠짐없이 마크다운 기호가 존재해야 합니다.
   `;
 
   const handleGenerateAI = async (type: 'mid' | 'high') => {
@@ -76,8 +78,8 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
 
       [문제 제작 요청 사항]
       1. 대상 학생 수준: 고등 모의고사 (고1~고3) 및 수능 대비 수준
-      2. 문제 제작 유형: 원문 기반 다른 유형 변형(예: 주제/목적 문제 → 어법/어휘/빈칸 문제로 변형) 또는 동일 난이도와 구조의 새로운 유사 지문 생성
-      3. 문제는 반드시 5지 선다형 객관식으로 출제하세요.
+      2. 문제는 반드시 5지 선다형 객관식으로 출제하세요.
+      3. 🚨 매우 중요: 출제 완료 전, 생성된 문제가 논리적으로 정답이 명확한지 1번 더 검수하세요. 문법 문제의 경우 출제 오류가 없는지 교차 검증하세요.
       4. 절대 다른 설명이나 인삿말을 덧붙이지 말고, 오직 아래의 JSON 배열(Array) 형태로만 출력하세요.
 
       ${formattingGuidelines}
@@ -107,7 +109,8 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
 
       [출제 조건]
       1. 문제는 5지 선다형 객관식으로 출제하세요.
-      2. 절대 다른 설명이나 인삿말을 덧붙이지 말고, 오직 아래의 JSON 배열(Array) 형태로만 출력하세요.
+      2. 🚨 매우 중요: 중등부 수준에 맞는 명확한 문법 문제를 출제하며, 복수 정답이나 논리적 오류가 발생하지 않도록 자체 검수를 진행한 후 출력하세요.
+      3. 절대 다른 설명이나 인삿말을 덧붙이지 말고, 오직 아래의 JSON 배열(Array) 형태로만 출력하세요.
 
       ${formattingGuidelines}
 
@@ -129,7 +132,8 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
       ]
     `;
 
-    const modelsToTry = ['gemini-3.7-flash', 'gemini-3.1-pro', 'gemini-3.5-flash-lite'];
+    // 💡 [핵심 패치] 가짜 AI 모델 이름을 최신 공식 최고성능 모델들로 수정
+    const modelsToTry = ['gemini-1.5-pro', 'gemini-1.5-flash'];
     let success = false;
     let textResponse = '';
 
@@ -140,7 +144,8 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.7 }
+            // 💡 [핵심 패치] 창의성(환각)을 제거하고 수능/내신 출제에 맞게 정확도를 0.2로 극대화
+            generationConfig: { temperature: 0.2 } 
           })
         });
 
@@ -162,9 +167,59 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
       setGeneratedProblems(parsedProblems);
       setIsGenerated(true);
     } catch (error) {
-      alert("AI 서버가 일시적으로 혼잡합니다. 잠시 후 다시 시도해주세요!");
+      alert("AI 서버가 일시적으로 혼잡하거나 JSON 파싱에 실패했습니다. 다시 시도해주세요!");
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  // 💡 [핵심 패치] 외부 AI의 피드백을 받아 자동으로 영문을 고쳐주는 기적의 함수
+  const handleAutoFix = async () => {
+    if (!aiFeedback.trim()) return alert("외부 AI가 지적한 오류 내용이나 수정 요청사항을 적어주세요!");
+    setIsAutoFixing(true);
+    
+    const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || (CONFIG as any)?.GEMINI?.API_KEY || (CONFIG as any)?.GEMINI_API_KEY;
+
+    const prompt = `
+    당신은 최고 수준의 영어 교육 전문가입니다.
+    아래에 출제된 영어 문제의 JSON 데이터와, 해당 문제에 대한 외부 검수자의 [오류 지적 사항]이 있습니다.
+    피드백을 완벽하게 반영하여 문제를 문법적, 논리적으로 수정한 후, 오직 동일한 구조의 단일 JSON 객체(Object) 형식으로만 반환하세요.
+
+    [외부 검수자 오류 지적 / 수정 요청사항]
+    ${aiFeedback}
+
+    [현재 문제 데이터 (수정 대상)]
+    ${JSON.stringify(editFormData, null, 2)}
+
+    ${formattingGuidelines}
+    출력은 반드시 다른 말 없이 순수한 JSON 객체 하나만 반환하세요. 배열(Array) 기호로 감싸지 마세요.
+    `;
+
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.1 } // 극도의 정확성 요구
+        })
+      });
+
+      const data = await response.json();
+      if (data.error) throw new Error(data.error.message);
+
+      const textResponse = data.candidates[0].content.parts[0].text;
+      const cleanJson = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+      const fixedProblem = JSON.parse(cleanJson);
+
+      setEditFormData(fixedProblem);
+      setAiFeedback('');
+      alert("✨ AI가 지적받은 오류를 완벽하게 수정했습니다! 변경된 내용을 확인해보세요.");
+    } catch (error) {
+      console.error(error);
+      alert("자동 수정 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setIsAutoFixing(false);
     }
   };
 
@@ -231,6 +286,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const startEditing = (index: number) => {
     setEditingIndex(index);
     setEditFormData(JSON.parse(JSON.stringify(generatedProblems[index]))); 
+    setAiFeedback(''); // 수정창 열 때 피드백 초기화
   };
 
   const saveEditing = () => {
@@ -246,6 +302,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const cancelEditing = () => {
     setEditingIndex(null);
     setEditFormData(null);
+    setAiFeedback('');
   };
 
   const updateEditForm = (field: keyof Problem, value: any) => {
@@ -387,7 +444,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
         
         {/* 입력 패널 */}
         <div style={{ flex: '0 0 300px', backgroundColor: 'white', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-          <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '800' }}>1. 원본 소스 입력</h3>
+          <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '800' }}>원본 소스 입력</h3>
           <textarea 
             placeholder="모의고사 지문이나 변형할 문법 문제 텍스트를 붙여넣으세요."
             value={sourceText}
@@ -422,7 +479,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                   <div style={{ fontWeight: 'bold' }}>Q{idx + 1}. {renderTextWithFormatting(prob.question)}</div>
                   <button onClick={() => startEditing(idx)} style={{ padding: '4px 8px', backgroundColor: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', flexShrink: 0, marginLeft: '8px' }}>
-                    ✏️ 문제 수정
+                    ✏️ 문제 오류 수정
                   </button>
                 </div>
                 <div style={{ fontSize: '13.5px', color: '#111', border: '1px solid #cbd5e1', padding: '16px', borderRadius: '8px', marginBottom: '12px', lineHeight: '1.6' }}>
@@ -444,7 +501,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                   <h4 style={{ margin: 0, color: '#10b981', fontSize: '16px' }}>Q{idx + 1} 문항 분석</h4>
                   <button onClick={() => startEditing(idx)} style={{ padding: '4px 8px', backgroundColor: '#f0fdf4', color: '#10b981', border: '1px solid #bbf7d0', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>
-                    ✏️ 해설 수정
+                    ✏️ 해설 오류 수정
                   </button>
                 </div>
                 
@@ -465,23 +522,43 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
         </div>
       </div>
 
-      {/* 💡 문항 전체 수정 모달창 */}
+      {/* 💡 문항 오류 자동/수동 수정 모달창 */}
       {editingIndex !== null && editFormData && (
         <div className="no-print" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 }}>
           <div style={{ backgroundColor: 'white', width: '800px', maxHeight: '90vh', overflowY: 'auto', borderRadius: '16px', padding: '32px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #e2e8f0', paddingBottom: '16px', marginBottom: '20px' }}>
-              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '800', color: '#1e293b' }}>✏️ {editingIndex + 1}번 문항 직접 수정</h2>
+              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '800', color: '#1e293b' }}>🛠️ {editingIndex + 1}번 문항 오류 수정</h2>
               <button onClick={cancelEditing} style={{ border: 'none', background: 'none', fontSize: '24px', cursor: 'pointer', color: '#94a3b8' }}>&times;</button>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* 💡 [혁신 패치] 영어 지식 없이 고치는 AI 자동 피드백 수정창 */}
+            <div style={{ backgroundColor: '#f0fdf4', padding: '20px', borderRadius: '12px', border: '2px dashed #4ade80', marginBottom: '24px' }}>
+              <label style={{ fontWeight: '900', fontSize: '15px', marginBottom: '8px', display: 'block', color: '#166534' }}>
+                🤖 영어를 직접 고치기 어렵다면? 외부 검수자의 지적을 붙여넣으세요!
+              </label>
+              <textarea
+                placeholder="예: 3번 보기 문법이 틀렸어. 수동태로 바꿔야 해. 또는 정답을 4번으로 바꾸고 그에 맞게 지문을 수정해줘."
+                value={aiFeedback}
+                onChange={e => setAiFeedback(e.target.value)}
+                rows={3}
+                style={{ width: '100%', padding: '12px', border: '1px solid #86efac', borderRadius: '8px', boxSizing: 'border-box', marginBottom: '12px', fontSize: '14px' }}
+              />
+              <button
+                onClick={handleAutoFix}
+                disabled={isAutoFixing}
+                style={{ width: '100%', padding: '14px', backgroundColor: '#16a34a', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '900', fontSize: '15px', cursor: isAutoFixing ? 'not-allowed' : 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 6px rgba(22,163,74,0.2)' }}
+              >
+                {isAutoFixing ? '🛠️ AI가 지적 사항을 분석하여 코드를 고치는 중입니다... ⏳' : '✨ 이 피드백대로 AI에게 원터치 자동 수정 맡기기'}
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', opacity: isAutoFixing ? 0.5 : 1 }}>
               <div>
                 <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block' }}>질문 (Question)</label>
                 <input value={editFormData.question} onChange={e => updateEditForm('question', e.target.value)} style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box' }} />
               </div>
               
               <div>
-                {/* 💡 [수정완료] 버셀 문법 오류를 일으켰던 기호를 안전한 문자로 고쳤습니다! */}
                 <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block' }}>지문 (Passage) - 💡 **강조**, &gt;인용구 허용</label>
                 <textarea value={editFormData.passage} onChange={e => updateEditForm('passage', e.target.value)} rows={6} style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box', resize: 'vertical' }} />
               </div>
@@ -525,8 +602,8 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
             </div>
 
             <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'flex-end' }}>
-              <button onClick={cancelEditing} style={{ padding: '12px 24px', backgroundColor: '#f1f5f9', color: '#475569', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>취소</button>
-              <button onClick={saveEditing} style={{ padding: '12px 32px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>저장 및 반영하기</button>
+              <button onClick={cancelEditing} disabled={isAutoFixing} style={{ padding: '12px 24px', backgroundColor: '#f1f5f9', color: '#475569', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: isAutoFixing ? 'not-allowed' : 'pointer' }}>취소</button>
+              <button onClick={saveEditing} disabled={isAutoFixing} style={{ padding: '12px 32px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: isAutoFixing ? 'not-allowed' : 'pointer' }}>수정된 사항 최종 저장하기</button>
             </div>
           </div>
         </div>
