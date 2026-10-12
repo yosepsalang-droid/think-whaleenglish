@@ -31,7 +31,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editFormData, setEditFormData] = useState<Problem | null>(null);
   
-  // 💡 [혁신 패치] 자동 수정 피드백 상태 관리
   const [aiFeedback, setAiFeedback] = useState('');
   const [isAutoFixing, setIsAutoFixing] = useState(false);
 
@@ -48,6 +47,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const grades = Array.from(new Set(students.map(s => s.grade))).filter(Boolean).sort();
   const filteredStudents = students.filter(s => s.grade === selectedGrade);
 
+  // 💡 [핵심 패치 1] 큰따옴표(") 사용 금지 규칙 추가 (JSON 파싱 에러 원천 차단)
   const formattingGuidelines = `
   [문제 출력 형식 및 텍스트 강조 가이드라인]
   1. 밑줄 사용 절대 금지: 플랫폼 환경상 밑줄(underline, <u>태그 등)은 정상적으로 출력되지 않으므로 절대 사용하지 마세요.
@@ -57,6 +57,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   5. 박스 처리(문장 삽입/요약문): 문장 삽입 문제나 요약문은 본문과 헷갈리지 않게 반드시 인용구(>) 기호를 맨 앞에 넣어서 명확히 구분하세요.
   6. 🚨 원문 100% 유지 및 한글 삽입 금지: 지문을 임의로 요약하거나 생략하지 마세요.
   7. 🚨 선지 개수 엄수: 지문 내에 번호를 매기는 문제의 경우, 반드시 지문 안에 ①번부터 ⑤번까지 빠짐없이 마크다운 기호가 존재해야 합니다.
+  8. 🚨 데이터 파싱 오류 방지: 본문, 문제, 해설 등 모든 텍스트 안에서 큰따옴표(")는 절대 사용하지 말고, 반드시 작은따옴표(')로 대체해서 출력하세요.
   `;
 
   const handleGenerateAI = async (type: 'mid' | 'high') => {
@@ -132,7 +133,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
       ]
     `;
 
-    // 💡 [핵심 패치] 가짜 AI 모델 이름을 최신 공식 최고성능 모델들로 수정
     const modelsToTry = ['gemini-1.5-pro', 'gemini-1.5-flash'];
     let success = false;
     let textResponse = '';
@@ -144,8 +144,11 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
-            // 💡 [핵심 패치] 창의성(환각)을 제거하고 수능/내신 출제에 맞게 정확도를 0.2로 극대화
-            generationConfig: { temperature: 0.2 } 
+            // 💡 [핵심 패치 2] JSON 출력 강제 지정 (다른 잡담 절대 불가)
+            generationConfig: { 
+              temperature: 0.2,
+              responseMimeType: "application/json"
+            } 
           })
         });
 
@@ -173,7 +176,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     }
   };
 
-  // 💡 [핵심 패치] 외부 AI의 피드백을 받아 자동으로 영문을 고쳐주는 기적의 함수
   const handleAutoFix = async () => {
     if (!aiFeedback.trim()) return alert("외부 AI가 지적한 오류 내용이나 수정 요청사항을 적어주세요!");
     setIsAutoFixing(true);
@@ -201,7 +203,10 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.1 } // 극도의 정확성 요구
+          generationConfig: { 
+            temperature: 0.1,
+            responseMimeType: "application/json"
+          } 
         })
       });
 
@@ -234,7 +239,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
       const { error } = await supabase.from('ai_exams').insert([
         {
           title: title.trim(),
-          source_text: sourceText, // 💡 [추가된 1줄] 복사해 온 원본 지문 전체를 통째로 영구 저장!
+          source_text: sourceText,
           problems: generatedProblems 
         }
       ]);
@@ -287,7 +292,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const startEditing = (index: number) => {
     setEditingIndex(index);
     setEditFormData(JSON.parse(JSON.stringify(generatedProblems[index]))); 
-    setAiFeedback(''); // 수정창 열 때 피드백 초기화
+    setAiFeedback(''); 
   };
 
   const saveEditing = () => {
@@ -532,7 +537,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
               <button onClick={cancelEditing} style={{ border: 'none', background: 'none', fontSize: '24px', cursor: 'pointer', color: '#94a3b8' }}>&times;</button>
             </div>
 
-            {/* 💡 [혁신 패치] 영어 지식 없이 고치는 AI 자동 피드백 수정창 */}
             <div style={{ backgroundColor: '#f0fdf4', padding: '20px', borderRadius: '12px', border: '2px dashed #4ade80', marginBottom: '24px' }}>
               <label style={{ fontWeight: '900', fontSize: '15px', marginBottom: '8px', display: 'block', color: '#166534' }}>
                 🤖 영어를 직접 고치기 어렵다면? 외부 검수자의 지적을 붙여넣으세요!
