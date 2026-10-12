@@ -234,6 +234,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
       const { error } = await supabase.from('ai_exams').insert([
         {
           title: title.trim(),
+          source_text: sourceText, // 💡 [추가된 1줄] 복사해 온 원본 지문 전체를 통째로 영구 저장!
           problems: generatedProblems 
         }
       ]);
@@ -242,7 +243,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
       alert(`🎉 [${title}] 시험지가 성공적으로 저장되었습니다!`);
     } catch (err: any) {
       console.error("저장 에러:", err);
-      alert("저장 중 오류가 발생했습니다.\n수파베이스에 'ai_exams' 테이블이 생성되어 있는지 확인해주세요.");
+      alert("저장 중 오류가 발생했습니다.\n수파베이스 'ai_exams' 테이블에 'source_text' 컬럼을 추가했는지 확인해주세요.");
     } finally {
       setIsSaving(false);
     }
