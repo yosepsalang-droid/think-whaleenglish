@@ -47,6 +47,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const grades = Array.from(new Set(students.map(s => s.grade))).filter(Boolean).sort();
   const filteredStudents = students.filter(s => s.grade === selectedGrade);
 
+  // 💡 [핵심 패치] AI가 큰따옴표를 잘못 써서 JSON이 터지는 현상을 막는 강력한 8번 규칙 추가!
   const formattingGuidelines = `
   [문제 출력 형식 및 텍스트 강조 가이드라인]
   1. 밑줄 사용 절대 금지: 플랫폼 환경상 밑줄(underline, <u>태그 등)은 정상적으로 출력되지 않으므로 절대 사용하지 마세요.
@@ -56,6 +57,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   5. 박스 처리(문장 삽입/요약문): 문장 삽입 문제나 요약문은 본문과 헷갈리지 않게 반드시 인용구(>) 기호를 맨 앞에 넣어서 명확히 구분하세요.
   6. 🚨 원문 100% 유지 및 한글 삽입 금지: 지문을 임의로 요약하거나 생략하지 마세요.
   7. 🚨 선지 개수 엄수: 지문 내에 번호를 매기는 문제의 경우, 반드시 지문 안에 ①번부터 ⑤번까지 빠짐없이 마크다운 기호가 존재해야 합니다.
+  8. 🚨 JSON 오류 방지: 응답은 반드시 완벽한 JSON Array [ ] 형태여야 하며, 텍스트 내용(Value) 안에 큰따옴표(")를 쓰면 에러가 나므로 반드시 작은따옴표(')로만 대체해서 쓰세요.
   `;
 
   const handleGenerateAI = async (type: 'mid' | 'high') => {
@@ -129,8 +131,8 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
       ]
     `;
 
-    // 💡 [핵심 복구 1] 원장님의 예전 코드에 있던 '진짜 최신' 제미나이 3.x 버전 완벽 복구
-    const modelsToTry = ['gemini-3.7-flash', 'gemini-3.1-pro', 'gemini-3.5-flash-lite'];
+    // 💡 [핵심 패치] 답답함을 날려줄 구글 최신 '초고속' 모델(1.5-flash)을 1순위로 배치!
+    const modelsToTry = ['gemini-1.5-flash', 'gemini-1.5-pro'];
     let success = false;
     let textResponse = '';
 
@@ -142,9 +144,9 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: { 
-              temperature: 0.7, 
-              maxOutputTokens: 8192, // 💡 답변이 짤리지 않도록 최대치 확장 유지
-              responseMimeType: "application/json" // 💡 오류의 핵심 원인이었던 JSON 파싱 에러 방지 모드 유지
+              temperature: 0.2, // 안정적이고 정교한 출제 모드
+              maxOutputTokens: 8192, 
+              responseMimeType: "application/json" // 💡 JSON 규격 강제
             } 
           })
         });
@@ -164,7 +166,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
       if (!success) throw new Error("모든 통로가 막혔습니다.");
       
       let cleanJson = textResponse.replace(/```json/gi, '').replace(/```/g, '').trim();
-      const jsonMatch = cleanJson.match(/\[[\s\S]*\]/); // 앞뒤 잡담을 무시하고 배열만 추출
+      const jsonMatch = cleanJson.match(/\[[\s\S]*\]/); 
       if (jsonMatch) cleanJson = jsonMatch[0];
 
       const parsedProblems: Problem[] = JSON.parse(cleanJson);
@@ -200,8 +202,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     출력은 반드시 다른 말 없이 순수한 JSON 객체 하나만 반환하세요. 배열(Array) 기호로 감싸지 마세요.
     `;
 
-    // 💡 [핵심 복구 2] 수정 기능에도 최신 3.x 모델 배열 적용
-    const modelsToTry = ['gemini-3.7-flash', 'gemini-3.1-pro', 'gemini-3.5-flash-lite'];
+    const modelsToTry = ['gemini-1.5-flash', 'gemini-1.5-pro'];
     let fixSuccess = false;
     let fixedProblem = null;
 
@@ -483,11 +484,12 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
             </select>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {/* 💡 [수정] 대기 시간 문구 추가하여 안심할 수 있도록 안내 */}
             <button onClick={() => handleGenerateAI('high')} disabled={isGenerating} style={{ padding: '12px', backgroundColor: '#475569', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: isGenerating ? 'not-allowed' : 'pointer', opacity: isGenerating ? 0.7 : 1 }}>
-              {isGenerating ? 'AI가 출제 중... ⏳' : '📝 고등부 모의고사 출제'}
+              {isGenerating ? '출제 중... ⏳ (약 10초 소요)' : '📝 고등부 모의고사 출제'}
             </button>
             <button onClick={() => handleGenerateAI('mid')} disabled={isGenerating} style={{ padding: '12px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: isGenerating ? 'not-allowed' : 'pointer', opacity: isGenerating ? 0.7 : 1 }}>
-              {isGenerating ? 'AI가 출제 중... ⏳' : '📝 중등부 내신 출제'}
+              {isGenerating ? '출제 중... ⏳ (약 10초 소요)' : '📝 중등부 내신 출제'}
             </button>
           </div>
         </div>
@@ -504,7 +506,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                   <div style={{ fontWeight: 'bold' }}>Q{idx + 1}. {renderTextWithFormatting(prob.question)}</div>
                   <button onClick={() => startEditing(idx)} style={{ padding: '4px 8px', backgroundColor: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', flexShrink: 0, marginLeft: '8px' }}>
-                    ✏️ 문제 오류 수정
+                    ✏️ 문제 수정
                   </button>
                 </div>
                 <div style={{ fontSize: '13.5px', color: '#111', border: '1px solid #cbd5e1', padding: '16px', borderRadius: '8px', marginBottom: '12px', lineHeight: '1.6' }}>
@@ -526,7 +528,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                   <h4 style={{ margin: 0, color: '#10b981', fontSize: '16px' }}>Q{idx + 1} 문항 분석</h4>
                   <button onClick={() => startEditing(idx)} style={{ padding: '4px 8px', backgroundColor: '#f0fdf4', color: '#10b981', border: '1px solid #bbf7d0', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>
-                    ✏️ 해설 오류 수정
+                    ✏️ 해설 수정
                   </button>
                 </div>
                 
@@ -552,7 +554,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
         <div className="no-print" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 }}>
           <div style={{ backgroundColor: 'white', width: '800px', maxHeight: '90vh', overflowY: 'auto', borderRadius: '16px', padding: '32px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #e2e8f0', paddingBottom: '16px', marginBottom: '20px' }}>
-              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '800', color: '#1e293b' }}>🛠️ {editingIndex + 1}번 문항 오류 수정</h2>
+              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '800', color: '#1e293b' }}>🛠️ {editingIndex + 1}번 문항 직접 수정</h2>
               <button onClick={cancelEditing} style={{ border: 'none', background: 'none', fontSize: '24px', cursor: 'pointer', color: '#94a3b8' }}>&times;</button>
             </div>
 
