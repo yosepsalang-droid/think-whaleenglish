@@ -18,7 +18,7 @@ interface Problem {
 
 export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const [sourceText, setSourceText] = useState('');
-  const [questionCount, setQuestionCount] = useState(5); // 기본값을 5문제로 세팅 
+  const [questionCount, setQuestionCount] = useState(5); 
   const [isGenerated, setIsGenerated] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false); 
   const [generatedProblems, setGeneratedProblems] = useState<Problem[]>([]);
@@ -47,16 +47,18 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const grades = Array.from(new Set(students.map(s => s.grade))).filter(Boolean).sort();
   const filteredStudents = students.filter(s => s.grade === selectedGrade);
 
-  // 💡 [핵심 패치] 파싱 에러를 유발하던 8번(작은따옴표) 규칙을 완전히 삭제했습니다.
+  // 💡 [혁신 패치] 줄바꿈(Enter) 및 특수기호 에러를 절대 막는 초강력 규정 추가
   const formattingGuidelines = `
-  [문제 출력 형식 및 텍스트 강조 가이드라인]
-  1. 밑줄 사용 절대 금지: 플랫폼 환경상 밑줄(underline, <u>태그 등)은 정상적으로 출력되지 않으므로 절대 사용하지 마세요.
-  2. 굵은 글씨(Bold) 활용: 어휘, 어법 문제 등에서 특정 단어나 문장을 강조해야 할 경우, 반드시 마크다운 굵기 기호(**)를 사용하세요. 
-  3. 번호와 함께 강조 표기법: 어휘/어법/지칭 추론 문제의 지문 내 강조 표시는 '번호 + 띄어쓰기 + **강조단어**' 형태로 통일하세요. (예: ① **that**)
-  4. 보기 구성: 밑줄/강조 문제의 보기를 만들 때는 숫자만 적지 말고, 반드시 해당 단어를 함께 적어주세요.
-  5. 박스 처리(문장 삽입/요약문): 문장 삽입 문제나 요약문은 본문과 헷갈리지 않게 반드시 인용구(>) 기호를 맨 앞에 넣어서 명확히 구분하세요.
-  6. 🚨 원문 100% 유지 및 한글 삽입 금지: 지문을 임의로 요약하거나 생략하지 마세요.
-  7. 🚨 선지 개수 엄수: 지문 내에 번호를 매기는 문제의 경우, 반드시 지문 안에 ①번부터 ⑤번까지 빠짐없이 마크다운 기호가 존재해야 합니다.
+  [🚨 필수: JSON 데이터 무결성 가이드라인]
+  1. 밑줄 사용 절대 금지: 굵은 글씨(**강조**)를 대신 사용하세요.
+  2. 보기 강조 표기법: '번호 + 띄어쓰기 + **강조단어**' (예: ① **that**)
+  3. 보기 구성: 보기를 만들 때는 숫자만 적지 말고, 내용도 함께 적어주세요.
+  4. 박스 처리: 문장 삽입/요약문 등은 본문과 구분되게 인용구(>) 기호를 맨 앞에 넣으세요.
+  5. 원문 100% 유지: 지문을 생략하거나 '...' 등으로 축약하지 마세요.
+  6. 선지 개수 엄수: 지문 안에 ①번부터 ⑤번까지 마크다운 기호가 모두 존재해야 합니다.
+  7. 🚨 [가장 중요] 줄바꿈(Enter) 금지: JSON 텍스트 값(Value) 안에는 실제 줄바꿈(엔터키)을 절대 넣지 마세요. 줄바꿈이 필요한 경우 반드시 '\\n' (역슬래시+n) 기호 문자를 텍스트로 대신 입력하세요.
+  8. 🚨 [가장 중요] 큰따옴표 이스케이프: JSON 안의 내용에서 큰따옴표를 쓸 때는 반드시 '\\"' (역슬래시+큰따옴표)로 적어 에러를 방지하세요.
+  9. 응답은 오직 순수한 JSON Array( [ ] ) 형태만 출력하며 다른 부가 설명(```json 등)은 절대 넣지 마세요.
   `;
 
   const handleGenerateAI = async (type: 'mid' | 'high') => {
@@ -79,8 +81,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
       [문제 제작 요청 사항]
       1. 대상 학생 수준: 고등 모의고사 (고1~고3) 및 수능 대비 수준
       2. 문제는 반드시 5지 선다형 객관식으로 출제하세요.
-      3. 🚨 매우 중요: 출제 완료 전, 생성된 문제가 논리적으로 정답이 명확한지 1번 더 검수하세요. 문법 문제의 경우 출제 오류가 없는지 교차 검증하세요.
-      4. 절대 다른 설명이나 인삿말을 덧붙이지 말고, 오직 아래의 JSON 배열(Array) 형태로만 출력하세요.
+      3. 🚨 매우 중요: 출제 완료 전, 생성된 문제가 논리적으로 정답이 명확한지 검수하세요.
 
       ${formattingGuidelines}
 
@@ -109,8 +110,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
 
       [출제 조건]
       1. 문제는 5지 선다형 객관식으로 출제하세요.
-      2. 🚨 매우 중요: 중등부 수준에 맞는 명확한 문법 문제를 출제하며, 복수 정답이나 논리적 오류가 발생하지 않도록 자체 검수를 진행한 후 출력하세요.
-      3. 절대 다른 설명이나 인삿말을 덧붙이지 말고, 오직 아래의 JSON 배열(Array) 형태로만 출력하세요.
+      2. 🚨 매우 중요: 중등부 수준에 맞는 명확한 문법 문제를 출제하며, 복수 정답이나 논리적 오류가 없도록 하세요.
 
       ${formattingGuidelines}
 
@@ -138,14 +138,14 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
 
     for (const model of modelsToTry) {
       try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+        const response = await fetch(`[https://generativelanguage.googleapis.com/v1beta/models/$](https://generativelanguage.googleapis.com/v1beta/models/$){model}:generateContent?key=${apiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: { 
               temperature: 0.2,
-              responseMimeType: "application/json" // 💡 JSON 규격 강제
+              responseMimeType: "application/json" 
             } 
           })
         });
@@ -165,21 +165,16 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
       if (!success) throw new Error("모든 통로가 막혔습니다.");
       
       let cleanJson = textResponse.replace(/```json/gi, '').replace(/```/g, '').trim();
-      
-      // 💡 [초강력 JSON 추출기] AI가 다른 잡담을 섞어 보내도 오직 [ ] 배열 구간만 완벽하게 쏙! 뽑아냅니다.
       const jsonMatch = cleanJson.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        cleanJson = jsonMatch[0];
-      }
+      if (jsonMatch) cleanJson = jsonMatch[0];
 
       const parsedProblems: Problem[] = JSON.parse(cleanJson);
       setGeneratedProblems(parsedProblems);
       setIsGenerated(true);
-    } catch (error) {
-      // 💡 만약 또 에러가 나면 개발자 도구(F12) 콘솔에서 원인을 추적할 수 있도록 로그를 남깁니다.
-      console.error("AI 원본 응답 텍스트:", textResponse); 
-      console.error("JSON 파싱 에러 상세:", error);
-      alert("AI가 문제 데이터를 정리하는 중에 실수가 있었습니다. 다시 한번 [출제] 버튼을 눌러주세요!");
+    } catch (error: any) {
+      console.error("AI 파싱 에러 상세:", error);
+      console.error("AI 원본 출력 데이터:", textResponse);
+      alert("AI가 지문의 '줄바꿈'이나 '따옴표'를 처리하다가 규칙을 잊고 실수를 냈습니다.\n(데이터 규격 에러)\n\n다시 한번 [출제] 버튼을 눌러주시면 정상 처리될 것입니다!");
     } finally {
       setIsGenerating(false);
     }
@@ -207,7 +202,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     `;
 
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`, {
+      const response = await fetch(`[https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=$](https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=$){apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -225,7 +220,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
       const textResponse = data.candidates[0].content.parts[0].text;
       
       let cleanJson = textResponse.replace(/```json/gi, '').replace(/```/g, '').trim();
-      const jsonMatch = cleanJson.match(/\{[\s\S]*\}/); // 단일 객체 추출
+      const jsonMatch = cleanJson.match(/\{[\s\S]*\}/); 
       if (jsonMatch) cleanJson = jsonMatch[0];
 
       const fixedProblem = JSON.parse(cleanJson);
@@ -252,7 +247,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
       const { error } = await supabase.from('ai_exams').insert([
         {
           title: title.trim(),
-          source_text: sourceText, // 💡 원본 지문 전체를 통째로 영구 저장!
+          source_text: sourceText,
           problems: generatedProblems 
         }
       ]);
