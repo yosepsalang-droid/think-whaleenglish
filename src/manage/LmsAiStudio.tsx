@@ -129,8 +129,8 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
       ]
     `;
 
-    // 💡 [핵심 패치] 실제 작동하는 구글 공식 최신 모델 이름들로 정립
-    const modelsToTry = ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-pro'];
+    // 💡 [핵심 복구 1] 원장님의 예전 코드에 있던 '진짜 최신' 제미나이 3.x 버전 완벽 복구
+    const modelsToTry = ['gemini-3.7-flash', 'gemini-3.1-pro', 'gemini-3.5-flash-lite'];
     let success = false;
     let textResponse = '';
 
@@ -142,8 +142,9 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: { 
-              temperature: 0.7, // 💡 원장님이 검증하신 '오류 안 나던 예전 코드'의 황금 비율 설정
-              maxOutputTokens: 8192 // 💡 문제가 짤리지 않도록 최대치 확장
+              temperature: 0.7, 
+              maxOutputTokens: 8192, // 💡 답변이 짤리지 않도록 최대치 확장 유지
+              responseMimeType: "application/json" // 💡 오류의 핵심 원인이었던 JSON 파싱 에러 방지 모드 유지
             } 
           })
         });
@@ -199,7 +200,8 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     출력은 반드시 다른 말 없이 순수한 JSON 객체 하나만 반환하세요. 배열(Array) 기호로 감싸지 마세요.
     `;
 
-    const modelsToTry = ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-pro'];
+    // 💡 [핵심 복구 2] 수정 기능에도 최신 3.x 모델 배열 적용
+    const modelsToTry = ['gemini-3.7-flash', 'gemini-3.1-pro', 'gemini-3.5-flash-lite'];
     let fixSuccess = false;
     let fixedProblem = null;
 
@@ -211,8 +213,9 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: { 
-              temperature: 0.1, // 수정할 때는 꼼꼼하고 엄격하게 0.1 적용
-              maxOutputTokens: 8192
+              temperature: 0.1, 
+              maxOutputTokens: 8192,
+              responseMimeType: "application/json"
             } 
           })
         });
