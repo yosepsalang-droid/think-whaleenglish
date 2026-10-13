@@ -47,17 +47,17 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const grades = Array.from(new Set(students.map(s => s.grade))).filter(Boolean).sort();
   const filteredStudents = students.filter(s => s.grade === selectedGrade);
 
-  // 💡 [핵심 패치] AI가 큰따옴표를 잘못 써서 JSON이 터지는 현상을 막는 강력한 8번 규칙 추가!
+  // 💡 [핵심 복구] 불필요한 따옴표 규칙을 없애고, 예전에 오류 없이 작동하던 규칙으로 복구했습니다.
   const formattingGuidelines = `
   [문제 출력 형식 및 텍스트 강조 가이드라인]
   1. 밑줄 사용 절대 금지: 플랫폼 환경상 밑줄(underline, <u>태그 등)은 정상적으로 출력되지 않으므로 절대 사용하지 마세요.
-  2. 굵은 글씨(Bold) 활용: 어휘, 어법 문제 등에서 특정 단어나 문장을 강조해야 할 경우, 반드시 마크다운 굵기 기호(**)를 사용하세요. 
+  2. 굵은 글씨(Bold) 활용: 어휘, 어법 문제 등에서 특정 단어나 문장을 강조(밑줄 대체)해야 할 경우, 반드시 마크다운 굵기 기호(**)를 사용하세요. 
+      - 예시(O): 다음 글의 **bold** 표시된 부분 중...
   3. 번호와 함께 강조 표기법: 어휘/어법/지칭 추론 문제의 지문 내 강조 표시는 '번호 + 띄어쓰기 + **강조단어**' 형태로 통일하세요. (예: ① **that**)
   4. 보기 구성: 밑줄/강조 문제의 보기를 만들 때는 숫자만 적지 말고, 반드시 해당 단어를 함께 적어주세요.
-  5. 박스 처리(문장 삽입/요약문): 문장 삽입 문제나 요약문은 본문과 헷갈리지 않게 반드시 인용구(>) 기호를 맨 앞에 넣어서 명확히 구분하세요.
-  6. 🚨 원문 100% 유지 및 한글 삽입 금지: 지문을 임의로 요약하거나 생략하지 마세요.
-  7. 🚨 선지 개수 엄수: 지문 내에 번호를 매기는 문제의 경우, 반드시 지문 안에 ①번부터 ⑤번까지 빠짐없이 마크다운 기호가 존재해야 합니다.
-  8. 🚨 JSON 오류 방지: 응답은 반드시 완벽한 JSON Array [ ] 형태여야 하며, 텍스트 내용(Value) 안에 큰따옴표(")를 쓰면 에러가 나므로 반드시 작은따옴표(')로만 대체해서 쓰세요.
+  5. 박스 처리(문장 삽입/요약문): 문장 삽입 문제의 [주어진 문장]이나, 요약문 문제의 [요약문]은 본문과 헷갈리지 않게 반드시 인용구(>) 기호를 해당 문장 맨 앞에 넣어서 명확히 구분하세요.
+  6. 🚨 원문 100% 유지 및 한글 삽입 금지: 지문 내용이 아무리 길어도 중간에 '...' 기호 등을 사용하여 임의로 요약하거나 생략하지 마세요. 또한 영어 지문 본문 안에는 어떠한 경우에도 한글 주석이나 설명(예: '생략 없음')을 절대 삽입하지 마세요.
+  7. 🚨 선지 개수 엄수: 지문 내에 번호를 매기는 문제(어휘, 어법, 지칭 추론 등)의 경우, 반드시 지문 안에 ①번부터 ⑤번까지 빠짐없이 마크다운 기호가 존재해야 합니다. AI의 분석 과정이나 내부 메모(예: '[추가 선지 구성을 위한...]')는 절대 출력에 포함하지 마세요.
   `;
 
   const handleGenerateAI = async (type: 'mid' | 'high') => {
@@ -79,8 +79,9 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
 
       [문제 제작 요청 사항]
       1. 대상 학생 수준: 고등 모의고사 (고1~고3) 및 수능 대비 수준
-      2. 문제는 반드시 5지 선다형 객관식으로 출제하세요.
-      3. 절대 다른 설명이나 인삿말을 덧붙이지 말고, 오직 아래의 JSON 배열(Array) 형태로만 출력하세요.
+      2. 문제 제작 유형: 원문 기반 다른 유형 변형(예: 주제/목적 문제 → 어법/어휘/빈칸 문제로 변형) 또는 동일 난이도와 구조의 새로운 유사 지문 생성
+      3. 문제는 반드시 5지 선다형 객관식으로 출제하세요.
+      4. 절대 다른 설명이나 인삿말을 덧붙이지 말고, 오직 아래의 JSON 배열(Array) 형태로만 출력하세요.
 
       ${formattingGuidelines}
 
@@ -131,8 +132,8 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
       ]
     `;
 
-    // 💡 [핵심 패치] 답답함을 날려줄 구글 최신 '초고속' 모델(1.5-flash)을 1순위로 배치!
-    const modelsToTry = ['gemini-1.5-flash', 'gemini-1.5-pro'];
+    // 💡 [핵심 복구] 원장님이 완벽하게 구동하셨던 그 3.x 버전 그대로 복구!
+    const modelsToTry = ['gemini-3.7-flash', 'gemini-3.1-pro', 'gemini-3.5-flash-lite'];
     let success = false;
     let textResponse = '';
 
@@ -144,10 +145,9 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: { 
-              temperature: 0.2, // 안정적이고 정교한 출제 모드
-              maxOutputTokens: 8192, 
-              responseMimeType: "application/json" // 💡 JSON 규격 강제
-            } 
+              temperature: 0.7, // 가장 출제 오류가 없었던 0.7 설정값 유지
+              maxOutputTokens: 8192 // 글자 수 잘림 방지 (무제한)
+            }
           })
         });
 
@@ -166,16 +166,17 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
       if (!success) throw new Error("모든 통로가 막혔습니다.");
       
       let cleanJson = textResponse.replace(/```json/gi, '').replace(/```/g, '').trim();
-      const jsonMatch = cleanJson.match(/\[[\s\S]*\]/); 
+      
+      // 혹시라도 AI가 앞뒤에 인사말을 쓰면 배열([])만 깔끔하게 뽑아내는 안전장치
+      const jsonMatch = cleanJson.match(/\[[\s\S]*\]/);
       if (jsonMatch) cleanJson = jsonMatch[0];
 
       const parsedProblems: Problem[] = JSON.parse(cleanJson);
       setGeneratedProblems(parsedProblems);
       setIsGenerated(true);
-    } catch (error: any) {
-      console.error("AI 파싱 에러 상세:", error);
-      console.error("AI 원본 출력 데이터:", textResponse);
-      alert("AI가 데이터를 처리하는 중에 일시적인 오류가 있었습니다.\n다시 한번 [출제] 버튼을 눌러주세요!");
+    } catch (error) {
+      console.error("파싱 오류 데이터:", textResponse);
+      alert("AI 서버가 일시적으로 혼잡합니다. 잠시 후 다시 시도해주세요!");
     } finally {
       setIsGenerating(false);
     }
@@ -202,7 +203,8 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     출력은 반드시 다른 말 없이 순수한 JSON 객체 하나만 반환하세요. 배열(Array) 기호로 감싸지 마세요.
     `;
 
-    const modelsToTry = ['gemini-1.5-flash', 'gemini-1.5-pro'];
+    // 💡 [핵심 복구] 수정 모델도 똑같이 3.x 버전으로 복구
+    const modelsToTry = ['gemini-3.7-flash', 'gemini-3.1-pro', 'gemini-3.5-flash-lite'];
     let fixSuccess = false;
     let fixedProblem = null;
 
@@ -214,10 +216,9 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: { 
-              temperature: 0.1, 
-              maxOutputTokens: 8192,
-              responseMimeType: "application/json"
-            } 
+              temperature: 0.2, // 수정할 때는 엄격하게
+              maxOutputTokens: 8192
+            }
           })
         });
 
@@ -259,7 +260,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
       const { error } = await supabase.from('ai_exams').insert([
         {
           title: title.trim(),
-          source_text: sourceText,
+          source_text: sourceText, // 💡 원본 지문 전체 통째로 영구 저장!
           problems: generatedProblems 
         }
       ]);
@@ -484,7 +485,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
             </select>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {/* 💡 [수정] 대기 시간 문구 추가하여 안심할 수 있도록 안내 */}
+            {/* 💡 [핵심] 답답하지 않도록 로딩 문구는 그대로 유지! */}
             <button onClick={() => handleGenerateAI('high')} disabled={isGenerating} style={{ padding: '12px', backgroundColor: '#475569', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: isGenerating ? 'not-allowed' : 'pointer', opacity: isGenerating ? 0.7 : 1 }}>
               {isGenerating ? '출제 중... ⏳ (약 10초 소요)' : '📝 고등부 모의고사 출제'}
             </button>
@@ -506,7 +507,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                   <div style={{ fontWeight: 'bold' }}>Q{idx + 1}. {renderTextWithFormatting(prob.question)}</div>
                   <button onClick={() => startEditing(idx)} style={{ padding: '4px 8px', backgroundColor: '#eff6ff', color: '#3b82f6', border: '1px solid #bfdbfe', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', flexShrink: 0, marginLeft: '8px' }}>
-                    ✏️ 문제 수정
+                    ✏️ 문제 오류 수정
                   </button>
                 </div>
                 <div style={{ fontSize: '13.5px', color: '#111', border: '1px solid #cbd5e1', padding: '16px', borderRadius: '8px', marginBottom: '12px', lineHeight: '1.6' }}>
@@ -528,7 +529,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                   <h4 style={{ margin: 0, color: '#10b981', fontSize: '16px' }}>Q{idx + 1} 문항 분석</h4>
                   <button onClick={() => startEditing(idx)} style={{ padding: '4px 8px', backgroundColor: '#f0fdf4', color: '#10b981', border: '1px solid #bbf7d0', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>
-                    ✏️ 해설 수정
+                    ✏️ 해설 오류 수정
                   </button>
                 </div>
                 
@@ -554,7 +555,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
         <div className="no-print" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 }}>
           <div style={{ backgroundColor: 'white', width: '800px', maxHeight: '90vh', overflowY: 'auto', borderRadius: '16px', padding: '32px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #e2e8f0', paddingBottom: '16px', marginBottom: '20px' }}>
-              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '800', color: '#1e293b' }}>🛠️ {editingIndex + 1}번 문항 직접 수정</h2>
+              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '800', color: '#1e293b' }}>🛠️ {editingIndex + 1}번 문항 오류 수정</h2>
               <button onClick={cancelEditing} style={{ border: 'none', background: 'none', fontSize: '24px', cursor: 'pointer', color: '#94a3b8' }}>&times;</button>
             </div>
 
