@@ -18,7 +18,7 @@ interface Problem {
 
 export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const [sourceText, setSourceText] = useState('');
-  const [questionCount, setQuestionCount] = useState(1); 
+  const [questionCount, setQuestionCount] = useState(5); // 기본값을 5문제로 세팅 
   const [isGenerated, setIsGenerated] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false); 
   const [generatedProblems, setGeneratedProblems] = useState<Problem[]>([]);
@@ -47,7 +47,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const grades = Array.from(new Set(students.map(s => s.grade))).filter(Boolean).sort();
   const filteredStudents = students.filter(s => s.grade === selectedGrade);
 
-  // 💡 [핵심 패치 1] 큰따옴표(") 사용 금지 규칙 추가 (JSON 파싱 에러 원천 차단)
+  // 💡 [핵심 패치] 파싱 에러를 유발하던 8번(작은따옴표) 규칙을 완전히 삭제했습니다.
   const formattingGuidelines = `
   [문제 출력 형식 및 텍스트 강조 가이드라인]
   1. 밑줄 사용 절대 금지: 플랫폼 환경상 밑줄(underline, <u>태그 등)은 정상적으로 출력되지 않으므로 절대 사용하지 마세요.
@@ -57,7 +57,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   5. 박스 처리(문장 삽입/요약문): 문장 삽입 문제나 요약문은 본문과 헷갈리지 않게 반드시 인용구(>) 기호를 맨 앞에 넣어서 명확히 구분하세요.
   6. 🚨 원문 100% 유지 및 한글 삽입 금지: 지문을 임의로 요약하거나 생략하지 마세요.
   7. 🚨 선지 개수 엄수: 지문 내에 번호를 매기는 문제의 경우, 반드시 지문 안에 ①번부터 ⑤번까지 빠짐없이 마크다운 기호가 존재해야 합니다.
-  8. 🚨 데이터 파싱 오류 방지: 본문, 문제, 해설 등 모든 텍스트 안에서 큰따옴표(")는 절대 사용하지 말고, 반드시 작은따옴표(')로 대체해서 출력하세요.
   `;
 
   const handleGenerateAI = async (type: 'mid' | 'high') => {
@@ -144,10 +143,9 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
-            // 💡 [핵심 패치 2] JSON 출력 강제 지정 (다른 잡담 절대 불가)
             generationConfig: { 
               temperature: 0.2,
-              responseMimeType: "application/json"
+              responseMimeType: "application/json" // 💡 JSON 규격 강제
             } 
           })
         });
@@ -165,12 +163,23 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
 
     try {
       if (!success) throw new Error("모든 통로가 막혔습니다.");
-      const cleanJson = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+      
+      let cleanJson = textResponse.replace(/```json/gi, '').replace(/```/g, '').trim();
+      
+      // 💡 [초강력 JSON 추출기] AI가 다른 잡담을 섞어 보내도 오직 [ ] 배열 구간만 완벽하게 쏙! 뽑아냅니다.
+      const jsonMatch = cleanJson.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        cleanJson = jsonMatch[0];
+      }
+
       const parsedProblems: Problem[] = JSON.parse(cleanJson);
       setGeneratedProblems(parsedProblems);
       setIsGenerated(true);
     } catch (error) {
-      alert("AI 서버가 일시적으로 혼잡하거나 JSON 파싱에 실패했습니다. 다시 시도해주세요!");
+      // 💡 만약 또 에러가 나면 개발자 도구(F12) 콘솔에서 원인을 추적할 수 있도록 로그를 남깁니다.
+      console.error("AI 원본 응답 텍스트:", textResponse); 
+      console.error("JSON 파싱 에러 상세:", error);
+      alert("AI가 문제 데이터를 정리하는 중에 실수가 있었습니다. 다시 한번 [출제] 버튼을 눌러주세요!");
     } finally {
       setIsGenerating(false);
     }
@@ -214,7 +223,11 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
       if (data.error) throw new Error(data.error.message);
 
       const textResponse = data.candidates[0].content.parts[0].text;
-      const cleanJson = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+      
+      let cleanJson = textResponse.replace(/```json/gi, '').replace(/```/g, '').trim();
+      const jsonMatch = cleanJson.match(/\{[\s\S]*\}/); // 단일 객체 추출
+      if (jsonMatch) cleanJson = jsonMatch[0];
+
       const fixedProblem = JSON.parse(cleanJson);
 
       setEditFormData(fixedProblem);
@@ -239,7 +252,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
       const { error } = await supabase.from('ai_exams').insert([
         {
           title: title.trim(),
-          source_text: sourceText,
+          source_text: sourceText, // 💡 원본 지문 전체를 통째로 영구 저장!
           problems: generatedProblems 
         }
       ]);
