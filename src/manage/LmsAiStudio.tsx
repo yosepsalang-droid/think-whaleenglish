@@ -25,27 +25,22 @@ interface SavedExam {
 }
 
 export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
-  // 💡 [혁신 패치 1] 화면 모드 전환 (출제소 vs 보관함)
   const [viewMode, setViewMode] = useState<'studio' | 'archive'>('studio');
 
-  // 출제소 상태
   const [sourceText, setSourceText] = useState('');
   const [questionCount, setQuestionCount] = useState(5); 
   const [isGenerated, setIsGenerated] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false); 
   const [generatedProblems, setGeneratedProblems] = useState<Problem[]>([]);
   
-  // 보관함 상태
   const [savedExams, setSavedExams] = useState<SavedExam[]>([]);
   const [selectedExam, setSelectedExam] = useState<SavedExam | null>(null);
 
-  // 배포 모달 상태
   const [showDistributeModal, setShowDistributeModal] = useState(false);
   const [students, setStudents] = useState<any[]>([]);
   const [selectedGrade, setSelectedGrade] = useState('');
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
 
-  // 수정 상태
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editFormData, setEditFormData] = useState<Problem | null>(null);
   const [aiFeedback, setAiFeedback] = useState('');
@@ -60,7 +55,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     fetchStudents();
   }, []);
 
-  // 💡 [혁신 패치 2] 보관함(Archive) 탭을 누르면 수파베이스에서 저장된 시험지를 싹 불러옵니다!
   useEffect(() => {
     if (viewMode === 'archive') {
       const fetchArchive = async () => {
@@ -69,7 +63,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
         if (error) console.error("보관함 로드 실패:", error);
       };
       fetchArchive();
-      setSelectedExam(null); // 탭 전환 시 선택 초기화
+      setSelectedExam(null); 
     }
   }, [viewMode]);
 
@@ -98,7 +92,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     setIsGenerated(false);
     setGeneratedProblems([]);
 
-    // 💡 [혁신 패치 3] 초등부 전용 아주 쉽고 직관적인 프롬프트 추가
     let promptBase = '';
     if (type === 'elem') {
       promptBase = `
@@ -149,7 +142,8 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
       ]
     `;
 
-    const modelsToTry = ['gemini-1.5-flash', 'gemini-1.5-pro'];
+    // 💡 [핵심 확정!] 절대 바뀌지 않는 3.x 버전의 안정적인 모델 배열 고정
+    const modelsToTry = ['gemini-3.7-flash', 'gemini-3.1-pro', 'gemini-3.5-flash-lite'];
     let success = false;
     let textResponse = '';
 
@@ -161,7 +155,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: { 
-              temperature: 0.2, 
+              temperature: 0.7, 
               maxOutputTokens: 8192, 
               responseMimeType: "application/json" 
             } 
@@ -215,7 +209,8 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     ${formattingGuidelines}
     `;
 
-    const modelsToTry = ['gemini-1.5-flash', 'gemini-1.5-pro'];
+    // 💡 [핵심 확정!] 자동 수정 기능에도 3.x 버전으로 영구 고정
+    const modelsToTry = ['gemini-3.7-flash', 'gemini-3.1-pro', 'gemini-3.5-flash-lite'];
     let fixSuccess = false;
     let fixedProblem = null;
 
@@ -281,7 +276,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     }
   };
 
-  // 인쇄 및 배포 로직 통합 (출제소 문제 or 보관함 선택 문제 모두 호환되도록 구성)
   const currentPrintProblems = viewMode === 'studio' ? generatedProblems : (selectedExam?.problems || []);
   const canPrintOrDistribute = currentPrintProblems.length > 0;
 
@@ -334,7 +328,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
         updated[editingIndex] = editFormData;
         setGeneratedProblems(updated);
       } else if (selectedExam) {
-        // 보관함에서 수정 시 화면만 반영 (원할 경우 Supabase DB 업데이트 추가 가능)
         const updated = [...selectedExam.problems];
         updated[editingIndex] = editFormData;
         setSelectedExam({ ...selectedExam, problems: updated });
@@ -348,6 +341,29 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     setEditingIndex(null);
     setEditFormData(null);
     setAiFeedback('');
+  };
+
+  const updateEditForm = (field: keyof Problem, value: any) => {
+    if (editFormData) {
+      setEditFormData({ ...editFormData, [field]: value });
+    }
+  };
+
+  const updateExplanation = (field: keyof Problem['explanation'], value: string) => {
+    if (editFormData) {
+      setEditFormData({
+        ...editFormData,
+        explanation: { ...editFormData.explanation, [field]: value }
+      });
+    }
+  };
+
+  const updateOption = (index: number, value: string) => {
+    if (editFormData) {
+      const newOptions = [...editFormData.options];
+      newOptions[index] = value;
+      setEditFormData({ ...editFormData, options: newOptions });
+    }
   };
 
   const renderTextWithFormatting = (text: string) => {
@@ -618,7 +634,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                 🤖 영어를 직접 고치기 어렵다면? 외부 검수자의 지적을 붙여넣으세요!
               </label>
               <textarea
-                placeholder="예: 3번 보기 문법이 틀렸어. 수동태로 바꿔야 해. 또는 정답을 4번으로 바꾸고 그에 맞게 지문을 수정해줘."
+                placeholder="예: 지문에 빈칸 ( )을 추가해주고, 정답을 4번으로 바꾼 뒤 그에 맞게 해설을 수정해줘."
                 value={aiFeedback}
                 onChange={e => setAiFeedback(e.target.value)}
                 rows={3}
