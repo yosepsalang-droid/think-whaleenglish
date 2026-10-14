@@ -70,20 +70,19 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const grades = Array.from(new Set(students.map(s => s.grade))).filter(Boolean).sort();
   const filteredStudents = students.filter(s => s.grade === selectedGrade);
 
+  // 💡 [초등부 쓰기 대응] 객관식과 주관식을 모두 소화할 수 있도록 규칙 변경
   const formattingGuidelines = `
   [문제 출력 형식 및 텍스트 강조 가이드라인]
-  1. 밑줄 사용 절대 금지: 플랫폼 환경상 밑줄(underline, <u>태그 등)은 정상적으로 출력되지 않으므로 절대 사용하지 마세요.
-  2. 굵은 글씨(Bold) 활용: 어휘, 어법 문제 등에서 특정 단어나 문장을 강조해야 할 경우, 반드시 마크다운 굵기 기호(**)를 사용하세요. 
-  3. 번호와 함께 강조 표기법: 어휘/어법/지칭 추론 문제의 지문 내 강조 표시는 '번호 + 띄어쓰기 + **강조단어**' 형태로 통일하세요. (예: ① **that**)
-  4. 보기 구성: 밑줄/강조 문제의 보기를 만들 때는 숫자만 적지 말고, 반드시 해당 단어를 함께 적어주세요.
-  5. 박스 처리(문장 삽입/요약문): 문장 삽입 문제나 요약문은 본문과 헷갈리지 않게 반드시 인용구(>) 기호를 맨 앞에 넣어서 명확히 구분하세요.
-  6. 🚨 원문 100% 유지 및 한글 삽입 금지: 지문을 임의로 요약하거나 생략하지 마세요.
-  7. 🚨 선지 개수 엄수: 지문 내에 번호를 매기는 문제의 경우, 반드시 지문 안에 ①번부터 ⑤번까지 빠짐없이 마크다운 기호가 존재해야 합니다.
-  8. 🚨 JSON 오류 방지: 응답은 반드시 완벽한 JSON Array [ ] 형태여야 하며, 텍스트 내용(Value) 안에 큰따옴표(")를 쓰면 에러가 나므로 반드시 작은따옴표(')로만 대체해서 쓰세요.
+  1. 밑줄 사용 절대 금지: 플랫폼 환경상 굵은 글씨(**강조**)를 대신 사용하세요.
+  2. 객관식 보기 강조: 어휘/어법 문제 등에서 보기는 '번호 + 띄어쓰기 + **강조단어**' 형태로 통일하세요. (예: ① **that**)
+  3. 박스 처리(문장 삽입/요약문): 본문과 헷갈리지 않게 반드시 인용구(>) 기호를 맨 앞에 넣어서 명확히 구분하세요.
+  4. 🚨 객관식 출제 조건: 중등/고등부 문제의 경우, 반드시 지문 안에 ①번부터 ⑤번까지 빠짐없이 마크다운 기호가 존재해야 합니다.
+  5. 🚨 주관식 출제 조건: 초등부 영작 문제의 경우, 객관식이 아니므로 "options" 항목을 반드시 빈 배열 [ ] 로 출력하세요.
+  6. 🚨 JSON 오류 방지: 응답은 반드시 완벽한 JSON Array [ ] 형태여야 하며, 텍스트 내용(Value) 안에 큰따옴표(")를 쓰면 에러가 나므로 반드시 작은따옴표(')로만 대체해서 쓰세요.
   `;
 
   const handleGenerateAI = async (type: 'elem' | 'mid' | 'high') => {
-    if (!sourceText) return alert("원본 지문이나 문제를 먼저 입력해주세요!");
+    if (!sourceText) return alert("원본 지문이나 문장을 먼저 입력해주세요!");
     
     const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || (CONFIG as any)?.GEMINI?.API_KEY || (CONFIG as any)?.GEMINI_API_KEY;
     if (!apiKey) return alert("API 키를 찾을 수 없습니다.");
@@ -93,21 +92,38 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     setGeneratedProblems([]);
 
     let promptBase = '';
+    
+    // 💡 [혁신 패치] 초등부 전용 '점진적 문장 확장 영작' 프롬프트
     if (type === 'elem') {
       promptBase = `
       당신은 10년 차 최고의 초등부 영어 학원 강사입니다.
-      다음 원본 텍스트를 바탕으로 [초등학생 수준에 맞는 아주 쉽고 재미있는 파닉스/기초단어/기초문법 문제]를 정확히 ${questionCount}개 만들어주세요.
-      문제가 너무 길거나 복잡하면 안 됩니다. 아주 직관적이어야 합니다.
+      아래 [원본 텍스트]를 바탕으로, 초등학생을 위한 [점진적 문장 확장(Sentence Building) 주관식 영작 문제]를 정확히 ${questionCount}단계로 만들어주세요.
+
+      [문장 확장 출제 방식]
+      학생이 아주 짧은 뼈대 문장(1~3형식)에서 시작해, 살(수식어구, 전치사구, 부사 등)을 하나씩 붙여가며 문장을 길게 완성하도록 유도합니다.
+      (예시)
+      Q1. 나는 놀았다. -> I played.
+      Q2. 나는 축구를 했다. -> I played soccer.
+      Q3. 나는 친구들과 축구를 했다. -> I played soccer with my friends.
+      Q4. 나는 어제 공원에서 친구들과 축구를 했다. -> I played soccer with my friends at the park yesterday.
+
+      [출제 조건]
+      1. 🚨 본 문제는 "주관식 영작" 이므로 JSON의 "options" 항목은 무조건 빈 배열 [] 로 출력하세요. (보기 출력 금지)
+      2. "question" 에는 학생이 영작할 [한글 뜻]과 (힌트 영단어)를 적어주세요.
+      3. "passage" 에는 이전 문장에서 무엇이 추가되었는지 아이들 눈높이에 맞춰 친절하게 설명해주세요. (예: "장소를 나타내는 말이 맨 뒤에 붙었어요!")
+      4. "answer" 에는 완성된 전체 영어 문장을 적어주세요.
       `;
     } else if (type === 'mid') {
       promptBase = `
       당신은 10년 차 최고의 중등부 영어 학원 강사입니다.
       다음 원본 텍스트를 바탕으로 [중등부 내신 문법 및 독해 변형 문제]를 정확히 ${questionCount}개 만들어주세요.
+      문제는 반드시 5지 선다형 객관식으로 출제하세요.
       `;
     } else {
       promptBase = `
       당신은 10년 차 최고의 고등부 영어 학원 강사입니다.
       아래 [원본 텍스트]를 바탕으로 [고등 모의고사 (고1~고3) 및 수능 대비 수준 변형 문제]를 정확히 ${questionCount}개 제작해 주세요.
+      문제는 반드시 5지 선다형 객관식으로 출제하세요.
       `;
     }
 
@@ -117,10 +133,9 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
       [원본 텍스트]
       ${sourceText}
 
-      [출제 조건]
-      1. 문제는 반드시 5지 선다형 객관식으로 출제하세요.
-      2. 🚨 논리적으로 정답이 명확해야 하며, 복수 정답이나 오류가 발생하지 않도록 자체 검수하세요.
-      3. 절대 다른 설명이나 인삿말을 덧붙이지 말고, 오직 아래의 JSON 배열(Array) 형태로만 출력하세요.
+      [출제 필수 조건]
+      1. 논리적으로 정답이 명확해야 하며, 복수 정답이나 오류가 발생하지 않도록 자체 검수하세요.
+      2. 절대 다른 설명이나 인삿말을 덧붙이지 말고, 오직 아래의 JSON 배열(Array) 형태로만 출력하세요.
 
       ${formattingGuidelines}
 
@@ -129,8 +144,8 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
         {
           "question": "문제 내용",
           "passage": "문제 지문 내용",
-          "options": ["① 보기", "② 보기", "③ 보기", "④ 보기", "⑤ 보기"],
-          "answer": "정답 번호 기호",
+          "options": ["① 보기", "② 보기", "③ 보기", "④ 보기", "⑤ 보기"], // 초등부 영작은 [] 빈 배열로 둘 것
+          "answer": "정답 번호 기호 또는 주관식 정답 문장",
           "explanation": {
             "direct": "직독직해 내용",
             "natural": "자연스러운 해석 내용",
@@ -142,7 +157,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
       ]
     `;
 
-    // 💡 [핵심 확정!] 절대 바뀌지 않는 3.x 버전의 안정적인 모델 배열 고정
     const modelsToTry = ['gemini-3.7-flash', 'gemini-3.1-pro', 'gemini-3.5-flash-lite'];
     let success = false;
     let textResponse = '';
@@ -209,7 +223,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     ${formattingGuidelines}
     `;
 
-    // 💡 [핵심 확정!] 자동 수정 기능에도 3.x 버전으로 영구 고정
     const modelsToTry = ['gemini-3.7-flash', 'gemini-3.1-pro', 'gemini-3.5-flash-lite'];
     let fixSuccess = false;
     let fixedProblem = null;
@@ -254,7 +267,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const handleSaveToDB = async () => {
     if (generatedProblems.length === 0) return alert("저장할 문제가 없습니다.");
     
-    const title = prompt("저장할 시험지의 제목을 입력해주세요.\n(예: 24년 9월 고1 모의고사 30번 변형)");
+    const title = prompt("저장할 시험지의 제목을 입력해주세요.\n(예: 초등부 문장 확장 쓰기 연습 1회)");
     if (!title || !title.trim()) return;
 
     setIsSaving(true);
@@ -416,7 +429,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
           {onBack && <button onClick={onBack} style={{ border: 'none', background: 'none', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', color: '#64748b' }}>← 뒤로</button>}
           <h1 style={{ margin: 0, fontSize: '20px', fontWeight: '900', color: '#1e293b' }}>🤖 AI 문제 연구소</h1>
           
-          {/* 💡 화면 모드 전환 탭 */}
           <div style={{ display: 'flex', backgroundColor: '#f1f5f9', padding: '4px', borderRadius: '12px' }}>
             <button onClick={() => setViewMode('studio')} style={{ padding: '8px 16px', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s', backgroundColor: viewMode === 'studio' ? 'white' : 'transparent', color: viewMode === 'studio' ? '#2563eb' : '#64748b', boxShadow: viewMode === 'studio' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none' }}>
               📝 AI 출제소
@@ -455,27 +467,26 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
             <div style={{ flex: '0 0 300px', backgroundColor: 'white', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
               <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '800' }}>원본 소스 입력</h3>
               <textarea 
-                placeholder="모의고사 지문이나 변형할 문법 문제 텍스트를 붙여넣으세요."
+                placeholder="지문이나 단어, 뼈대 문장을 붙여넣으세요."
                 value={sourceText}
                 onChange={(e) => setSourceText(e.target.value)}
                 style={{ width: '100%', height: '200px', padding: '12px', boxSizing: 'border-box', borderRadius: '8px', border: '1px solid #cbd5e1', resize: 'none', marginBottom: '16px' }}
               />
               <div style={{ marginBottom: '16px' }}>
-                <label style={{ fontSize: '14px', fontWeight: 'bold', color: '#475569', display: 'block', marginBottom: '8px' }}>생성할 문항 수</label>
+                <label style={{ fontSize: '14px', fontWeight: 'bold', color: '#475569', display: 'block', marginBottom: '8px' }}>생성할 문항 수 (단계 수)</label>
                 <select value={questionCount} onChange={(e) => setQuestionCount(Number(e.target.value))} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontWeight: 'bold' }}>
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => <option key={num} value={num}>{num}문제 생성</option>)}
                 </select>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {/* 💡 [혁신 패치 3] 초등부 출제 버튼 추가 */}
                 <button onClick={() => handleGenerateAI('elem')} disabled={isGenerating} style={{ padding: '12px', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: isGenerating ? 'not-allowed' : 'pointer', opacity: isGenerating ? 0.7 : 1 }}>
-                  {isGenerating ? '출제 중... ⏳' : '🧸 초등부 파닉스/기초 출제'}
+                  {isGenerating ? '출제 중... ⏳' : '🧸 초등 문장 확장 쓰기'}
                 </button>
                 <button onClick={() => handleGenerateAI('mid')} disabled={isGenerating} style={{ padding: '12px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: isGenerating ? 'not-allowed' : 'pointer', opacity: isGenerating ? 0.7 : 1 }}>
                   {isGenerating ? '출제 중... ⏳' : '📝 중등부 내신 출제'}
                 </button>
                 <button onClick={() => handleGenerateAI('high')} disabled={isGenerating} style={{ padding: '12px', backgroundColor: '#475569', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: isGenerating ? 'not-allowed' : 'pointer', opacity: isGenerating ? 0.7 : 1 }}>
-                  {isGenerating ? '출제 중... ⏳' : '📝 고등부 모의고사 출제'}
+                  {isGenerating ? '출제 중... ⏳' : '📝 고등 모의고사 출제'}
                 </button>
               </div>
             </div>
@@ -497,9 +508,15 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                     <div style={{ fontSize: '13.5px', color: '#111', border: '1px solid #cbd5e1', padding: '16px', borderRadius: '8px', marginBottom: '12px', lineHeight: '1.6' }}>
                       {renderTextWithFormatting(prob.passage)}
                     </div>
-                    <div style={{ fontSize: '13.5px', color: '#334155', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      {prob.options.map((opt, i) => <span key={i}>{opt}</span>)}
-                    </div>
+                    
+                    {/* 💡 [핵심] 보기가 있으면 5지선다 출력, 없으면 주관식 쓰기 밑줄 출력 */}
+                    {prob.options && prob.options.length > 0 ? (
+                      <div style={{ fontSize: '13.5px', color: '#334155', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {prob.options.map((opt, i) => <span key={i}>{opt}</span>)}
+                      </div>
+                    ) : (
+                      <div style={{ borderBottom: '2px dashed #cbd5e1', marginTop: '30px', marginBottom: '10px' }}></div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -511,19 +528,17 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                 {isGenerated && generatedProblems.map((prob, idx) => (
                   <div key={idx} style={{ marginBottom: '24px', paddingBottom: '20px', borderBottom: '2px dashed #e2e8f0' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                      <h4 style={{ margin: 0, color: '#10b981', fontSize: '16px' }}>Q{idx + 1} 문항 분석</h4>
+                      <h4 style={{ margin: 0, color: '#10b981', fontSize: '16px' }}>Q{idx + 1} 정답 및 해설</h4>
                       <button onClick={() => startEditing(idx)} style={{ padding: '4px 8px', backgroundColor: '#f0fdf4', color: '#10b981', border: '1px solid #bbf7d0', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>
                         ✏️ 해설 수정
                       </button>
                     </div>
                     <div style={{ marginBottom: '12px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ fontWeight: 'bold', backgroundColor: '#ef4444', color: 'white', padding: '4px 8px', borderRadius: '6px' }}>정답</span> 
-                      <b>{prob.answer}</b>
+                      <b style={{ color: '#111' }}>{prob.answer}</b>
                     </div>
                     <div style={{ fontSize: '13px', lineHeight: '1.5', color: '#334155' }}>
                       <p style={{ margin: '0 0 8px 0' }}><b>[핵심 어휘]</b><br/>{prob.explanation.vocabulary}</p>
-                      <p style={{ margin: '0 0 8px 0' }}><b>[직독직해]</b><br/>{prob.explanation.direct}</p>
-                      <p style={{ margin: '0 0 8px 0' }}><b>[자연스러운 해석]</b><br/>{prob.explanation.natural}</p>
                       <p style={{ margin: '0 0 8px 0', backgroundColor: '#f8fafc', padding: '8px', borderRadius: '4px' }}><b>[구조 & 문법]</b><br/>{prob.explanation.structure}<br/>{prob.explanation.grammar}</p>
                     </div>
                   </div>
@@ -536,7 +551,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
         {/* ===================== [모드 2] 문제 보관함 화면 ===================== */}
         {viewMode === 'archive' && (
           <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
-            {/* 좌측: 시험지 목록 */}
             <div style={{ flex: '0 0 350px', backgroundColor: 'white', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', maxHeight: '800px', overflowY: 'auto' }}>
               <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', fontWeight: '800', color: '#1e293b' }}>🗂️ 저장된 시험지 목록</h3>
               {savedExams.length === 0 ? (
@@ -564,7 +578,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
               )}
             </div>
 
-            {/* 우측: 선택된 시험지 뷰 */}
             <div style={{ flex: '1', backgroundColor: 'white', borderRadius: '16px', padding: '30px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', minHeight: '600px', maxHeight: '800px', overflowY: 'auto' }}>
               {!selectedExam ? (
                 <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#94a3b8', fontSize: '16px' }}>
@@ -576,7 +589,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                     {selectedExam.title}
                   </h2>
                   <div style={{ display: 'flex', gap: '20px' }}>
-                    {/* 학생용 문제 뷰 (보관함) */}
                     <div style={{ flex: 1 }}>
                       <h3 style={{ margin: '0 0 20px 0', paddingBottom: '12px', borderBottom: '2px solid #e2e8f0', color: '#3b82f6' }}>📄 문제지</h3>
                       {selectedExam.problems.map((prob, idx) => (
@@ -587,13 +599,18 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                           <div style={{ fontSize: '13.5px', color: '#111', border: '1px solid #cbd5e1', padding: '16px', borderRadius: '8px', marginBottom: '12px', lineHeight: '1.6' }}>
                             {renderTextWithFormatting(prob.passage)}
                           </div>
-                          <div style={{ fontSize: '13.5px', color: '#334155', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            {prob.options.map((opt, i) => <span key={i}>{opt}</span>)}
-                          </div>
+                          
+                          {/* 💡 보관함 뷰에서도 주관식 렌더링 지원 */}
+                          {prob.options && prob.options.length > 0 ? (
+                            <div style={{ fontSize: '13.5px', color: '#334155', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              {prob.options.map((opt, i) => <span key={i}>{opt}</span>)}
+                            </div>
+                          ) : (
+                            <div style={{ borderBottom: '2px dashed #cbd5e1', marginTop: '30px', marginBottom: '10px' }}></div>
+                          )}
                         </div>
                       ))}
                     </div>
-                    {/* 교사용 해설지 뷰 (보관함) */}
                     <div style={{ flex: 1 }}>
                       <h3 style={{ margin: '0 0 20px 0', paddingBottom: '12px', borderBottom: '2px solid #e2e8f0', color: '#10b981' }}>👩‍🏫 해설지</h3>
                       {selectedExam.problems.map((prob, idx) => (
@@ -605,8 +622,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                           </div>
                           <div style={{ fontSize: '13px', lineHeight: '1.5', color: '#334155' }}>
                             <p style={{ margin: '0 0 8px 0' }}><b>[핵심 어휘]</b><br/>{prob.explanation.vocabulary}</p>
-                            <p style={{ margin: '0 0 8px 0' }}><b>[직독직해]</b><br/>{prob.explanation.direct}</p>
-                            <p style={{ margin: '0 0 8px 0' }}><b>[자연스러운 해석]</b><br/>{prob.explanation.natural}</p>
                             <p style={{ margin: '0 0 8px 0', backgroundColor: '#f8fafc', padding: '8px', borderRadius: '4px' }}><b>[구조 & 문법]</b><br/>{prob.explanation.structure}<br/>{prob.explanation.grammar}</p>
                           </div>
                         </div>
@@ -658,17 +673,22 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                 <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block' }}>지문 (Passage)</label>
                 <textarea value={editFormData.passage} onChange={e => updateEditForm('passage', e.target.value)} rows={6} style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box', resize: 'vertical' }} />
               </div>
-              <div>
-                <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block' }}>보기 (Options)</label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {editFormData.options.map((opt, i) => (
-                    <input key={i} value={opt} onChange={e => updateOption(i, e.target.value)} style={{ width: '100%', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box' }} />
-                  ))}
+              
+              {/* 보기가 있을 때만 수정 입력창 표시 (주관식 영작은 숨김) */}
+              {editFormData.options && editFormData.options.length > 0 && (
+                <div>
+                  <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block' }}>보기 (Options)</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {editFormData.options.map((opt, i) => (
+                      <input key={i} value={opt} onChange={e => updateOption(i, e.target.value)} style={{ width: '100%', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box' }} />
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
+
               <div>
-                <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block' }}>정답 기호 (예: ③)</label>
-                <input value={editFormData.answer} onChange={e => updateEditForm('answer', e.target.value)} style={{ width: '100px', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box' }} />
+                <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block' }}>정답 (주관식 문장 또는 기호)</label>
+                <input value={editFormData.answer} onChange={e => updateEditForm('answer', e.target.value)} style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box' }} />
               </div>
               <hr style={{ borderTop: '1px dashed #cbd5e1', margin: '10px 0' }} />
               <div>
@@ -676,20 +696,8 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                 <textarea value={editFormData.explanation.vocabulary} onChange={e => updateExplanation('vocabulary', e.target.value)} rows={2} style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box' }} />
               </div>
               <div>
-                <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block', color: '#10b981' }}>직독직해</label>
-                <textarea value={editFormData.explanation.direct} onChange={e => updateExplanation('direct', e.target.value)} rows={3} style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box' }} />
-              </div>
-              <div>
-                <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block', color: '#10b981' }}>자연스러운 해석</label>
-                <textarea value={editFormData.explanation.natural} onChange={e => updateExplanation('natural', e.target.value)} rows={3} style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box' }} />
-              </div>
-              <div>
-                <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block', color: '#10b981' }}>구조 분석</label>
-                <textarea value={editFormData.explanation.structure} onChange={e => updateExplanation('structure', e.target.value)} rows={2} style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box' }} />
-              </div>
-              <div>
-                <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block', color: '#10b981' }}>핵심 문법</label>
-                <textarea value={editFormData.explanation.grammar} onChange={e => updateExplanation('grammar', e.target.value)} rows={2} style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box' }} />
+                <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block', color: '#10b981' }}>구조 및 문법 설명</label>
+                <textarea value={editFormData.explanation.grammar} onChange={e => updateExplanation('grammar', e.target.value)} rows={3} style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box' }} />
               </div>
             </div>
 
@@ -721,12 +729,18 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                     <div style={{ border: '1px solid #000', padding: '12px', marginBottom: '10px', fontSize: '10pt', lineHeight: '1.5', wordBreak: 'keep-all', overflowWrap: 'break-word', width: '100%', boxSizing: 'border-box', textAlign: 'left' }}>
                       {renderTextWithFormatting(prob.passage)}
                     </div>
+
+                    {/* 💡 [핵심] 인쇄용 뷰에서도 영작용 빈칸 지원 */}
                     <div className="options-box" style={{ display: 'flex', flexDirection: isShortOptions ? 'row' : 'column', flexWrap: isShortOptions ? 'wrap' : 'nowrap', justifyContent: isShortOptions ? 'space-between' : 'flex-start', gap: isShortOptions ? '8px' : '5px', fontSize: '9.5pt', paddingLeft: '2px', textAlign: 'left' }}>
-                      {prob.options.map(opt => (
-                        <div key={opt} style={{ width: isShortOptions ? '48%' : '100%', textAlign: 'left', display: 'block', paddingLeft: isShortOptions ? '0' : '0px' }}>
-                          {renderTextWithFormatting(opt)}
-                        </div>
-                      ))}
+                      {prob.options && prob.options.length > 0 ? (
+                        prob.options.map(opt => (
+                          <div key={opt} style={{ width: isShortOptions ? '48%' : '100%', textAlign: 'left', display: 'block', paddingLeft: isShortOptions ? '0' : '0px' }}>
+                            {renderTextWithFormatting(opt)}
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ borderBottom: '1px solid #64748b', width: '100%', height: '40px', marginTop: '15px' }}></div>
+                      )}
                     </div>
                   </div>
                 )
@@ -746,12 +760,10 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                   <h3 style={{ margin: '0 0 6px 0', fontSize: '11pt', color: '#1e3a8a', textAlign: 'left' }}>{idx + 1}번 해설</h3>
                   <div style={{ marginBottom: '6px', fontSize: '10pt', textAlign: 'left' }}>
                     <span style={{ fontWeight: 'bold', backgroundColor: '#e2e8f0', padding: '2px 6px', borderRadius: '4px', marginRight: '6px' }}>정답</span> 
-                    <b>{prob.answer}</b>
+                    <b style={{ color: '#111' }}>{prob.answer}</b>
                   </div>
                   <div style={{ fontSize: '9pt', lineHeight: '1.4', textAlign: 'left' }}>
                     <p style={{ margin: '0 0 4px 0', textAlign: 'left' }}><b>[핵심 어휘]</b><br/>{prob.explanation.vocabulary}</p>
-                    <p style={{ margin: '0 0 4px 0', textAlign: 'left' }}><b>[직독직해]</b><br/>{prob.explanation.direct}</p>
-                    <p style={{ margin: '0 0 4px 0', textAlign: 'left' }}><b>[자연스러운 해석]</b><br/>{prob.explanation.natural}</p>
                     <p style={{ margin: '0 0 4px 0', backgroundColor: '#f8fafc', padding: '4px', textAlign: 'left' }}><b>[구조 & 문법]</b><br/>{prob.explanation.structure}<br/>{prob.explanation.grammar}</p>
                   </div>
                 </div>
