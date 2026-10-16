@@ -39,6 +39,9 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
   const [startNo, setStartNo] = useState<number | ''>('');
   const [endNo, setEndNo] = useState<number | ''>('');
   
+  // 💡 [혁신 패치] 교재 이름에 상관없이 누구나 범위를 지정할 수 있는 선택 스위치 추가!
+  const [studyMode, setStudyMode] = useState<'random' | 'range'>('random');
+
   const [currentTestMode, setCurrentTestMode] = useState('');
 
   const [wrongQuestions, setWrongQuestions] = useState<Question[]>([]);
@@ -49,9 +52,6 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
   const typingInputRef = useRef<HTMLInputElement>(null);
 
   const taskTypeName = tableName === 'words_high' ? '고등단어' : '중등단어';
-
-  // 💡 [핵심 스위치] 교재 이름에 '필수'나 '숙어'가 들어가거나 고등부인 경우 범위 지정 모드 켜기!
-  const isRangeMode = tableName === 'words_high' || selectedBook.includes('필수') || selectedBook.includes('숙어');
 
   const { realTodayStr } = useMemo(() => {
     const now = new Date();
@@ -144,16 +144,15 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
     if (!selectedBook) return alert("교재를 선택해주세요.");
     if (!selectedDate) return alert("학습 날짜를 선택해주세요.");
     
-    // 💡 범위 지정 모드일 때만 번호 입력을 필수로 체크합니다.
-    if (isRangeMode) {
-      if (startNo === '' || endNo === '') return alert("학습할 번호를 입력해주세요.");
+    // 💡 [변경] 명시적으로 '범위 지정' 모드일 때만 번호를 체크합니다.
+    if (studyMode === 'range') {
+      if (startNo === '' || endNo === '') return alert("학습할 시작/끝 번호(Day)를 입력해주세요.");
       if (startNo > endNo) return alert("끝 번호가 시작 번호보다 작습니다.");
     }
 
     let availableWords = allWords.filter(w => w.book === selectedBook);
 
-    if (isRangeMode) {
-      // 💡 범위 모드: 시작~끝 번호 안의 단어만 완벽하게 가져옵니다 (쿨다운 무시)
+    if (studyMode === 'range') {
       availableWords = availableWords.filter(w => {
         const match = w.day?.match(/\d+/);
         if (!match) return false;
@@ -162,7 +161,6 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
       });
       if (availableWords.length === 0) return alert(`해당 범위에 단어가 없습니다.`);
     } else {
-      // 💡 기존 모드: 워드타파 등은 예전처럼 '전체에서 2일 쿨다운 적용 후 랜덤 추출'
       const historyKey = `voca_history_${studentId}`;
       const history = JSON.parse(localStorage.getItem(historyKey) || '{}');
       const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
@@ -181,9 +179,8 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
 
     setTestWords(availableWords); 
     
-    // 💡 [에러 해결 부분] 버셀의 타입스크립트 에러를 방지하기 위해 중복된 조건(tableName !== 'words_high')을 제거했습니다.
     let maxLimit = availableWords.length;
-    if (!isRangeMode) {
+    if (studyMode === 'random') {
       if (mode === 'eng2kor') maxLimit = 150;
       else if (mode === 'kor2eng') maxLimit = 30;
       else if (mode === 'half') maxLimit = 100;
@@ -354,7 +351,7 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
     
     const storageKey = `voca_log_${tableName}_${studentId}`;
     const savedData = JSON.parse(localStorage.getItem(storageKey) || '{"records":{}}');
-    const rangeText = isRangeMode ? `${startNo}~${endNo}번` : '전체 랜덤';
+    const rangeText = studyMode === 'range' ? `${startNo}~${endNo}번` : '전체 랜덤';
     
     savedData.records[selectedDate] = { date: selectedDate, book: selectedBook, range: rangeText, status: '완료', score: totalQCount, attempt: attemptCount };
     localStorage.setItem(storageKey, JSON.stringify(savedData));
@@ -418,8 +415,21 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
             </select>
           </div>
 
-          {/* 💡 조건부 렌더링: '필수'나 '숙어' 교재일 때만 범위 지정 입력창이 스르륵 나타납니다! */}
-          {isRangeMode && (
+          {/* 💡 [신규 추가] 누구나 언제든 클릭할 수 있는 직관적인 학습 모드 선택 스위치 */}
+          <div style={{ textAlign: 'left', marginBottom: '16px' }}>
+            <label style={{ fontSize: '13px', fontWeight: '700', color: '#8e8e93', marginLeft: '4px', marginBottom: '8px', display: 'block' }}>🎯 학습 방식 선택</label>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button onClick={() => setStudyMode('random')} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: studyMode === 'random' ? '2px solid #007aff' : '1px solid #d1d1d6', backgroundColor: studyMode === 'random' ? '#eef6ff' : '#f9f9f9', color: studyMode === 'random' ? '#007aff' : '#8e8e93', fontWeight: '800', cursor: 'pointer', transition: 'all 0.2s' }}>
+                🎲 전체 랜덤 학습
+              </button>
+              <button onClick={() => setStudyMode('range')} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: studyMode === 'range' ? '2px solid #ff9500' : '1px solid #d1d1d6', backgroundColor: studyMode === 'range' ? '#fff5e6' : '#f9f9f9', color: studyMode === 'range' ? '#ff9500' : '#8e8e93', fontWeight: '800', cursor: 'pointer', transition: 'all 0.2s' }}>
+                📏 범위 지정 학습
+              </button>
+            </div>
+          </div>
+
+          {/* 범위 지정을 눌렀을 때만 나타나는 번호 입력 창 */}
+          {studyMode === 'range' && (
             <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', animation: 'fadeIn 0.3s' }}>
               <div style={{ flex: 1, textAlign: 'left' }}>
                 <label style={{ fontSize: '13px', fontWeight: '700', color: '#8e8e93', marginLeft: '4px', marginBottom: '8px', display: 'block' }}>시작 번호 (Day)</label>
