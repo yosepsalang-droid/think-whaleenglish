@@ -1,40 +1,41 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { PHONICS_DB } from './PhonicsData';
 
 interface PhonicsTraceProps {
-  onBack: () => void; // 💡 로비로 안전하게 돌아가는 기능 추가
+  day: number;
+  onBack: () => void; 
   onComplete: () => void;
 }
 
-// 💡 기계음(물결표) 방지: 쉼표(,)로 교체 완료!
-const TARGETS = [
-  { letter: 'Aa', sound: '에이, 애' },
-  { letter: 'Bb', sound: '비, 브' },
-  { letter: 'Cc', sound: '씨, 크' },
-  { letter: 'Dd', sound: '디, 드' }
-];
+export default function PhonicsTrace({ day, onBack, onComplete }: PhonicsTraceProps) {
+  // 💡 그날(Day) 배운 단어의 알파벳 종류만 중복 없이 모아서 가져옵니다!
+  const dayWords = PHONICS_DB.filter((item: any) => item.day === day);
+  const targets = Array.from(new Set(dayWords.map(w => w.letter)));
 
-export default function PhonicsTrace({ onBack, onComplete }: PhonicsTraceProps) {
   const [step, setStep] = useState(0);
   const [isDrawing, setIsDrawing] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
   
+  // 💡 [핵심 패치] 얼마나 선을 길게 그렸는지 추적하는 '꼼수 방지' 변수
+  const [strokeLength, setStrokeLength] = useState(0);
+  const lastPosRef = useRef<{x: number, y: number} | null>(null);
+  
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const currentTarget = TARGETS[step];
+  const currentLetter = targets[step];
 
   const speakTeacher = (text: string) => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'ko-KR'; 
+      utterance.lang = 'en-US'; 
       utterance.rate = 0.85; 
-      utterance.pitch = 1.1; 
       window.speechSynthesis.speak(utterance);
     }
   };
 
   useEffect(() => {
-    if (step < TARGETS.length) {
-      setTimeout(() => speakTeacher(TARGETS[step].sound), 500);
+    if (step < targets.length) {
+      setTimeout(() => speakTeacher(targets[step]), 500);
       clearCanvas();
     }
   }, [step]);
@@ -47,7 +48,7 @@ export default function PhonicsTrace({ onBack, onComplete }: PhonicsTraceProps) 
     if ('touches' in e && e.touches.length > 0) {
       return { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
     } else if ('clientX' in e) {
-      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      return { x: (e as React.MouseEvent).clientX - rect.left, y: (e as React.MouseEvent).clientY - rect.top };
     }
     return null;
   };
@@ -60,6 +61,7 @@ export default function PhonicsTrace({ onBack, onComplete }: PhonicsTraceProps) 
     if (ctx) {
       ctx.beginPath();
       ctx.moveTo(coords.x, coords.y);
+      lastPosRef.current = coords; // 💡 첫 좌표 기억
       setIsDrawing(true);
     }
   };
@@ -68,6 +70,14 @@ export default function PhonicsTrace({ onBack, onComplete }: PhonicsTraceProps) 
     if (!isDrawing) return;
     const coords = getCoordinates(e);
     if (!coords || !canvasRef.current) return;
+
+    // 💡 [핵심 패치] 선을 그릴 때마다 이동한 거리를 더해서 기록합니다.
+    if (lastPosRef.current) {
+      const dx = coords.x - lastPosRef.current.x;
+      const dy = coords.y - lastPosRef.current.y;
+      setStrokeLength(prev => prev + Math.sqrt(dx * dx + dy * dy));
+    }
+    lastPosRef.current = coords;
 
     const ctx = canvasRef.current.getContext('2d');
     if (ctx) {
@@ -80,23 +90,32 @@ export default function PhonicsTrace({ onBack, onComplete }: PhonicsTraceProps) 
     }
   };
 
-  const stopDrawing = () => setIsDrawing(false);
+  const stopDrawing = () => {
+    setIsDrawing(false);
+    lastPosRef.current = null;
+  };
 
   const clearCanvas = () => {
     const canvas = canvasRef.current;
     if (canvas) {
       const ctx = canvas.getContext('2d');
       if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+      setStrokeLength(0); // 💡 지우면 그린 거리도 초기화
     }
   };
 
   const handleNext = () => {
+    // 💡 [핵심 패치] 총 그린 길이가 600 픽셀 이하면 통과 안 됨! (대충 점 하나 찍고 넘어가기 방지)
+    if (strokeLength < 600) {
+      alert("조금 더 꼼꼼히 알파벳을 따라 써보세요! ✏️ (길이가 부족해요)");
+      return;
+    }
+
     setIsFinished(true); 
-    speakTeacher("참 잘했어요!");
     
     setTimeout(() => {
       setIsFinished(false);
-      if (step + 1 < TARGETS.length) {
+      if (step + 1 < targets.length) {
         setStep(prev => prev + 1);
       } else {
         onComplete(); 
@@ -104,19 +123,18 @@ export default function PhonicsTrace({ onBack, onComplete }: PhonicsTraceProps) 
     }, 1500);
   };
 
+  if (!currentLetter) return null;
+
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: '#eff6ff', display: 'flex', flexDirection: 'column', zIndex: 2000, fontFamily: 'Pretendard, sans-serif' }}>
       
-      {/* 💡 안전한 뒤로 가기 버튼 */}
       <div style={{ position: 'absolute', top: '24px', left: '24px', zIndex: 10 }}>
-        <button onClick={onBack} style={{ width: '50px', height: '50px', borderRadius: '50%', backgroundColor: 'white', border: 'none', fontSize: '24px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-          ←
-        </button>
+        <button onClick={onBack} style={{ width: '50px', height: '50px', borderRadius: '50%', backgroundColor: 'white', border: 'none', fontSize: '24px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>←</button>
       </div>
 
       <div style={{ padding: '30px', textAlign: 'center', marginTop: '20px' }}>
         <div style={{ fontSize: '24px', color: '#3b82f6', fontWeight: '900' }}>Step 2. 마법 스케치북 ✏️</div>
-        <div style={{ fontSize: '20px', color: '#475569', marginTop: '10px', fontWeight: 'bold' }}>흐린 글씨를 따라 예쁘게 써보세요!</div>
+        <div style={{ fontSize: '20px', color: '#475569', marginTop: '10px', fontWeight: 'bold' }}>흐린 글씨를 꼼꼼히 채워 써보세요!</div>
       </div>
 
       <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
@@ -124,7 +142,7 @@ export default function PhonicsTrace({ onBack, onComplete }: PhonicsTraceProps) 
 
         <div style={{ position: 'relative', width: '600px', height: '400px', backgroundColor: 'white', borderRadius: '32px', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
           <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '280px', fontWeight: '900', color: '#f1f5f9', userSelect: 'none', fontFamily: '"Comic Sans MS", "Chalkboard SE", sans-serif' }}>
-            {currentTarget.letter}
+            {currentLetter}
           </div>
           <canvas
             ref={canvasRef} width={600} height={400}

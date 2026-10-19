@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-// 💡 [경로 완벽 수정] 같은 폴더(src/elem)에 있는 PhonicsData.ts를 바로 불러옵니다.
 import { PHONICS_DB } from './PhonicsData'; 
 
 interface PhonicsLearnProps {
@@ -9,16 +8,15 @@ interface PhonicsLearnProps {
 }
 
 export default function PhonicsLearn({ day, onBack, onFinish }: PhonicsLearnProps) {
-  // 💡 [에러 해결] item이 어떤 타입인지 Vercel이 헷갈리지 않도록 (item: any)로 명확히 지정!
   const dayWords = PHONICS_DB.filter((item: any) => item.day === day);
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isListening, setIsListening] = useState(false);
   
-  const [feedback, setFeedback] = useState<'none' | 'success' | 'fail' | 'niceTry'>('none');
+  // 💡 [추가] 3번 실패했을 때 보여줄 'giveup' 상태 추가!
+  const [feedback, setFeedback] = useState<'none' | 'success' | 'fail' | 'niceTry' | 'giveup'>('none');
   const [attempts, setAttempts] = useState(0);
   
-  // 💡 [추가] 마이크가 인식한 텍스트를 화면에 띄워주기 위한 상태
   const [lastSpeech, setLastSpeech] = useState<string>(''); 
   
   const recognitionRef = useRef<any>(null);
@@ -26,7 +24,7 @@ export default function PhonicsLearn({ day, onBack, onFinish }: PhonicsLearnProp
 
   useEffect(() => {
     setAttempts(0);
-    setLastSpeech(''); // 단어가 바뀔 때마다 인식된 글자도 초기화
+    setLastSpeech('');
     setTimeout(() => speakTeacher(), 500);
   }, [currentIndex]);
 
@@ -43,20 +41,17 @@ export default function PhonicsLearn({ day, onBack, onFinish }: PhonicsLearnProp
       
       recognition.onresult = (event: any) => {
         const transcript = event.results[0][0].transcript.toLowerCase();
-        
-        // 💡 화면에 인식된 말 띄워주기
         setLastSpeech(transcript); 
         
-        // 💡 [핵심 수정] 첫 글자만 맞으면 통과시켜주던 꼼수 삭제! 
-        // 반드시 타겟 단어(word)가 포함되어 있어야만 통과됩니다.
         if (transcript.includes(currentItem.word.toLowerCase())) {
           handleSuccess();
         } else {
           const newAttempts = attempts + 1;
           setAttempts(newAttempts);
           
+          // 💡 [핵심 패치] 3번 틀리면 좌절하지 않게 'giveup' 화면 띄우기
           if (newAttempts >= 3) {
-            handleNiceTry();
+            setFeedback('giveup');
           } else {
             setFeedback('fail');
             setTimeout(() => setFeedback('none'), 1500);
@@ -90,12 +85,17 @@ export default function PhonicsLearn({ day, onBack, onFinish }: PhonicsLearnProp
 
   const handleSuccess = () => {
     setFeedback('success');
-    moveToNext();
+    moveToNext(2000);
   };
 
-  const handleNiceTry = () => {
-    setFeedback('niceTry');
-    moveToNext(2500); 
+  const handleSkip = () => {
+    moveToNext(0); // 바로 넘어가기
+  };
+
+  const handleRetry = () => {
+    setAttempts(0);
+    setFeedback('none');
+    speakTeacher();
   };
 
   const moveToNext = (delay = 2000) => {
@@ -114,15 +114,7 @@ export default function PhonicsLearn({ day, onBack, onFinish }: PhonicsLearnProp
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: '#eff6ff', display: 'flex', flexDirection: 'column', zIndex: 2000, fontFamily: 'Pretendard, sans-serif' }}>
       
-      <style>
-        {`
-          @keyframes ripple {
-            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
-            70% { box-shadow: 0 0 0 40px rgba(239, 68, 68, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-          }
-        `}
-      </style>
+      <style>{`@keyframes ripple { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); } 70% { box-shadow: 0 0 0 40px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }`}</style>
 
       <div style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: '20px' }}>
         <button onClick={onBack} style={{ width: '50px', height: '50px', borderRadius: '50%', backgroundColor: 'white', border: 'none', fontSize: '24px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>←</button>
@@ -136,10 +128,15 @@ export default function PhonicsLearn({ day, onBack, onFinish }: PhonicsLearnProp
         {feedback === 'success' && <div style={{ position: 'absolute', top: '5%', fontSize: '60px', color: '#10b981', fontWeight: '900', textShadow: '0 4px 10px rgba(0,0,0,0.2)', zIndex: 10 }}>🎉 Excellent! 🎉</div>}
         {feedback === 'fail' && <div style={{ position: 'absolute', top: '5%', fontSize: '32px', color: '#ef4444', fontWeight: '900', zIndex: 10 }}>🤔 다시 한번 크게 말해볼까요? (남은 기회: {3 - attempts}번)</div>}
         
-        {feedback === 'niceTry' && (
-          <div style={{ position: 'absolute', top: '5%', display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 10 }}>
-            <div style={{ fontSize: '50px', color: '#f59e0b', fontWeight: '900', textShadow: '0 4px 10px rgba(0,0,0,0.2)' }}>👍 Good Try!</div>
-            <div style={{ fontSize: '24px', color: '#d97706', fontWeight: 'bold', marginTop: '10px' }}>일치율 75%! 점점 좋아지고 있어요. 다음으로 고고! 🚀</div>
+        {/* 💡 [핵심 패치] 3번 틀렸을 때 보여줄 친절한 구제 창 */}
+        {feedback === 'giveup' && (
+          <div style={{ position: 'absolute', top: '2%', display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 10, backgroundColor: 'white', padding: '30px', borderRadius: '30px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+            <div style={{ fontSize: '50px', color: '#f59e0b', fontWeight: '900' }}>😅 조금 어려웠나요?</div>
+            <div style={{ fontSize: '20px', color: '#64748b', fontWeight: 'bold', marginTop: '10px', marginBottom: '20px' }}>선생님과 함께 나중에 다시 연습해봐도 괜찮아요!</div>
+            <div style={{ display: 'flex', gap: '20px' }}>
+              <button onClick={handleRetry} style={{ padding: '16px 30px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '20px', fontSize: '20px', fontWeight: 'bold', cursor: 'pointer' }}>🔄 한 번 더 도전!</button>
+              <button onClick={handleSkip} style={{ padding: '16px 30px', backgroundColor: '#e2e8f0', color: '#475569', border: 'none', borderRadius: '20px', fontSize: '20px', fontWeight: 'bold', cursor: 'pointer' }}>⏭️ 일단 넘어가기</button>
+            </div>
           </div>
         )}
 
@@ -150,10 +147,10 @@ export default function PhonicsLearn({ day, onBack, onFinish }: PhonicsLearnProp
         </div>
         
         <div style={{ display: 'flex', gap: '30px', marginTop: '60px' }}>
-          <button onClick={speakTeacher} style={{ width: '100px', height: '100px', borderRadius: '50%', backgroundColor: '#f8fafc', border: '4px solid #cbd5e1', fontSize: '40px', cursor: 'pointer', boxShadow: '0 8px 16px rgba(0,0,0,0.1)' }}>🔊</button>
+          <button onClick={speakTeacher} disabled={feedback === 'giveup'} style={{ width: '100px', height: '100px', borderRadius: '50%', backgroundColor: '#f8fafc', border: '4px solid #cbd5e1', fontSize: '40px', cursor: 'pointer', boxShadow: '0 8px 16px rgba(0,0,0,0.1)' }}>🔊</button>
           <button 
             onClick={toggleListening} 
-            disabled={feedback === 'success' || feedback === 'niceTry'}
+            disabled={feedback === 'success' || feedback === 'niceTry' || feedback === 'giveup'}
             style={{ 
               width: '100px', height: '100px', borderRadius: '50%', border: 'none', fontSize: '40px', cursor: 'pointer',
               backgroundColor: isListening ? '#ef4444' : '#3b82f6', color: 'white',
@@ -166,7 +163,6 @@ export default function PhonicsLearn({ day, onBack, onFinish }: PhonicsLearnProp
           </button>
         </div>
         
-        {/* 💡 [추가] 인식된 소리를 화면에 출력해주는 자막 영역 (디버깅/테스트용) */}
         <div style={{ marginTop: '24px', fontSize: '20px', fontWeight: 'bold', color: isListening ? '#ef4444' : '#64748b' }}>
           {isListening ? "듣고 있어요! 크게 말해주세요... 〰️" : "마이크를 누르고 말해보세요."}
         </div>

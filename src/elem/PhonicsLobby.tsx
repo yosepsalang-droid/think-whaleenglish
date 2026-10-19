@@ -9,7 +9,7 @@ import PhonicsBoss from './PhonicsBoss';
 interface PhonicsLobbyProps {
   onBack: () => void;
   studentName?: string;
-  stars?: number; // 💡 App.tsx에서 넘겨주는 stars를 허용하도록 추가!
+  stars?: number; 
 }
 
 export default function PhonicsLobby({ onBack, studentName = "김철수", stars: initialStars = 12 }: PhonicsLobbyProps) {
@@ -28,14 +28,16 @@ export default function PhonicsLobby({ onBack, studentName = "김철수", stars:
     { id: 4, name: "이중소리 성", title: "Digraphs", x: "85%", y: "40%", emoji: "🏰" },
   ];
 
+  // 💡 Day 8까지 교재와 100% 매칭
   const level1Days = [
-    { id: 1, title: "Day 1", target: "Aa, Bb, Cc, Dd" },
-    { id: 2, title: "Day 2", target: "Ee, Ff, Gg, Hh" },
-    { id: 3, title: "Day 3", target: "Ii, Jj, Kk, Ll" },
-    { id: 4, title: "Day 4", target: "Mm, Nn, Oo, Pp" },
-    { id: 5, title: "Day 5", target: "Qq, Rr, Ss, Tt" },
-    { id: 6, title: "Day 6", target: "Uu, Vv, Ww, Xx" },
-    { id: 7, title: "Day 7", target: "Yy, Zz" },
+    { id: 1, title: "Day 1 (L1)", target: "Aa, Bb, Cc" },
+    { id: 2, title: "Day 2 (L2)", target: "Dd, Ee, Ff" },
+    { id: 3, title: "Day 3 (L4)", target: "Gg, Hh, Ii" },
+    { id: 4, title: "Day 4 (L5)", target: "Jj, Kk, Ll" },
+    { id: 5, title: "Day 5 (L9)", target: "Mm, Nn, Oo" },
+    { id: 6, title: "Day 6 (L10)", target: "Pp, Qq, Rr" },
+    { id: 7, title: "Day 7 (L12)", target: "Ss, Tt, Uu, Vv" },
+    { id: 8, title: "Day 8 (L13)", target: "Ww, Xx, Yy, Zz" },
   ];
 
   const levelSteps = [
@@ -72,7 +74,6 @@ export default function PhonicsLobby({ onBack, studentName = "김철수", stars:
     }
   };
 
-  // 💡 컴포넌트 타입 에러 방지 (빌드 통과용)
   const TraceComp = PhonicsTrace as any;
   const BubbleComp = PhonicsBubblePop as any;
   const WordDropComp = PhonicsWordDrop as any;
