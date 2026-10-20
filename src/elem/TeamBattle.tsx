@@ -2,9 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 
 interface TeamBattleProps {
-  onBack: () => void;
-  tableName?: 'words_mid' | 'words_high'; // 추후 문장 DB 테이블로 확장 가능
-}
+    onBack: () => void;
+    tableName?: 'words_mid' | 'words_high' | 'words'; // 💡 'words' 추가!
+  }
 
 interface Student {
   student_id: string;
