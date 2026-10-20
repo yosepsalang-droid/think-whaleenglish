@@ -95,4 +95,122 @@ export default function Lms({ onBack }: LmsProps) {
 
             <div style={{ marginBottom: '15px' }}>
               <label style={styles.label}>학년</label>
-              <select value={newStudent.grade} onChange={(e) => setNewStudent({...newStudent, grade: e.target.value})}
+              <select value={newStudent.grade} onChange={(e) => setNewStudent({...newStudent, grade: e.target.value})} style={styles.input}>
+                <option value="초1">초1</option>
+                <option value="초2">초2</option>
+                <option value="초3">초3</option>
+                <option value="초4">초4</option>
+                <option value="초5">초5</option>
+                <option value="초6">초6</option>
+                <option value="중1">중1</option>
+                <option value="중2">중2</option>
+                <option value="중3">중3</option>
+                <option value="고1">고1</option>
+                <option value="고2">고2</option>
+                <option value="고3">고3</option>
+              </select>
+            </div>
+
+            <div style={{ marginBottom: '15px' }}>
+              <label style={styles.label}>시작 교재명</label>
+              <input type="text" value={newStudent.currentBook} onChange={(e) => setNewStudent({...newStudent, currentBook: e.target.value})} placeholder="예: 240_1 또는 워드타파" style={styles.input} />
+            </div>
+
+            <div style={{ marginBottom: '25px' }}>
+              <label style={styles.label}>시작 진도</label>
+              <input type="text" value={newStudent.progress} onChange={(e) => setNewStudent({...newStudent, progress: e.target.value})} placeholder="예: Unit1 Day1 또는 1" style={styles.input} />
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={() => setShowAddStudent(false)} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: '1px solid #cbd5e1', backgroundColor: 'white', color: '#475569', fontWeight: 'bold', cursor: 'pointer' }}>취소</button>
+              <button onClick={handleAddStudent} disabled={isSubmitting} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: 'none', backgroundColor: '#2563eb', color: 'white', fontWeight: 'bold', cursor: isSubmitting ? 'not-allowed' : 'pointer' }}>
+                {isSubmitting ? '등록 중...' : '등록 완료'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{ background: 'white', padding: '40px', borderRadius: '24px', width: '800px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)', position: 'relative' }}>
+        
+        {/* 뒤로가기 버튼 */}
+        <button onClick={onBack} style={{ position: 'absolute', top: '24px', left: '24px', background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#333' }}>
+          ◀ 메인으로
+        </button>
+
+        <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#1e293b', margin: '20px 0 30px 0', textAlign: 'center' }}>
+          👑 ACADEMY CONTROL TOWER (통합 관제탑)
+        </h2>
+
+        {/* 💡 [추가] 교실 대난투 팀 배틀 실행 버튼 */}
+        <button 
+          onClick={() => setShowTeamBattle(true)}
+          style={{ 
+            width: '100%', padding: '20px', backgroundColor: '#f59e0b', color: 'white', 
+            border: 'none', borderRadius: '16px', cursor: 'pointer', fontWeight: '900', 
+            fontSize: '24px', marginBottom: '20px', boxShadow: '0 6px 12px rgba(245,158,11,0.3)' 
+          }}
+          onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.98)'}
+          onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+        >
+          📺 교실 대난투 팀 배틀 (TV 모드 실행)
+        </button>
+
+        {/* 상단 컨트롤 버튼 그룹 (AI 연구소 + 신규학생등록) */}
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+          <button
+            onClick={() => setShowAiStudio(true)}
+            style={{ flex: 1, padding: '14px 16px', border: 'none', borderRadius: '12px', backgroundColor: '#1e293b', color: 'white', fontSize: '15px', fontWeight: 800, cursor: 'pointer' }}
+          >
+            🤖 AI 문제 연구소
+          </button>
+          
+          <button
+            onClick={() => setShowAddStudent(true)}
+            style={{ flex: 1, padding: '14px 16px', border: 'none', borderRadius: '12px', backgroundColor: '#2563eb', color: 'white', fontSize: '15px', fontWeight: 800, cursor: 'pointer' }}
+          >
+            ➕ 신규 학생 등록
+          </button>
+        </div>
+
+        {/* 탭 네비게이션 바 */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '30px', backgroundColor: '#f1f5f9', padding: '6px', borderRadius: '14px' }}>
+          <button 
+            onClick={() => setActiveTab('elementary')}
+            style={{ flex: 1, padding: '12px', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: '700', cursor: 'pointer', backgroundColor: activeTab === 'elementary' ? 'white' : 'transparent', color: activeTab === 'elementary' ? '#33b864' : '#64748b', boxShadow: activeTab === 'elementary' ? '0 2px 8px rgba(0,0,0,0.05)' : 'none', transition: 'all 0.2s' }}
+          >
+            🧸 초등부 관리
+          </button>
+          
+          <button 
+            onClick={() => setActiveTab('middle')}
+            style={{ flex: 1, padding: '12px', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: '700', cursor: 'pointer', backgroundColor: activeTab === 'middle' ? 'white' : 'transparent', color: activeTab === 'middle' ? '#4f46e5' : '#64748b', boxShadow: activeTab === 'middle' ? '0 2px 8px rgba(0,0,0,0.05)' : 'none', transition: 'all 0.2s' }}
+          >
+            ✍️ 중등부 관리
+          </button>
+          
+          <button 
+            onClick={() => setActiveTab('report')}
+            style={{ flex: 1, padding: '12px', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: '700', cursor: 'pointer', backgroundColor: activeTab === 'report' ? 'white' : 'transparent', color: activeTab === 'report' ? '#ea580c' : '#64748b', boxShadow: activeTab === 'report' ? '0 2px 8px rgba(0,0,0,0.05)' : 'none', transition: 'all 0.2s' }}
+          >
+            💌 주말 리포트
+          </button>
+        </div>
+
+        {/* 분리된 개별 서브 파일들을 조건부로 조립합니다. */}
+        <div style={{ minHeight: '300px', padding: '10px' }}>
+          {activeTab === 'elementary' && <ElemManage />}
+          {activeTab === 'middle' && <MidManage />}
+          {activeTab === 'report' && <ReportManage />}
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+// 팝업창 입력칸 스타일
+const styles = {
+  label: { display: 'block', fontSize: '13px', color: '#64748b', fontWeight: 'bold', marginBottom: '6px' },
+  input: { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '14px', boxSizing: 'border-box' as const }
+};
