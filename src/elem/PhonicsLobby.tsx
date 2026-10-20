@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import PhonicsLearn from './PhonicsLearn';
 import PhonicsTrace from './PhonicsTrace';
 import PhonicsBubblePop from './PhonicsBubblePop';
@@ -13,15 +13,32 @@ interface PhonicsLobbyProps {
 }
 
 export default function PhonicsLobby({ onBack, studentName = "김철수", stars: initialStars = 12 }: PhonicsLobbyProps) {
-  const [stars, setStars] = useState(initialStars);
   
-  // 💡 진행 상태 관리 (level 1, day 1, step 1부터 시작)
-  const [currentProgress, setCurrentProgress] = useState({ level: 1, day: 1, step: 1 });
-  const [reviewLimit, setReviewLimit] = useState(5);
+  // 💡 [핵심 패치 1] 앱을 켤 때 이전에 저장된 별 개수가 있는지 확인하고 불러옵니다.
+  const [stars, setStars] = useState(() => {
+    const savedStars = localStorage.getItem(`phonics_stars_${studentName}`);
+    return savedStars ? parseInt(savedStars, 10) : initialStars;
+  });
+  
+  // 💡 [핵심 패치 2] 앱을 켤 때 이전에 저장된 진도(Day, Step)가 있는지 확인하고 불러옵니다.
+  const [currentProgress, setCurrentProgress] = useState(() => {
+    const savedProgress = localStorage.getItem(`phonics_progress_${studentName}`);
+    return savedProgress ? JSON.parse(savedProgress) : { level: 1, day: 1, step: 1 };
+  });
 
+  const [reviewLimit, setReviewLimit] = useState(5);
   const [selectedLevel, setSelectedLevel] = useState<number | null>(null);
   const [selectedDay, setSelectedDay] = useState<number>(1);
   const [activeStep, setActiveStep] = useState<number | null>(null);
+
+  // 💡 [핵심 패치 3] 진도나 별 개수가 바뀔 때마다 브라우저에 영구 저장합니다. (자동 저장)
+  useEffect(() => {
+    localStorage.setItem(`phonics_progress_${studentName}`, JSON.stringify(currentProgress));
+  }, [currentProgress, studentName]);
+
+  useEffect(() => {
+    localStorage.setItem(`phonics_stars_${studentName}`, stars.toString());
+  }, [stars, studentName]);
 
   const stages = [
     { id: 1, name: "알파벳 동굴", title: "Alphabet", x: "15%", y: "60%", emoji: "🦇" },
@@ -50,25 +67,20 @@ export default function PhonicsLobby({ onBack, studentName = "김철수", stars:
     { id: 6, title: "미니 보스전", desc: "총정리 배틀", emoji: "👾", reward: "🌟 1" },
   ];
 
-  // 💡 [핵심 패치] Day 진행도 잠금 해제 및 전체 오픈 로직
   const handleStepComplete = () => {
     setStars(prev => prev + 1);
     
-    // 새로 진도를 나가는 경우 (복습이 아닐 때)
     if (selectedDay === currentProgress.day && activeStep === currentProgress.step) {
-      
-      // 6단계(미니 보스전)를 깬 경우 -> 다음 Day로 넘어가기!
       if (activeStep === 6) {
         if (currentProgress.day < 8) {
           const nextDay = currentProgress.day + 1;
           setCurrentProgress(prev => ({ ...prev, day: nextDay, step: 1 }));
-          setSelectedDay(nextDay); // 메뉴 포커스도 다음 날로 이동시켜 자물쇠 풀린 걸 보여줌
-          setActiveStep(null); // 로비로 나옴
+          setSelectedDay(nextDay);
+          setActiveStep(null); 
           setTimeout(() => {
             alert(`🌟 완벽해요! Day ${currentProgress.day} 미션을 클리어했습니다!\n이제 Day ${nextDay} 탐험이 열렸습니다! 🚀`);
           }, 300);
         } else {
-          // Day 8의 마지막 단계까지 다 깬 경우 -> 모든 Day 완전 오픈! (day를 9로 만들어서 영구 해제)
           setCurrentProgress(prev => ({ ...prev, day: 9, step: 1 }));
           setActiveStep(null);
           setTimeout(() => {
@@ -76,7 +88,6 @@ export default function PhonicsLobby({ onBack, studentName = "김철수", stars:
           }, 300);
         }
       } 
-      // 1~5단계를 깬 경우 -> 바로 다음 단계(Step)로 자동 이동!
       else {
         if (activeStep !== null) {
           setCurrentProgress(prev => ({ ...prev, step: prev.step + 1 }));
@@ -84,7 +95,6 @@ export default function PhonicsLobby({ onBack, studentName = "김철수", stars:
         }
       }
     } 
-    // 이미 깬 곳을 다시 복습하는 경우
     else {
       setReviewLimit(prev => Math.max(0, prev - 1));
       setActiveStep(null);
@@ -166,6 +176,15 @@ export default function PhonicsLobby({ onBack, studentName = "김철수", stars:
         <button style={{ width: '90px', height: '90px', borderRadius: '24px', backgroundColor: '#8b5cf6', border: '4px solid #ddd6fe', fontSize: '40px', cursor: 'pointer', boxShadow: '0 10px 20px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
           🎮<span style={{ fontSize: '12px', fontWeight: 'bold', marginTop: '4px', backgroundColor: '#ffda79', color: '#b33939', padding: '2px 6px', borderRadius: '10px' }}>🌟 -3</span>
         </button>
+        <button onClick={() => {
+          if(window.confirm("개발자 모드: 진도를 초기화하시겠습니까?")) {
+            setCurrentProgress({ level: 1, day: 1, step: 1 });
+            setStars(12);
+            setSelectedLevel(null);
+          }
+        }} style={{ width: '90px', height: '90px', borderRadius: '24px', backgroundColor: '#64748b', border: '4px solid #cbd5e1', fontSize: '40px', cursor: 'pointer', boxShadow: '0 10px 20px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
+          🔄<span style={{ fontSize: '12px', fontWeight: 'bold', marginTop: '4px' }}>초기화</span>
+        </button>
       </div>
 
       <button onClick={() => {
@@ -205,7 +224,6 @@ export default function PhonicsLobby({ onBack, studentName = "김철수", stars:
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', flex: 1 }}>
                 {levelSteps.map((step) => {
                   let status = 'locked'; 
-                  // 💡 currentProgress.day가 9가 되면, selectedDay(1~8)보다 항상 크므로 모든 곳이 completed 처리됨!
                   if (selectedDay < currentProgress.day) status = 'completed'; 
                   else if (selectedDay === currentProgress.day) {
                     if (step.id < currentProgress.step) status = 'completed'; 
