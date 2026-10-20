@@ -14,6 +14,8 @@ interface PhonicsLobbyProps {
 
 export default function PhonicsLobby({ onBack, studentName = "김철수", stars: initialStars = 12 }: PhonicsLobbyProps) {
   const [stars, setStars] = useState(initialStars);
+  
+  // 💡 진행 상태 관리 (level 1, day 1, step 1부터 시작)
   const [currentProgress, setCurrentProgress] = useState({ level: 1, day: 1, step: 1 });
   const [reviewLimit, setReviewLimit] = useState(5);
 
@@ -28,7 +30,6 @@ export default function PhonicsLobby({ onBack, studentName = "김철수", stars:
     { id: 4, name: "이중소리 성", title: "Digraphs", x: "85%", y: "40%", emoji: "🏰" },
   ];
 
-  // 💡 Day 8까지 교재와 100% 매칭
   const level1Days = [
     { id: 1, title: "Day 1 (L1)", target: "Aa, Bb, Cc" },
     { id: 2, title: "Day 2 (L2)", target: "Dd, Ee, Ff" },
@@ -49,16 +50,45 @@ export default function PhonicsLobby({ onBack, studentName = "김철수", stars:
     { id: 6, title: "미니 보스전", desc: "총정리 배틀", emoji: "👾", reward: "🌟 1" },
   ];
 
+  // 💡 [핵심 패치] Day 진행도 잠금 해제 및 전체 오픈 로직
   const handleStepComplete = () => {
-    alert("🌟 미션 완료! 별 1개를 획득했습니다!");
     setStars(prev => prev + 1);
     
-    if (activeStep === currentProgress.step) {
-      setCurrentProgress(prev => ({ ...prev, step: prev.step + 1 }));
-    } else {
+    // 새로 진도를 나가는 경우 (복습이 아닐 때)
+    if (selectedDay === currentProgress.day && activeStep === currentProgress.step) {
+      
+      // 6단계(미니 보스전)를 깬 경우 -> 다음 Day로 넘어가기!
+      if (activeStep === 6) {
+        if (currentProgress.day < 8) {
+          const nextDay = currentProgress.day + 1;
+          setCurrentProgress(prev => ({ ...prev, day: nextDay, step: 1 }));
+          setSelectedDay(nextDay); // 메뉴 포커스도 다음 날로 이동시켜 자물쇠 풀린 걸 보여줌
+          setActiveStep(null); // 로비로 나옴
+          setTimeout(() => {
+            alert(`🌟 완벽해요! Day ${currentProgress.day} 미션을 클리어했습니다!\n이제 Day ${nextDay} 탐험이 열렸습니다! 🚀`);
+          }, 300);
+        } else {
+          // Day 8의 마지막 단계까지 다 깬 경우 -> 모든 Day 완전 오픈! (day를 9로 만들어서 영구 해제)
+          setCurrentProgress(prev => ({ ...prev, day: 9, step: 1 }));
+          setActiveStep(null);
+          setTimeout(() => {
+            alert(`🎉 대단해요! 모든 파닉스 탐험(Day 1 ~ Day 8)을 마스터했습니다! 🏆\n이제 모든 단계를 언제든 자유롭게 복습할 수 있습니다.`);
+          }, 300);
+        }
+      } 
+      // 1~5단계를 깬 경우 -> 바로 다음 단계(Step)로 자동 이동!
+      else {
+        if (activeStep !== null) {
+          setCurrentProgress(prev => ({ ...prev, step: prev.step + 1 }));
+          setActiveStep(activeStep + 1);
+        }
+      }
+    } 
+    // 이미 깬 곳을 다시 복습하는 경우
+    else {
       setReviewLimit(prev => Math.max(0, prev - 1));
+      setActiveStep(null);
     }
-    setActiveStep(null);
   };
 
   const handleStepClick = (dayId: number, stepId: number, status: string) => {
@@ -115,7 +145,7 @@ export default function PhonicsLobby({ onBack, studentName = "김철수", stars:
         return (
           <div key={stage.id} style={{ position: 'absolute', left: stage.x, top: stage.y, transform: 'translate(-50%, -50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: isCurrentLevel ? 5 : 2, animation: isCurrentLevel ? 'float 3s ease-in-out infinite' : 'none' }}>
             <div 
-              onClick={() => { if(isUnlocked) { setSelectedLevel(stage.id); setSelectedDay(currentProgress.day); } }}
+              onClick={() => { if(isUnlocked) { setSelectedLevel(stage.id); setSelectedDay(currentProgress.day > 8 ? 8 : currentProgress.day); } }}
               style={{ width: '140px', height: '140px', backgroundColor: isUnlocked ? '#a8e6cf' : '#b2bec3', borderRadius: '50%', border: `8px solid ${isUnlocked ? '#10ac84' : '#636e72'}`, display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '60px', boxShadow: '0 15px 25px rgba(0,0,0,0.2)', cursor: isUnlocked ? 'pointer' : 'not-allowed' }}
             >
               {isUnlocked ? stage.emoji : '🔒'}
@@ -138,7 +168,11 @@ export default function PhonicsLobby({ onBack, studentName = "김철수", stars:
         </button>
       </div>
 
-      <button onClick={() => alert("현재 열려있는 진도로 바로 이동합니다!")} style={{ position: 'absolute', bottom: '40px', left: '50%', transform: 'translateX(-50%)', backgroundColor: '#ffeb3b', color: '#b33939', border: 'none', borderRadius: '50px', padding: '24px 64px', fontSize: '28px', fontWeight: '900', cursor: 'pointer', zIndex: 20, boxShadow: '0 10px 20px rgba(0,0,0,0.2)', borderBottom: '6px solid #f39c12' }}>
+      <button onClick={() => {
+        setSelectedLevel(1);
+        setSelectedDay(currentProgress.day > 8 ? 8 : currentProgress.day);
+        setActiveStep(currentProgress.day > 8 ? null : currentProgress.step);
+      }} style={{ position: 'absolute', bottom: '40px', left: '50%', transform: 'translateX(-50%)', backgroundColor: '#ffeb3b', color: '#b33939', border: 'none', borderRadius: '50px', padding: '24px 64px', fontSize: '28px', fontWeight: '900', cursor: 'pointer', zIndex: 20, boxShadow: '0 10px 20px rgba(0,0,0,0.2)', borderBottom: '6px solid #f39c12' }}>
         🚀 오늘의 탐험 시작하기!
       </button>
 
@@ -171,11 +205,13 @@ export default function PhonicsLobby({ onBack, studentName = "김철수", stars:
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', flex: 1 }}>
                 {levelSteps.map((step) => {
                   let status = 'locked'; 
+                  // 💡 currentProgress.day가 9가 되면, selectedDay(1~8)보다 항상 크므로 모든 곳이 completed 처리됨!
                   if (selectedDay < currentProgress.day) status = 'completed'; 
                   else if (selectedDay === currentProgress.day) {
                     if (step.id < currentProgress.step) status = 'completed'; 
                     else if (step.id === currentProgress.step) status = 'current'; 
                   }
+                  
                   return (
                     <div key={step.id} onClick={() => status !== 'locked' && handleStepClick(selectedDay, step.id, status)} style={{ backgroundColor: status === 'locked' ? '#f1f5f9' : '#ffffff', border: `3px solid ${status === 'locked' ? '#e2e8f0' : (status === 'current' ? '#3b82f6' : '#22c55e')}`, borderRadius: '20px', padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: status === 'locked' ? 'not-allowed' : 'pointer', position: 'relative', opacity: status === 'locked' ? 0.7 : 1 }}>
                       {status === 'completed' && <div style={{ position: 'absolute', top: '-10px', right: '-10px', fontSize: '24px' }}>🟢</div>}

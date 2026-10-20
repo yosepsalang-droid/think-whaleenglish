@@ -13,10 +13,8 @@ export default function PhonicsLearn({ day, onBack, onFinish }: PhonicsLearnProp
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isListening, setIsListening] = useState(false);
   
-  // 💡 [추가] 3번 실패했을 때 보여줄 'giveup' 상태 추가!
-  const [feedback, setFeedback] = useState<'none' | 'success' | 'fail' | 'niceTry' | 'giveup'>('none');
+  const [feedback, setFeedback] = useState<'none' | 'success' | 'fail' | 'giveup'>('none');
   const [attempts, setAttempts] = useState(0);
-  
   const [lastSpeech, setLastSpeech] = useState<string>(''); 
   
   const recognitionRef = useRef<any>(null);
@@ -28,6 +26,7 @@ export default function PhonicsLearn({ day, onBack, onFinish }: PhonicsLearnProp
     setTimeout(() => speakTeacher(), 500);
   }, [currentIndex]);
 
+  // 💡 [핵심 패치 2] attempts 의존성을 끊어내어 마이크가 초기화되는 버그를 고쳤습니다.
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
@@ -46,22 +45,28 @@ export default function PhonicsLearn({ day, onBack, onFinish }: PhonicsLearnProp
         if (transcript.includes(currentItem.word.toLowerCase())) {
           handleSuccess();
         } else {
-          const newAttempts = attempts + 1;
-          setAttempts(newAttempts);
-          
-          // 💡 [핵심 패치] 3번 틀리면 좌절하지 않게 'giveup' 화면 띄우기
-          if (newAttempts >= 3) {
-            setFeedback('giveup');
-          } else {
-            setFeedback('fail');
-            setTimeout(() => setFeedback('none'), 1500);
-          }
+          // 실패 횟수를 안전하게 누적시킵니다.
+          setAttempts(prev => {
+            const newAttempts = prev + 1;
+            if (newAttempts >= 3) {
+              setFeedback('giveup'); // 정확히 3번 실패 시 포기 화면 띄우기
+            } else {
+              setFeedback('fail');
+              setTimeout(() => setFeedback(curr => curr === 'fail' ? 'none' : curr), 1500);
+            }
+            return newAttempts;
+          });
         }
       };
+      
       recognition.onerror = () => setIsListening(false);
       recognitionRef.current = recognition;
+      
+      return () => {
+        if (recognitionRef.current) recognitionRef.current.abort();
+      };
     }
-  }, [currentIndex, currentItem, attempts]);
+  }, [currentIndex, currentItem]);
 
   const speakTeacher = () => {
     if ('speechSynthesis' in window) {
@@ -69,11 +74,6 @@ export default function PhonicsLearn({ day, onBack, onFinish }: PhonicsLearnProp
       const utterance = new SpeechSynthesisUtterance(currentItem.word);
       utterance.lang = 'en-US';
       utterance.rate = 0.8;
-      
-      const voices = window.speechSynthesis.getVoices();
-      const bestVoice = voices.find(v => v.lang === 'en-US' && (v.name.includes('Google') || v.name.includes('Natural'))) || voices.find(v => v.lang === 'en-US');
-      if (bestVoice) utterance.voice = bestVoice;
-
       window.speechSynthesis.speak(utterance);
     }
   };
@@ -89,7 +89,7 @@ export default function PhonicsLearn({ day, onBack, onFinish }: PhonicsLearnProp
   };
 
   const handleSkip = () => {
-    moveToNext(0); // 바로 넘어가기
+    moveToNext(0); 
   };
 
   const handleRetry = () => {
@@ -128,7 +128,6 @@ export default function PhonicsLearn({ day, onBack, onFinish }: PhonicsLearnProp
         {feedback === 'success' && <div style={{ position: 'absolute', top: '5%', fontSize: '60px', color: '#10b981', fontWeight: '900', textShadow: '0 4px 10px rgba(0,0,0,0.2)', zIndex: 10 }}>🎉 Excellent! 🎉</div>}
         {feedback === 'fail' && <div style={{ position: 'absolute', top: '5%', fontSize: '32px', color: '#ef4444', fontWeight: '900', zIndex: 10 }}>🤔 다시 한번 크게 말해볼까요? (남은 기회: {3 - attempts}번)</div>}
         
-        {/* 💡 [핵심 패치] 3번 틀렸을 때 보여줄 친절한 구제 창 */}
         {feedback === 'giveup' && (
           <div style={{ position: 'absolute', top: '2%', display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 10, backgroundColor: 'white', padding: '30px', borderRadius: '30px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
             <div style={{ fontSize: '50px', color: '#f59e0b', fontWeight: '900' }}>😅 조금 어려웠나요?</div>
@@ -140,7 +139,7 @@ export default function PhonicsLearn({ day, onBack, onFinish }: PhonicsLearnProp
           </div>
         )}
 
-        <div style={{ backgroundColor: 'white', padding: '60px', borderRadius: '40px', boxShadow: '0 20px 40px rgba(0,0,0,0.08)', textAlign: 'center', transform: (feedback === 'success' || feedback === 'niceTry') ? 'scale(1.1)' : 'scale(1)', transition: 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}>
+        <div style={{ backgroundColor: 'white', padding: '60px', borderRadius: '40px', boxShadow: '0 20px 40px rgba(0,0,0,0.08)', textAlign: 'center', transform: (feedback === 'success') ? 'scale(1.1)' : 'scale(1)', transition: 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}>
           <div style={{ fontSize: '120px', lineHeight: '1', margin: '0' }}>{currentItem.icon}</div>
           <div style={{ fontSize: '140px', fontWeight: '900', color: '#1e3a8a', margin: '20px 0', lineHeight: '1' }}>{currentItem.letter}</div>
           <div style={{ fontSize: '40px', fontWeight: '800', color: '#64748b' }}>{currentItem.word}</div>
@@ -150,7 +149,7 @@ export default function PhonicsLearn({ day, onBack, onFinish }: PhonicsLearnProp
           <button onClick={speakTeacher} disabled={feedback === 'giveup'} style={{ width: '100px', height: '100px', borderRadius: '50%', backgroundColor: '#f8fafc', border: '4px solid #cbd5e1', fontSize: '40px', cursor: 'pointer', boxShadow: '0 8px 16px rgba(0,0,0,0.1)' }}>🔊</button>
           <button 
             onClick={toggleListening} 
-            disabled={feedback === 'success' || feedback === 'niceTry' || feedback === 'giveup'}
+            disabled={feedback === 'success' || feedback === 'giveup'}
             style={{ 
               width: '100px', height: '100px', borderRadius: '50%', border: 'none', fontSize: '40px', cursor: 'pointer',
               backgroundColor: isListening ? '#ef4444' : '#3b82f6', color: 'white',

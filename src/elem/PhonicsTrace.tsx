@@ -8,7 +8,6 @@ interface PhonicsTraceProps {
 }
 
 export default function PhonicsTrace({ day, onBack, onComplete }: PhonicsTraceProps) {
-  // 💡 그날(Day) 배운 단어의 알파벳 종류만 중복 없이 모아서 가져옵니다!
   const dayWords = PHONICS_DB.filter((item: any) => item.day === day);
   const targets = Array.from(new Set(dayWords.map(w => w.letter)));
 
@@ -16,8 +15,9 @@ export default function PhonicsTrace({ day, onBack, onComplete }: PhonicsTracePr
   const [isDrawing, setIsDrawing] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
   
-  // 💡 [핵심 패치] 얼마나 선을 길게 그렸는지 추적하는 '꼼수 방지' 변수
+  // 💡 [핵심 패치 3] 길이뿐만 아니라 상하좌우 '너비'를 체크해서 한군데 뱅글뱅글 꼼수 차단!
   const [strokeLength, setStrokeLength] = useState(0);
+  const [bounds, setBounds] = useState({ minX: 9999, maxX: 0, minY: 9999, maxY: 0 });
   const lastPosRef = useRef<{x: number, y: number} | null>(null);
   
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -61,7 +61,15 @@ export default function PhonicsTrace({ day, onBack, onComplete }: PhonicsTracePr
     if (ctx) {
       ctx.beginPath();
       ctx.moveTo(coords.x, coords.y);
-      lastPosRef.current = coords; // 💡 첫 좌표 기억
+      lastPosRef.current = coords; 
+      
+      setBounds(prev => ({
+        minX: Math.min(prev.minX, coords.x),
+        maxX: Math.max(prev.maxX, coords.x),
+        minY: Math.min(prev.minY, coords.y),
+        maxY: Math.max(prev.maxY, coords.y)
+      }));
+      
       setIsDrawing(true);
     }
   };
@@ -71,13 +79,20 @@ export default function PhonicsTrace({ day, onBack, onComplete }: PhonicsTracePr
     const coords = getCoordinates(e);
     if (!coords || !canvasRef.current) return;
 
-    // 💡 [핵심 패치] 선을 그릴 때마다 이동한 거리를 더해서 기록합니다.
     if (lastPosRef.current) {
       const dx = coords.x - lastPosRef.current.x;
       const dy = coords.y - lastPosRef.current.y;
       setStrokeLength(prev => prev + Math.sqrt(dx * dx + dy * dy));
     }
     lastPosRef.current = coords;
+
+    // 그릴 때마다 상하좌우 최댓값/최솟값 갱신
+    setBounds(prev => ({
+      minX: Math.min(prev.minX, coords.x),
+      maxX: Math.max(prev.maxX, coords.x),
+      minY: Math.min(prev.minY, coords.y),
+      maxY: Math.max(prev.maxY, coords.y)
+    }));
 
     const ctx = canvasRef.current.getContext('2d');
     if (ctx) {
@@ -100,14 +115,18 @@ export default function PhonicsTrace({ day, onBack, onComplete }: PhonicsTracePr
     if (canvas) {
       const ctx = canvas.getContext('2d');
       if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-      setStrokeLength(0); // 💡 지우면 그린 거리도 초기화
+      setStrokeLength(0); 
+      setBounds({ minX: 9999, maxX: 0, minY: 9999, maxY: 0 }); // 지우개로 지우면 면적도 초기화
     }
   };
 
   const handleNext = () => {
-    // 💡 [핵심 패치] 총 그린 길이가 600 픽셀 이하면 통과 안 됨! (대충 점 하나 찍고 넘어가기 방지)
-    if (strokeLength < 600) {
-      alert("조금 더 꼼꼼히 알파벳을 따라 써보세요! ✏️ (길이가 부족해요)");
+    const width = bounds.maxX - bounds.minX;
+    const height = bounds.maxY - bounds.minY;
+
+    // 💡 길이가 800픽셀 이하거나, 좌우/상하 폭이 너무 좁으면(100px 미만) 통과 불가!
+    if (strokeLength < 800 || width < 80 || height < 80) {
+      alert("알파벳을 너무 작게 쓰거나 대충 쓴 것 같아요! ✏️\n빈칸을 가득 채워서 다시 예쁘게 써주세요!");
       return;
     }
 
@@ -134,7 +153,7 @@ export default function PhonicsTrace({ day, onBack, onComplete }: PhonicsTracePr
 
       <div style={{ padding: '30px', textAlign: 'center', marginTop: '20px' }}>
         <div style={{ fontSize: '24px', color: '#3b82f6', fontWeight: '900' }}>Step 2. 마법 스케치북 ✏️</div>
-        <div style={{ fontSize: '20px', color: '#475569', marginTop: '10px', fontWeight: 'bold' }}>흐린 글씨를 꼼꼼히 채워 써보세요!</div>
+        <div style={{ fontSize: '20px', color: '#475569', marginTop: '10px', fontWeight: 'bold' }}>흐린 글씨를 넓고 꼼꼼하게 채워 써보세요!</div>
       </div>
 
       <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
