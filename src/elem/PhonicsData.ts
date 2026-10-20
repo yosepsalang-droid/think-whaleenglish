@@ -2,7 +2,7 @@ export interface PhonicsWord {
   id: number; day: number; letter: string; word: string; icon: string; sound: string;
 }
 
-// 💡 올려주신 학원 교재 이미지를 바탕으로 Lesson을 Day1~Day8로 완벽하게 맵핑했습니다.
+// 💡 교재 기반 단어 리스트 (yarn -> yellow 변경 완료)
 export const PHONICS_DB: PhonicsWord[] = [
   // Day 1 (Lesson 01 Aa~Cc)
   { id: 1, day: 1, letter: 'Aa', word: 'ant', icon: '🐜', sound: 'ant' },
@@ -92,7 +92,7 @@ export const PHONICS_DB: PhonicsWord[] = [
   { id: 71, day: 8, letter: 'Xx', word: 'box', icon: '📦', sound: 'box' },
   { id: 72, day: 8, letter: 'Xx', word: 'six', icon: '6️⃣', sound: 'six' },
   { id: 73, day: 8, letter: 'Yy', word: 'yo-yo', icon: '🪀', sound: 'yo-yo' },
-  { id: 74, day: 8, letter: 'Yy', word: 'yarn', icon: '🧶', sound: 'yarn' },
+  { id: 74, day: 8, letter: 'Yy', word: 'yellow', icon: '🟡', sound: 'yellow' }, // 💡 yarn에서 yellow로 완벽 적용
   { id: 75, day: 8, letter: 'Yy', word: 'yogurt', icon: '🍦', sound: 'yogurt' },
   { id: 76, day: 8, letter: 'Zz', word: 'zebra', icon: '🦓', sound: 'zebra' },
   { id: 77, day: 8, letter: 'Zz', word: 'zero', icon: '0️⃣', sound: 'zero' },
