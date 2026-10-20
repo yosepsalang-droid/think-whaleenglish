@@ -12,9 +12,9 @@ import WordMaster from './elem/WordMaster';
 import Ranking from './elem/Ranking'; 
 import GameWordDrop from './elem/GameWordDrop'; 
 import CardGame from './elem/CardGame'; 
-import TypingGame from './elem/TypingGame'; // 💡 [새로 추가된 파일 불러오기]
-// 💡 [여기 추가!] 팀 배틀 컴포넌트 불러오기
-import TeamBattle from './elem/TeamBattle';
+import TypingGame from './elem/TypingGame'; 
+import TeamBattle from './elem/TeamBattle'; 
+import StudentBattle from './elem/StudentBattle'; // 💡 [추가] 학생용 실시간 패드
 
 // 📘 중·고등부 학습 컴포넌트
 import MidHome from './mid/MidHome';
@@ -199,22 +199,31 @@ export default function App() {
             />
           )}
 
-          {/* 💡 [새로 추가된 부분] 3단 진화 타이핑 게임 연결! (학생 교재도 완벽하게 넘겨줍니다) */}
           {currentMenu === 'typingGame' && (
             <TypingGame 
               onBack={() => setCurrentMenu('home')} 
               studentId={loggedInStudent.id} 
               studentName={loggedInStudent.name} 
-              currentBook={loggedInStudent.currentBook} // 현재 교재 연동 완료!
+              currentBook={loggedInStudent.currentBook}
               tableName="words" 
               onGameComplete={handleGameComplete} 
             />
           )}
-          {/* 💡 [여기 추가!] 팀 배틀 연결하기 */}
+
+          {/* 💡 [기존 연결] 관제탑용 팀 배틀 호스트 */}
           {currentMenu === 'teamBattle' && (
             <TeamBattle 
               onBack={() => setCurrentMenu('home')} 
-              tableName="words" // 초등부 단어장 테이블 이름에 맞게 수정 가능
+              tableName="words" 
+            />
+          )}
+
+          {/* 💡 [새로 추가] 학생용 스마트폰 리모컨 */}
+          {currentMenu === 'studentBattle' && (
+            <StudentBattle 
+              studentId={loggedInStudent.id} 
+              studentName={loggedInStudent.name} 
+              onBack={() => setCurrentMenu('home')} 
             />
           )}
 
@@ -229,7 +238,6 @@ export default function App() {
     }
   }
 
-  // ... (이하 SchoolSelect 및 TestLogin 부분은 기존과 동일)
   if (showSchoolSelect) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f9f9f9', fontFamily: 'Pretendard' }}>
