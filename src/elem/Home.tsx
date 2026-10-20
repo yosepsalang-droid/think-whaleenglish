@@ -155,6 +155,29 @@ export default function Home({ student, onNavigate, onLogout, onUpdateStudent, o
       >
         🃏 서바이벌 카드 짝맞추기 게임
       </button>
+      {/* 💡 [여기 추가!] TV 모드 팀 배틀 입장 버튼 */}
+      <button 
+        onClick={() => onNavigate('teamBattle')} 
+        style={{ 
+          width: '100%', 
+          padding: '18px', 
+          background: 'linear-gradient(135deg, #f59e0b, #d97706)', 
+          color: 'white', 
+          border: 'none', 
+          borderRadius: '16px', 
+          fontSize: '18px', 
+          fontWeight: '800', 
+          cursor: 'pointer', 
+          boxShadow: '0 6px 16px rgba(245,158,11,0.2)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: '8px',
+          marginTop: '15px'
+        }}
+      >
+        📺 교실 대난투 팀 배틀 (TV 모드)
+      </button>
 
       {/* 💡 통합 랭킹전 버튼 (기존에 onNavigate('ranking') 용 버튼이 없다면 아래 코드가 유용합니다. 원치 않으시면 삭제하셔도 됩니다.) */}
       <button 

@@ -13,6 +13,8 @@ import Ranking from './elem/Ranking';
 import GameWordDrop from './elem/GameWordDrop'; 
 import CardGame from './elem/CardGame'; 
 import TypingGame from './elem/TypingGame'; // 💡 [새로 추가된 파일 불러오기]
+// 💡 [여기 추가!] 팀 배틀 컴포넌트 불러오기
+import TeamBattle from './elem/TeamBattle';
 
 // 📘 중·고등부 학습 컴포넌트
 import MidHome from './mid/MidHome';
@@ -206,6 +208,13 @@ export default function App() {
               currentBook={loggedInStudent.currentBook} // 현재 교재 연동 완료!
               tableName="words" 
               onGameComplete={handleGameComplete} 
+            />
+          )}
+          {/* 💡 [여기 추가!] 팀 배틀 연결하기 */}
+          {currentMenu === 'teamBattle' && (
+            <TeamBattle 
+              onBack={() => setCurrentMenu('home')} 
+              tableName="words" // 초등부 단어장 테이블 이름에 맞게 수정 가능
             />
           )}
 
