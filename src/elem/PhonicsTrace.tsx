@@ -15,7 +15,6 @@ export default function PhonicsTrace({ day, onBack, onComplete }: PhonicsTracePr
   const [isDrawing, setIsDrawing] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
   
-  // 💡 [핵심 패치 3] 길이뿐만 아니라 상하좌우 '너비'를 체크해서 한군데 뱅글뱅글 꼼수 차단!
   const [strokeLength, setStrokeLength] = useState(0);
   const [bounds, setBounds] = useState({ minX: 9999, maxX: 0, minY: 9999, maxY: 0 });
   const lastPosRef = useRef<{x: number, y: number} | null>(null);
@@ -86,7 +85,6 @@ export default function PhonicsTrace({ day, onBack, onComplete }: PhonicsTracePr
     }
     lastPosRef.current = coords;
 
-    // 그릴 때마다 상하좌우 최댓값/최솟값 갱신
     setBounds(prev => ({
       minX: Math.min(prev.minX, coords.x),
       maxX: Math.max(prev.maxX, coords.x),
@@ -111,29 +109,40 @@ export default function PhonicsTrace({ day, onBack, onComplete }: PhonicsTracePr
   };
 
   const clearCanvas = () => {
+    // 💡 화면의 선만 지우는 게 아니라, 메모리에 누적된 거리/면적 기록도 무조건 0으로 폭파!
+    setStrokeLength(0); 
+    setBounds({ minX: 9999, maxX: 0, minY: 9999, maxY: 0 }); 
+
     const canvas = canvasRef.current;
     if (canvas) {
       const ctx = canvas.getContext('2d');
-      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-      setStrokeLength(0); 
-      setBounds({ minX: 9999, maxX: 0, minY: 9999, maxY: 0 }); // 지우개로 지우면 면적도 초기화
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.beginPath(); // 💡 캔버스 내부의 보이지 않는 선 찌꺼기까지 완벽 차단
+      }
     }
   };
 
   const handleNext = () => {
-    const width = bounds.maxX - bounds.minX;
-    const height = bounds.maxY - bounds.minY;
+    const width = bounds.maxX === 0 ? 0 : bounds.maxX - bounds.minX;
+    const height = bounds.maxY === 0 ? 0 : bounds.maxY - bounds.minY;
 
-    // 💡 길이가 800픽셀 이하거나, 좌우/상하 폭이 너무 좁으면(100px 미만) 통과 불가!
-    if (strokeLength < 800 || width < 80 || height < 80) {
+    if (strokeLength < 800 || width < 100 || height < 100) {
       alert("알파벳을 너무 작게 쓰거나 대충 쓴 것 같아요! ✏️\n빈칸을 가득 채워서 다시 예쁘게 써주세요!");
       return;
     }
 
     setIsFinished(true); 
     
+    // 💡 [핵심 버그 수정] 통과 판정이 나는 즉시, 상태값을 0으로 싹 비워버립니다. 
+    // 이렇게 해야 2번째, 3번째 글자로 이전 기록이 넘어가지 않습니다!
+    setStrokeLength(0);
+    setBounds({ minX: 9999, maxX: 0, minY: 9999, maxY: 0 });
+
     setTimeout(() => {
       setIsFinished(false);
+      clearCanvas(); // 혹시나 해서 한 번 더 지우기
+      
       if (step + 1 < targets.length) {
         setStep(prev => prev + 1);
       } else {
