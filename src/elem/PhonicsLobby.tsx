@@ -14,24 +14,25 @@ interface PhonicsLobbyProps {
 
 export default function PhonicsLobby({ onBack, studentName = "김철수", stars: initialStars = 12 }: PhonicsLobbyProps) {
   
-  // 💡 [핵심 패치 1] 앱을 켤 때 이전에 저장된 별 개수가 있는지 확인하고 불러옵니다.
-  const [stars, setStars] = useState(() => {
+  // 💡 [에러 해결 1] <number>를 붙여서 숫자가 들어간다고 깐깐한 버셀에게 알려줍니다.
+  const [stars, setStars] = useState<number>(() => {
     const savedStars = localStorage.getItem(`phonics_stars_${studentName}`);
     return savedStars ? parseInt(savedStars, 10) : initialStars;
   });
   
-  // 💡 [핵심 패치 2] 앱을 켤 때 이전에 저장된 진도(Day, Step)가 있는지 확인하고 불러옵니다.
-  const [currentProgress, setCurrentProgress] = useState(() => {
+  // 💡 [에러 해결 2] <{ level: number; day: number; step: number }> 를 붙여서 값의 모양을 완벽하게 지정합니다.
+  const [currentProgress, setCurrentProgress] = useState<{ level: number; day: number; step: number }>(() => {
     const savedProgress = localStorage.getItem(`phonics_progress_${studentName}`);
     return savedProgress ? JSON.parse(savedProgress) : { level: 1, day: 1, step: 1 };
   });
 
-  const [reviewLimit, setReviewLimit] = useState(5);
+  // 💡 여기도 <number> 명시
+  const [reviewLimit, setReviewLimit] = useState<number>(5);
+  
   const [selectedLevel, setSelectedLevel] = useState<number | null>(null);
   const [selectedDay, setSelectedDay] = useState<number>(1);
   const [activeStep, setActiveStep] = useState<number | null>(null);
 
-  // 💡 [핵심 패치 3] 진도나 별 개수가 바뀔 때마다 브라우저에 영구 저장합니다. (자동 저장)
   useEffect(() => {
     localStorage.setItem(`phonics_progress_${studentName}`, JSON.stringify(currentProgress));
   }, [currentProgress, studentName]);
@@ -68,20 +69,21 @@ export default function PhonicsLobby({ onBack, studentName = "김철수", stars:
   ];
 
   const handleStepComplete = () => {
-    setStars(prev => prev + 1);
+    // 💡 [에러 해결 3] prev 값의 타입을 명확히 알려줌
+    setStars((prev: number) => prev + 1);
     
     if (selectedDay === currentProgress.day && activeStep === currentProgress.step) {
       if (activeStep === 6) {
         if (currentProgress.day < 8) {
           const nextDay = currentProgress.day + 1;
-          setCurrentProgress(prev => ({ ...prev, day: nextDay, step: 1 }));
+          setCurrentProgress((prev: any) => ({ ...prev, day: nextDay, step: 1 }));
           setSelectedDay(nextDay);
           setActiveStep(null); 
           setTimeout(() => {
             alert(`🌟 완벽해요! Day ${currentProgress.day} 미션을 클리어했습니다!\n이제 Day ${nextDay} 탐험이 열렸습니다! 🚀`);
           }, 300);
         } else {
-          setCurrentProgress(prev => ({ ...prev, day: 9, step: 1 }));
+          setCurrentProgress((prev: any) => ({ ...prev, day: 9, step: 1 }));
           setActiveStep(null);
           setTimeout(() => {
             alert(`🎉 대단해요! 모든 파닉스 탐험(Day 1 ~ Day 8)을 마스터했습니다! 🏆\n이제 모든 단계를 언제든 자유롭게 복습할 수 있습니다.`);
@@ -90,13 +92,13 @@ export default function PhonicsLobby({ onBack, studentName = "김철수", stars:
       } 
       else {
         if (activeStep !== null) {
-          setCurrentProgress(prev => ({ ...prev, step: prev.step + 1 }));
+          setCurrentProgress((prev: any) => ({ ...prev, step: prev.step + 1 }));
           setActiveStep(activeStep + 1);
         }
       }
     } 
     else {
-      setReviewLimit(prev => Math.max(0, prev - 1));
+      setReviewLimit((prev: number) => Math.max(0, prev - 1));
       setActiveStep(null);
     }
   };
