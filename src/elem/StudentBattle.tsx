@@ -51,7 +51,7 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
   }, [studentId]);
 
   const handleJoinRoom = async () => {
-    if (!roomData || roomData.status !== 'waiting') return alert("현재 입장할 수 있는 방이 없습니다.");
+    if (!roomData || roomData.status !== 'waiting') return;
     
     const isAlreadyJoined = roomData.players?.some((p: any) => p.student_id === studentId);
     if (isAlreadyJoined) return;
@@ -62,7 +62,6 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
     await supabase.from('game_rooms').update({ players: updatedPlayers }).eq('id', 'main_room');
   };
 
-  // 💡 기존 영어 게임 정답 제출 로직
   const handleEnglishSubmit = async (answer: string) => {
     if (hasSubmitted || !myTeam || !roomData?.game_data?.currentQuestion) return;
     setHasSubmitted(true);
@@ -84,36 +83,45 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
     });
   };
 
-  // 🎯 넘버 스나이퍼: 1. 내 비밀 숫자 숨기기
-  const handleHideNumber = async () => {
-    const num = parseInt(inputText, 10);
-    const maxNum = roomData.game_data?.maxNumber || 40;
-    
-    if (isNaN(num) || num < 1 || num > maxNum) return alert(`1부터 ${maxNum} 사이의 숫자를 입력하세요!`);
-    if (hasSubmitted) return;
-
-    setHasSubmitted(true);
-    await supabase.channel('sniper_host_listener').send({
-      type: 'broadcast',
-      event: 'hide_number',
-      payload: { studentId, number: num }
-    });
-    setInputText('');
+  // 🎯 스나이퍼 공통: 숫자 그리드 생성기
+  const renderNumberGrid = (maxNum: number, onClick: (num: number) => void, disabledNumbers: number[] = []) => {
+    const numbers = Array.from({ length: maxNum }, (_, i) => i + 1);
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', width: '100%', maxWidth: '400px', maxHeight: '50vh', overflowY: 'auto', padding: '10px' }}>
+        {numbers.map(num => {
+          const isDisabled = disabledNumbers.includes(num);
+          return (
+            <button
+              key={num}
+              disabled={isDisabled}
+              onClick={() => onClick(num)}
+              style={{
+                padding: '15px 0', fontSize: '24px', fontWeight: '900',
+                backgroundColor: isDisabled ? '#334155' : 'white',
+                color: isDisabled ? '#64748b' : '#111',
+                border: 'none', borderRadius: '12px',
+                cursor: isDisabled ? 'not-allowed' : 'pointer',
+                boxShadow: isDisabled ? 'none' : '0 4px 0 rgba(0,0,0,0.2)',
+                opacity: isDisabled ? 0.5 : 1
+              }}
+            >
+              {num}
+            </button>
+          );
+        })}
+      </div>
+    );
   };
 
-  // 🎯 넘버 스나이퍼: 2. 상대방 저격하기
-  const handleSnipeNumber = async () => {
-    const num = parseInt(inputText, 10);
-    const maxNum = roomData.game_data?.maxNumber || 40;
+  const handleSniperAction = async (num: number, actionType: 'hide_number' | 'snipe_number') => {
+    if (hasSubmitted) return;
+    setHasSubmitted(true);
     
-    if (isNaN(num) || num < 1 || num > maxNum) return alert(`1부터 ${maxNum} 사이의 숫자를 입력하세요!`);
-
     await supabase.channel('sniper_host_listener').send({
       type: 'broadcast',
-      event: 'snipe_number',
-      payload: { studentName, number: num }
+      event: actionType,
+      payload: { studentId, studentName, number: num }
     });
-    setInputText('');
   };
 
   if (!roomData || roomData.status === 'closed') {
@@ -128,16 +136,13 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
 
   if (roomData.status === 'waiting') {
     const isJoined = roomData.players?.some((p: any) => p.student_id === studentId);
-    
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#0f172a', color: 'white', fontFamily: 'sans-serif' }}>
         <h1 style={{ fontSize: '32px', fontWeight: '900', color: '#fde047', marginBottom: '10px' }}>교실 대난투 대기실</h1>
         <p style={{ fontSize: '16px', color: '#94a3b8', marginBottom: '40px' }}>선생님이 게임을 시작할 때까지 기다려주세요!</p>
 
         {!isJoined ? (
-          <button onClick={handleJoinRoom} style={{ padding: '20px 60px', fontSize: '24px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '16px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 8px 0 #b91c1c', animation: 'pulse 1.5s infinite' }}>
-            입장하기! 🚀
-          </button>
+          <button onClick={handleJoinRoom} style={{ padding: '20px 60px', fontSize: '24px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '16px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 8px 0 #b91c1c', animation: 'pulse 1.5s infinite' }}>입장하기! 🚀</button>
         ) : (
           <div style={{ padding: '20px', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '16px', textAlign: 'center' }}>
             <div style={{ fontSize: '50px', marginBottom: '10px' }}>✅</div>
@@ -150,15 +155,21 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
   }
 
   if (roomData.status === 'playing') {
-    const gameMode = roomData.game_data?.gameMode || 'typing';
-    
-    // 💡 [넘버 스나이퍼 전용 화면 처리]
+    // 💡 [안전장치] gameMode가 아직 동기화 안 되었다면 빈 화면으로 안전하게 대기
+    const gameMode = roomData.game_data?.gameMode;
+    if (!gameMode) return <div style={{ backgroundColor: '#0f172a', height: '100vh' }} />;
+
     if (gameMode === 'sniper') {
       const phase = roomData.game_data.sniperPhase || 'hiding';
-      const isAlive = roomData.game_data.alivePlayers?.includes(studentId);
+      
+      // 초기에 alivePlayers 배열이 없으면 살아있다고 간주하여 에러 방지
+      const alivePlayers = roomData.game_data.alivePlayers || [];
+      const isAlive = alivePlayers.length === 0 ? true : alivePlayers.includes(studentId);
       const maxNum = roomData.game_data.maxNumber || 40;
+      const isMyTurn = roomData.game_data.currentTurn === studentId;
+      const shotNumbers = roomData.game_data.shotNumbers || [];
 
-      // 💀 탈락자 (회색 관전 모드)
+      // 💀 탈락자 관전 모드
       if (!isAlive) {
         return (
           <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: '#334155', color: '#94a3b8', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif' }}>
@@ -169,7 +180,7 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
         );
       }
 
-      // 생존자 배경 (팀 컬러)
+      // 생존자 모드
       return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: myTeam?.color || '#0f172a', color: 'white', fontFamily: 'sans-serif', transition: 'background-color 0.5s' }}>
           <div style={{ padding: '20px', backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -177,52 +188,44 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
             <div style={{ fontSize: '24px', fontWeight: '900' }}>{myTeam?.name}</div>
           </div>
 
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '10px' }}>
             
-            {/* 1단계: 은폐 모드 */}
             {phase === 'hiding' && (
-              <div style={{ width: '100%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '20px', textAlign: 'center' }}>
-                <div style={{ fontSize: '80px' }}>🕵️‍♂️</div>
+              <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
                 {hasSubmitted ? (
-                  <h2 style={{ fontSize: '28px', fontWeight: '900', animation: 'popUp 0.3s' }}>숨기기 완료!<br/><span style={{ fontSize: '18px', color: '#cbd5e1' }}>다른 친구들을 기다리는 중...</span></h2>
+                  <h2 style={{ fontSize: '28px', fontWeight: '900' }}>숨기기 완료! 대기 중... 🔒</h2>
                 ) : (
                   <>
-                    <div style={{ fontSize: '24px', fontWeight: '900', marginBottom: '10px' }}>나만의 비밀 숫자를 숨기세요!</div>
-                    <div style={{ fontSize: '18px', color: '#fde047', marginBottom: '10px' }}>(범위: 1 ~ {maxNum})</div>
-                    <input 
-                      type="number" 
-                      value={inputText}
-                      onChange={(e) => setInputText(e.target.value)}
-                      placeholder="숫자 입력"
-                      style={{ width: '100%', padding: '20px', fontSize: '32px', borderRadius: '16px', border: 'none', textAlign: 'center', fontWeight: '900', outline: 'none', color: '#111' }}
-                    />
-                    <button onClick={handleHideNumber} style={{ width: '100%', padding: '20px', fontSize: '24px', backgroundColor: '#111', color: 'white', border: 'none', borderRadius: '16px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 8px 0 rgba(0,0,0,0.5)' }}>완료! 숨기기 🔒</button>
+                    <div style={{ fontSize: '22px', fontWeight: '900', marginBottom: '15px' }}>나만의 비밀 숫자를 터치해서 숨기세요!</div>
+                    {renderNumberGrid(maxNum, (num) => handleSniperAction(num, 'hide_number'))}
                   </>
                 )}
               </div>
             )}
 
-            {/* 2단계: 저격 모드 */}
             {phase === 'sniping' && (
-              <div style={{ width: '100%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '20px', textAlign: 'center' }}>
-                <div style={{ fontSize: '80px', animation: 'pulse 1s infinite' }}>🎯</div>
-                <div style={{ fontSize: '24px', fontWeight: '900', marginBottom: '10px' }}>선생님이 내 이름을 부르면<br/>상대의 예상 숫자를 저격하세요!</div>
-                <input 
-                  type="number" 
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  placeholder="예상 숫자 입력"
-                  style={{ width: '100%', padding: '20px', fontSize: '32px', borderRadius: '16px', border: 'none', textAlign: 'center', fontWeight: '900', outline: 'none', color: '#111' }}
-                />
-                <button onClick={handleSnipeNumber} style={{ width: '100%', padding: '20px', fontSize: '24px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '16px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 8px 0 #b91c1c' }}>저격 발사! 💥</button>
+              <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                {isMyTurn ? (
+                  <>
+                    <div style={{ fontSize: '60px', animation: 'pulse 1s infinite' }}>🎯</div>
+                    <div style={{ fontSize: '24px', fontWeight: '900', marginBottom: '15px', color: '#fde047' }}>내 차례입니다! 저격 숫자를 터치하세요!</div>
+                    {/* 이미 쏜 번호는 비활성화하여 넘겨줌 */}
+                    {renderNumberGrid(maxNum, (num) => handleSniperAction(num, 'snipe_number'), shotNumbers)}
+                  </>
+                ) : (
+                  <div style={{ opacity: 0.8 }}>
+                    <div style={{ fontSize: '60px', marginBottom: '20px' }}>👀</div>
+                    <h2 style={{ fontSize: '24px', fontWeight: '900' }}>다른 친구가 저격 중입니다...</h2>
+                    <p>TV 화면을 확인하세요!</p>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* 3단계: 연출 및 대기 */}
             {(phase === 'shooting' || phase === 'game_over') && (
               <div style={{ textAlign: 'center', animation: 'popUp 0.3s ease-out' }}>
-                <div style={{ fontSize: '80px', marginBottom: '20px' }}>👀</div>
-                <h2 style={{ fontSize: '28px', fontWeight: '900' }}>TV 화면을 확인하세요!</h2>
+                <div style={{ fontSize: '80px', marginBottom: '20px' }}>💥</div>
+                <h2 style={{ fontSize: '28px', fontWeight: '900' }}>저격 결과 확인 중!</h2>
               </div>
             )}
           </div>
@@ -231,7 +234,7 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
       );
     }
 
-    // 💡 [기존 영어 게임 (타자/스크램블/OX) 전용 화면]
+    // 💡 기존 영어 게임 (타자/스크램블/OX)
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: myTeam?.color || '#0f172a', color: 'white', fontFamily: 'sans-serif', transition: 'background-color 0.5s' }}>
         <div style={{ padding: '20px', backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -240,7 +243,6 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
         </div>
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          
           {hasSubmitted ? (
             <div style={{ textAlign: 'center', animation: 'popUp 0.3s ease-out' }}>
               <div style={{ fontSize: '80px', marginBottom: '20px' }}>⏳</div>
@@ -255,16 +257,7 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
 
               {(gameMode === 'typing' || gameMode === 'scramble') && (
                 <>
-                  <input 
-                    type="text" 
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    placeholder="여기에 입력하세요"
-                    style={{ width: '100%', padding: '20px', fontSize: '24px', borderRadius: '16px', border: 'none', textAlign: 'center', fontWeight: 'bold', outline: 'none', boxSizing: 'border-box', color: '#111' }}
-                    autoComplete="off"
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                  />
+                  <input type="text" value={inputText} onChange={(e) => setInputText(e.target.value)} placeholder="여기에 입력하세요" style={{ width: '100%', padding: '20px', fontSize: '24px', borderRadius: '16px', border: 'none', textAlign: 'center', fontWeight: 'bold', outline: 'none', boxSizing: 'border-box', color: '#111' }} autoComplete="off" autoCapitalize="none" autoCorrect="off" />
                   <button onClick={() => handleEnglishSubmit(inputText)} style={{ width: '100%', padding: '20px', fontSize: '24px', backgroundColor: '#111', color: 'white', border: 'none', borderRadius: '16px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 8px 0 rgba(0,0,0,0.5)' }}>제출하기 🚀</button>
                 </>
               )}
