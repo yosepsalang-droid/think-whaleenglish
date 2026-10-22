@@ -24,17 +24,26 @@ interface NumberSniperProps {
 export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: NumberSniperProps) {
   const [phase, setPhase] = useState<'init' | 'hiding' | 'sniping' | 'shooting' | 'game_over'>('init');
   const [alivePlayers, setAlivePlayers] = useState<string[]>(players.map(p => p.student_id));
-  const secretNumbersRef = useRef<Record<string, number>>({});
-  
   const [timeLeft, setTimeLeft] = useState(10);
   const [currentTurn, setCurrentTurn] = useState<string | null>(null);
-  const turnQueueRef = useRef<string[]>([]);
-  const shotNumbersRef = useRef<number[]>([]);
-  
   const [lastShot, setLastShot] = useState<{ shooter: string, number: number, hits: string[] } | null>(null);
   const [winnerTeam, setWinnerTeam] = useState<Team | null>(null);
 
-  // 1. 게임 초기 세팅 및 타이머 시작
+  // 💡 [핵심 해결] 심판이 과거의 기억에 갇히지 않도록, '현재 최신 상태'를 메모장에 적어둡니다 (useRef)
+  const phaseRef = useRef(phase);
+  const alivePlayersRef = useRef(alivePlayers);
+  const currentTurnRef = useRef(currentTurn);
+  
+  const secretNumbersRef = useRef<Record<string, number>>({});
+  const turnQueueRef = useRef<string[]>([]);
+  const shotNumbersRef = useRef<number[]>([]);
+
+  // 상태가 바뀔 때마다 메모장을 실시간으로 업데이트합니다.
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
+  useEffect(() => { alivePlayersRef.current = alivePlayers; }, [alivePlayers]);
+  useEffect(() => { currentTurnRef.current = currentTurn; }, [currentTurn]);
+
+  // 1. 게임 초기 세팅 및 수신 안테나 장착
   useEffect(() => {
     const initGame = async () => {
       const initialAlive = players.map(p => p.student_id);
@@ -109,13 +118,14 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
 
   // 4. 누군가 저격을 발사했을 때
   const handleSnipeShot = async (shooterId: string, shooterName: string, targetNumber: number) => {
-    if (phase !== 'sniping' || shooterId !== currentTurn) return;
+    // 💡 [버그 해결!] 과거의 변수가 아니라, 방금 전까지 기록된 최신 메모장(Ref)을 확인합니다.
+    if (phaseRef.current !== 'sniping' || shooterId !== currentTurnRef.current) return;
     
     setPhase('shooting');
     shotNumbersRef.current.push(targetNumber); // 쏜 번호 기록 (비활성화용)
 
     const hits: string[] = [];
-    alivePlayers.forEach(id => {
+    alivePlayersRef.current.forEach(id => {
       if (secretNumbersRef.current[id] === targetNumber) {
         hits.push(id);
       }
@@ -123,7 +133,7 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
 
     setLastShot({ shooter: shooterName, number: targetNumber, hits });
 
-    const newAlivePlayers = alivePlayers.filter(id => !hits.includes(id));
+    const newAlivePlayers = alivePlayersRef.current.filter(id => !hits.includes(id));
     setAlivePlayers(newAlivePlayers);
 
     await supabase.from('game_rooms').update({ 
