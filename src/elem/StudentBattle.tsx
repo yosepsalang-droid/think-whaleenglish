@@ -1,18 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 
-interface Student {
-  id: string;
-  name: string;
-  grade: string;
-}
-
 interface StudentBattleProps {
-  student: Student;
+  studentId: string;
+  studentName: string;
   onBack: () => void;
 }
 
-export default function StudentBattle({ student, onBack }: StudentBattleProps) {
+export default function StudentBattle({ studentId, studentName, onBack }: StudentBattleProps) {
   const [roomData, setRoomData] = useState<any>(null);
   const [myTeam, setMyTeam] = useState<any>(null);
   
@@ -26,7 +21,7 @@ export default function StudentBattle({ student, onBack }: StudentBattleProps) {
       const { data } = await supabase.from('game_rooms').select('*').eq('id', 'main_room').single();
       if (data) {
         setRoomData(data);
-        const me = data.players?.find((p: any) => p.student_id === student.id);
+        const me = data.players?.find((p: any) => p.student_id === studentId);
         if (me && data.game_data?.teams) {
           const team = data.game_data.teams.find((t: any) => t.id === me.teamId);
           setMyTeam(team);
@@ -43,7 +38,7 @@ export default function StudentBattle({ student, onBack }: StudentBattleProps) {
         setRoomData(newData);
 
         // 내 팀 정보 실시간 업데이트
-        const me = newData.players?.find((p: any) => p.student_id === student.id);
+        const me = newData.players?.find((p: any) => p.student_id === studentId);
         if (me && newData.game_data?.teams) {
           const team = newData.game_data.teams.find((t: any) => t.id === me.teamId);
           setMyTeam(team);
@@ -58,16 +53,16 @@ export default function StudentBattle({ student, onBack }: StudentBattleProps) {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [student.id]);
+  }, [studentId]);
 
   // 3. 학생이 직접 [대기실 입장] 버튼을 누를 때 실행 (이름 등록)
   const handleJoinRoom = async () => {
     if (!roomData || roomData.status !== 'waiting') return alert("현재 입장할 수 있는 방이 없습니다.");
     
-    const isAlreadyJoined = roomData.players?.some((p: any) => p.student_id === student.id);
+    const isAlreadyJoined = roomData.players?.some((p: any) => p.student_id === studentId);
     if (isAlreadyJoined) return;
 
-    const newPlayer = { student_id: student.id, name: student.name };
+    const newPlayer = { student_id: studentId, name: studentName };
     const updatedPlayers = [...(roomData.players || []), newPlayer];
 
     await supabase.from('game_rooms').update({ players: updatedPlayers }).eq('id', 'main_room');
@@ -87,7 +82,7 @@ export default function StudentBattle({ student, onBack }: StudentBattleProps) {
     if (gameMode === 'typing' || gameMode === 'scramble') {
       isCorrect = answer.toLowerCase().trim() === currentQ.eng.toLowerCase().trim();
     } 
-    // OX 모드는 버튼 누르는 즉시 판별 (현재는 테스트를 위해 무조건 통과처리, 추후 엔진 연동)
+    // OX 모드는 버튼 누르는 즉시 판별
     else if (gameMode === 'ox') {
       isCorrect = true; 
     }
@@ -115,7 +110,7 @@ export default function StudentBattle({ student, onBack }: StudentBattleProps) {
 
   // 대기실 입장 버튼 화면
   if (roomData.status === 'waiting') {
-    const isJoined = roomData.players?.some((p: any) => p.student_id === student.id);
+    const isJoined = roomData.players?.some((p: any) => p.student_id === studentId);
     
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#0f172a', color: 'white', fontFamily: 'sans-serif' }}>
@@ -146,7 +141,7 @@ export default function StudentBattle({ student, onBack }: StudentBattleProps) {
         
         {/* 상단 팀 정보 바 */}
         <div style={{ padding: '20px', backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{student.name}</div>
+          <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{studentName}</div>
           <div style={{ fontSize: '24px', fontWeight: '900' }}>{myTeam?.name}</div>
         </div>
 
@@ -175,7 +170,7 @@ export default function StudentBattle({ student, onBack }: StudentBattleProps) {
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
                     placeholder="여기에 입력하세요"
-                    style={{ width: '100%', padding: '20px', fontSize: '24px', borderRadius: '16px', border: 'none', textAlign: 'center', fontWeight: 'bold', outline: 'none', boxSizing: 'border-box' }}
+                    style={{ width: '100%', padding: '20px', fontSize: '24px', borderRadius: '16px', border: 'none', textAlign: 'center', fontWeight: 'bold', outline: 'none', boxSizing: 'border-box', color: '#111' }}
                     autoComplete="off"
                     autoCapitalize="none"
                     autoCorrect="off"
