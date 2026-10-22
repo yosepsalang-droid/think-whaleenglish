@@ -193,7 +193,6 @@ export default function Ranking({ onBack, studentName = "테스트학생" }: Ran
         let isFetchingLogs = true;
 
         while (isFetchingLogs) {
-          // 🚨 [점수 오류 해결 핵심] order('created_at')을 추가하여 데이터가 랜덤으로 섞이거나 누락되는 것을 막았습니다.
           const { data, error } = await supabase
             .from('learning_logs')
             .select('student_id, student_name, score, created_at') 
@@ -218,7 +217,6 @@ export default function Ranking({ onBack, studentName = "테스트학생" }: Ran
         let isFetchingStudents = true;
         
         while (isFetchingStudents) {
-          // 🚨 [점수 오류 해결 핵심] 학생 데이터도 순서대로 불려오도록 고정
           const { data, error } = await supabase
             .from('students')
             .select('student_id, grade')
@@ -298,48 +296,30 @@ export default function Ranking({ onBack, studentName = "테스트학생" }: Ran
         <div style={{ width: '80px' }}></div>
       </div>
 
+      {/* 💡 깔끔하게 정리된 공지사항 영역 */}
       <div style={{ backgroundColor: '#fffdf0', border: '1px solid #ffda79', borderRadius: '12px', padding: '16px', marginBottom: '24px', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
-  <div style={{ fontWeight: '900', color: '#cc8e00', fontSize: '16px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-    📢 [공지] 10월 마라톤 랭킹전 상품 안내 🎁
-  </div>
-  <div style={{ fontSize: '14px', color: '#333', lineHeight: '1.7', wordBreak: 'keep-all' }}>
-    <div style={{ marginBottom: '12px' }}>
-      고래영어 친구들! 이번 달 1~3등을 달성한 친구들을 위한 특별한 선물을 공개합니다!
-    </div>
-    
-    <div style={{ backgroundColor: '#fffdf0', border: '1px solid #ffda79', borderRadius: '12px', padding: '16px', marginBottom: '24px', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
-  <div style={{ fontWeight: '900', color: '#cc8e00', fontSize: '16px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-    📢 [공지] 10월 마라톤 랭킹전 상품 안내 🎁
-  </div>
-  <div style={{ fontSize: '14px', color: '#333', lineHeight: '1.7', wordBreak: 'keep-all' }}>
-    <div style={{ marginBottom: '12px' }}>
-      고래영어 친구들! 이번 달 1~3등을 달성한 친구들을 위한 특별한 선물을 공개합니다!
-    </div>
-    
-    <div style={{ backgroundColor: '#fffdf0', border: '1px solid #ffda79', borderRadius: '12px', padding: '16px', marginBottom: '24px', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
-  <div style={{ fontWeight: '900', color: '#cc8e00', fontSize: '16px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
-    📢 [공지] 10월 마라톤 랭킹전 상품 안내 🎁
-  </div>
-  
-  <div style={{ fontSize: '14px', color: '#333', lineHeight: '1.7', wordBreak: 'keep-all', textAlign: 'center' }}>
-    <div style={{ marginBottom: '16px' }}>
-      고래영어 친구들! 이번 달 1~3등을 달성한 친구들을 위한 특별한 선물을 공개합니다!
-    </div>
-    
-    {/* 💡 해결책: 1~3등을 투명한 박스로 묶어서 왼쪽 정렬 후 중앙 배치 */}
-    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
-      <div style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <div>🥇 <strong>1등:</strong> CU, GS25, 메가커피 상품권 중 택 1 <span style={{ color: '#777', fontSize: '13px' }}>(약 1만 원 상당)</span> 💳☕</div>
-        <div>🥈 <strong>2등:</strong> 카카오 이모티콘 또는 상품권 중 택 1 <span style={{ color: '#777', fontSize: '13px' }}>(약 5천 원 상당)</span> 🎀🎫</div>
-        <div>🥉 <strong>3등:</strong> 원하는 카카오 이모티콘 선물! ✨📱</div>
-      </div>
-    </div>
+        <div style={{ fontWeight: '900', color: '#cc8e00', fontSize: '16px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
+          📢 [공지] 10월 마라톤 랭킹전 상품 안내 🎁
+        </div>
+        
+        <div style={{ fontSize: '14px', color: '#333', lineHeight: '1.7', wordBreak: 'keep-all', textAlign: 'center' }}>
+          <div style={{ marginBottom: '16px' }}>
+            고래영어 친구들! 이번 달 1~3등을 달성한 친구들을 위한 특별한 선물을 공개합니다!
+          </div>
+          
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
+            <div style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div>🥇 <strong>1등:</strong> CU, GS25, 메가커피 상품권 중 택 1 <span style={{ color: '#777', fontSize: '13px' }}>(약 1만 원 상당)</span> 💳☕</div>
+              <div>🥈 <strong>2등:</strong> 카카오 이모티콘 또는 상품권 중 택 1 <span style={{ color: '#777', fontSize: '13px' }}>(약 5천 원 상당)</span> 🎀🎫</div>
+              <div>🥉 <strong>3등:</strong> 원하는 카카오 이모티콘 선물! ✨📱</div>
+            </div>
+          </div>
 
-    <div style={{ fontWeight: '800', color: '#007aff' }}>
-      이번 달도 랭킹 1위를 향해 열심히 달려보자고요! 화이팅! 🐋🔥
-    </div>
-  </div>
-</div>
+          <div style={{ fontWeight: '800', color: '#007aff' }}>
+            이번 달도 랭킹 1위를 향해 열심히 달려보자고요! 화이팅! 🐋🔥
+          </div>
+        </div>
+      </div>
 
       <HonorRollCard 
         data={lastMonthRankings} 
