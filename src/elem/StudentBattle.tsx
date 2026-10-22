@@ -62,29 +62,58 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
     await supabase.from('game_rooms').update({ players: updatedPlayers }).eq('id', 'main_room');
   };
 
-  const handleSubmit = async (answer: string) => {
+  // 💡 기존 영어 게임 정답 제출 로직
+  const handleEnglishSubmit = async (answer: string) => {
     if (hasSubmitted || !myTeam || !roomData?.game_data?.currentQuestion) return;
-
-    setHasSubmitted(true); // 버튼 즉시 잠금
+    setHasSubmitted(true);
     
     const currentQ = roomData.game_data.currentQuestion;
     const gameMode = roomData.game_data.gameMode;
     let isCorrect = false;
 
-    // 💡 [핵심] 이제 OX 모드도 진짜 정답 판별을 합니다!
     if (gameMode === 'typing' || gameMode === 'scramble') {
       isCorrect = answer.toLowerCase().trim() === currentQ.eng.toLowerCase().trim();
-    } 
-    else if (gameMode === 'ox') {
+    } else if (gameMode === 'ox') {
       isCorrect = answer === roomData.game_data.oxAnswer; 
     }
 
-    // 💡 정답이든 오답이든 관제탑으로 무조건 제출 신호를 쏩니다! (조기 종료를 위해)
     await supabase.channel('main_room_host').send({
       type: 'broadcast',
       event: 'submit_answer',
       payload: { isCorrect, teamId: myTeam.id }
     });
+  };
+
+  // 🎯 넘버 스나이퍼: 1. 내 비밀 숫자 숨기기
+  const handleHideNumber = async () => {
+    const num = parseInt(inputText, 10);
+    const maxNum = roomData.game_data?.maxNumber || 40;
+    
+    if (isNaN(num) || num < 1 || num > maxNum) return alert(`1부터 ${maxNum} 사이의 숫자를 입력하세요!`);
+    if (hasSubmitted) return;
+
+    setHasSubmitted(true);
+    await supabase.channel('sniper_host_listener').send({
+      type: 'broadcast',
+      event: 'hide_number',
+      payload: { studentId, number: num }
+    });
+    setInputText('');
+  };
+
+  // 🎯 넘버 스나이퍼: 2. 상대방 저격하기
+  const handleSnipeNumber = async () => {
+    const num = parseInt(inputText, 10);
+    const maxNum = roomData.game_data?.maxNumber || 40;
+    
+    if (isNaN(num) || num < 1 || num > maxNum) return alert(`1부터 ${maxNum} 사이의 숫자를 입력하세요!`);
+
+    await supabase.channel('sniper_host_listener').send({
+      type: 'broadcast',
+      event: 'snipe_number',
+      payload: { studentName, number: num }
+    });
+    setInputText('');
   };
 
   if (!roomData || roomData.status === 'closed') {
@@ -122,7 +151,87 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
 
   if (roomData.status === 'playing') {
     const gameMode = roomData.game_data?.gameMode || 'typing';
+    
+    // 💡 [넘버 스나이퍼 전용 화면 처리]
+    if (gameMode === 'sniper') {
+      const phase = roomData.game_data.sniperPhase || 'hiding';
+      const isAlive = roomData.game_data.alivePlayers?.includes(studentId);
+      const maxNum = roomData.game_data.maxNumber || 40;
 
+      // 💀 탈락자 (회색 관전 모드)
+      if (!isAlive) {
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: '#334155', color: '#94a3b8', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif' }}>
+            <div style={{ fontSize: '100px', marginBottom: '20px', filter: 'grayscale(1)' }}>💀</div>
+            <h2 style={{ fontSize: '32px', fontWeight: '900', color: '#cbd5e1' }}>탈락하셨습니다!</h2>
+            <p style={{ fontSize: '18px', marginTop: '10px' }}>관전 모드입니다. 결과를 지켜보세요.</p>
+          </div>
+        );
+      }
+
+      // 생존자 배경 (팀 컬러)
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: myTeam?.color || '#0f172a', color: 'white', fontFamily: 'sans-serif', transition: 'background-color 0.5s' }}>
+          <div style={{ padding: '20px', backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{studentName} (생존 🏃)</div>
+            <div style={{ fontSize: '24px', fontWeight: '900' }}>{myTeam?.name}</div>
+          </div>
+
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+            
+            {/* 1단계: 은폐 모드 */}
+            {phase === 'hiding' && (
+              <div style={{ width: '100%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '20px', textAlign: 'center' }}>
+                <div style={{ fontSize: '80px' }}>🕵️‍♂️</div>
+                {hasSubmitted ? (
+                  <h2 style={{ fontSize: '28px', fontWeight: '900', animation: 'popUp 0.3s' }}>숨기기 완료!<br/><span style={{ fontSize: '18px', color: '#cbd5e1' }}>다른 친구들을 기다리는 중...</span></h2>
+                ) : (
+                  <>
+                    <div style={{ fontSize: '24px', fontWeight: '900', marginBottom: '10px' }}>나만의 비밀 숫자를 숨기세요!</div>
+                    <div style={{ fontSize: '18px', color: '#fde047', marginBottom: '10px' }}>(범위: 1 ~ {maxNum})</div>
+                    <input 
+                      type="number" 
+                      value={inputText}
+                      onChange={(e) => setInputText(e.target.value)}
+                      placeholder="숫자 입력"
+                      style={{ width: '100%', padding: '20px', fontSize: '32px', borderRadius: '16px', border: 'none', textAlign: 'center', fontWeight: '900', outline: 'none', color: '#111' }}
+                    />
+                    <button onClick={handleHideNumber} style={{ width: '100%', padding: '20px', fontSize: '24px', backgroundColor: '#111', color: 'white', border: 'none', borderRadius: '16px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 8px 0 rgba(0,0,0,0.5)' }}>완료! 숨기기 🔒</button>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* 2단계: 저격 모드 */}
+            {phase === 'sniping' && (
+              <div style={{ width: '100%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '20px', textAlign: 'center' }}>
+                <div style={{ fontSize: '80px', animation: 'pulse 1s infinite' }}>🎯</div>
+                <div style={{ fontSize: '24px', fontWeight: '900', marginBottom: '10px' }}>선생님이 내 이름을 부르면<br/>상대의 예상 숫자를 저격하세요!</div>
+                <input 
+                  type="number" 
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  placeholder="예상 숫자 입력"
+                  style={{ width: '100%', padding: '20px', fontSize: '32px', borderRadius: '16px', border: 'none', textAlign: 'center', fontWeight: '900', outline: 'none', color: '#111' }}
+                />
+                <button onClick={handleSnipeNumber} style={{ width: '100%', padding: '20px', fontSize: '24px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '16px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 8px 0 #b91c1c' }}>저격 발사! 💥</button>
+              </div>
+            )}
+
+            {/* 3단계: 연출 및 대기 */}
+            {(phase === 'shooting' || phase === 'game_over') && (
+              <div style={{ textAlign: 'center', animation: 'popUp 0.3s ease-out' }}>
+                <div style={{ fontSize: '80px', marginBottom: '20px' }}>👀</div>
+                <h2 style={{ fontSize: '28px', fontWeight: '900' }}>TV 화면을 확인하세요!</h2>
+              </div>
+            )}
+          </div>
+          <style>{`@keyframes popUp { 0% { transform: scale(0.5); opacity: 0; } 50% { transform: scale(1.1); } 100% { transform: scale(1); opacity: 1; } }`}</style>
+        </div>
+      );
+    }
+
+    // 💡 [기존 영어 게임 (타자/스크램블/OX) 전용 화면]
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: myTeam?.color || '#0f172a', color: 'white', fontFamily: 'sans-serif', transition: 'background-color 0.5s' }}>
         <div style={{ padding: '20px', backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -156,19 +265,18 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
                     autoCapitalize="none"
                     autoCorrect="off"
                   />
-                  <button onClick={() => handleSubmit(inputText)} style={{ width: '100%', padding: '20px', fontSize: '24px', backgroundColor: '#111', color: 'white', border: 'none', borderRadius: '16px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 8px 0 rgba(0,0,0,0.5)' }}>제출하기 🚀</button>
+                  <button onClick={() => handleEnglishSubmit(inputText)} style={{ width: '100%', padding: '20px', fontSize: '24px', backgroundColor: '#111', color: 'white', border: 'none', borderRadius: '16px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 8px 0 rgba(0,0,0,0.5)' }}>제출하기 🚀</button>
                 </>
               )}
 
               {gameMode === 'ox' && (
                 <div style={{ display: 'flex', gap: '15px' }}>
-                  <button onClick={() => handleSubmit('O')} style={{ flex: 1, height: '150px', fontSize: '80px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '24px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 10px 0 #1d4ed8' }}>O</button>
-                  <button onClick={() => handleSubmit('X')} style={{ flex: 1, height: '150px', fontSize: '80px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '24px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 10px 0 #b91c1c' }}>X</button>
+                  <button onClick={() => handleEnglishSubmit('O')} style={{ flex: 1, height: '150px', fontSize: '80px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '24px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 10px 0 #1d4ed8' }}>O</button>
+                  <button onClick={() => handleEnglishSubmit('X')} style={{ flex: 1, height: '150px', fontSize: '80px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '24px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 10px 0 #b91c1c' }}>X</button>
                 </div>
               )}
             </div>
           )}
-
         </div>
         <style>{`@keyframes popUp { 0% { transform: scale(0.5); opacity: 0; } 50% { transform: scale(1.1); } 100% { transform: scale(1); opacity: 1; } }`}</style>
       </div>
