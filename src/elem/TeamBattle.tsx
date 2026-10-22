@@ -34,10 +34,9 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
   
   const [selectedBook, setSelectedBook] = useState<string>('');
   const [teamCount, setTeamCount] = useState<number>(2);
-  // 💡 게임 모드에 'sniper' 추가
   const [gameMode, setGameMode] = useState<'typing' | 'scramble' | 'ox' | 'sniper'>('typing');
   const [winScore, setWinScore] = useState<number>(3); 
-  const [sniperRange, setSniperRange] = useState<number>(40); // 넘버 스나이퍼용 숫자 범위
+  const [sniperRange, setSniperRange] = useState<number>(40);
 
   const [joinedPlayers, setJoinedPlayers] = useState<Player[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -81,7 +80,7 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
         if (newData.players) setJoinedPlayers(newData.players);
       })
       .on('broadcast', { event: 'submit_answer' }, ({ payload }) => {
-        if (gameMode === 'sniper') return; // 넘버스나이퍼는 전용 컴포넌트에서 채점 처리함
+        if (gameMode === 'sniper') return;
 
         submitCountRef.current += 1; 
         
@@ -103,7 +102,7 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
   }, [gameMode]);
 
   useEffect(() => {
-    if (gameMode === 'sniper') return; // 스나이퍼 모드는 자체 타이머 없음
+    if (gameMode === 'sniper') return; 
     if (roomStatus === 'playing' && timeLeft > 0) {
       const timer = setTimeout(() => setTimeLeft(prev => prev - 1), 1000);
       return () => clearTimeout(timer);
@@ -152,7 +151,6 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
     setJoinedPlayers(assignedPlayers);
 
     if (gameMode === 'sniper') {
-      // 넘버 스나이퍼 전용 세팅
       setRoomStatus('playing');
       await supabase.from('game_rooms').update({ 
         status: 'playing',
@@ -398,4 +396,74 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
               )}
               {gameMode === 'ox' && (
                 <>
-                  <div style={{ fontSize: '32px', color: '#94a3b8', marginBottom: '20px' }}>단어와
+                  <div style={{ fontSize: '32px', color: '#94a3b8', marginBottom: '20px' }}>단어와 뜻이 올바르게 짝지어졌나요?</div>
+                  <div style={{ fontSize: '100px', fontWeight: '900', color: 'white' }}>{questions[currentIndex]?.eng}</div>
+                  <div style={{ fontSize: '60px', color: '#fde047', marginTop: '20px' }}>뜻 : {currentOxData.displayKor}</div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {roomStatus === 'round_end' && gameMode !== 'sniper' && (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '40px' }}>
+          <h1 style={{ fontSize: '50px', color: '#f59e0b', fontWeight: '900', marginBottom: '20px' }}>라운드 종료!</h1>
+          
+          {gameMode === 'ox' ? (
+            <>
+              <div style={{ fontSize: '40px', color: '#94a3b8', marginBottom: '10px' }}>정답은?</div>
+              <div style={{ fontSize: '60px', fontWeight: '900', color: currentOxData.oxAnswer === 'O' ? '#4ade80' : '#ef4444', marginBottom: '40px' }}>
+                {currentOxData.oxAnswer === 'O' ? '⭕ 올바른 뜻이었습니다!' : `❌ 틀린 뜻이었습니다! (진짜 뜻: ${questions[currentIndex]?.kor})`}
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: '40px', color: '#94a3b8', marginBottom: '10px' }}>정답은?</div>
+              <div style={{ fontSize: '100px', fontWeight: '900', color: '#4ade80', marginBottom: '40px', letterSpacing: '5px' }}>
+                {questions[currentIndex]?.eng}
+              </div>
+            </>
+          )}
+
+          <div style={{ fontSize: '50px', fontWeight: '900', color: 'white', backgroundColor: 'rgba(255,255,255,0.1)', padding: '30px 60px', borderRadius: '30px', animation: 'popUp 0.5s ease-out' }}>
+            {roundResultText}
+          </div>
+
+          <button onClick={handleNextRoundAction} style={{ marginTop: '60px', padding: '20px 60px', fontSize: '28px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '16px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 8px 0 #1d4ed8' }}>
+            {teams.some(t => t.score >= winScore) ? '최종 결과 발표 보기 🏆' : '다음 라운드 준비 ⏭️'}
+          </button>
+        </div>
+      )}
+
+      {roomStatus === 'result' && gameMode !== 'sniper' && (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+          <div style={{ fontSize: '100px', marginBottom: '20px', animation: 'bounce 1s infinite' }}>🎉</div>
+          <h1 style={{ fontSize: '60px', fontWeight: '900', color: '#fde047', marginBottom: '50px' }}>최종 우승팀 탄생!</h1>
+          
+          <div style={{ display: 'flex', gap: '30px', alignItems: 'flex-end', height: '350px' }}>
+            {[...teams].sort((a, b) => b.score - a.score).map((team, idx) => (
+              <div key={team.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: idx === 0 ? 1 : 0.6 }}>
+                <div style={{ fontSize: '40px', fontWeight: '900', marginBottom: '15px', color: idx === 0 ? '#fde047' : 'white' }}>{team.score}세트</div>
+                <div style={{ width: '200px', height: `${250 - (idx * 50)}px`, backgroundColor: team.color, borderRadius: '20px 20px 0 0', display: 'flex', justifyContent: 'center', paddingTop: '20px', boxShadow: idx === 0 ? '0 -10px 40px rgba(253,224,71,0.5)' : 'none' }}>
+                  <span style={{ fontSize: '32px', fontWeight: '900', color: 'white' }}>{idx + 1}등</span>
+                </div>
+                <div style={{ fontSize: '28px', fontWeight: 'bold', marginTop: '15px' }}>{team.name}</div>
+              </div>
+            ))}
+          </div>
+
+          <button onClick={handleForceClose} style={{ marginTop: '60px', padding: '20px 50px', fontSize: '28px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '16px', fontWeight: '900', cursor: 'pointer' }}>
+            대기실 닫기 및 메인으로
+          </button>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes popUp { 0% { transform: scale(0.5); opacity: 0; } 50% { transform: scale(1.1); } 100% { transform: scale(1); opacity: 1; } }
+        @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-30px); } }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); color: #dc2626; } 100% { transform: scale(1); } }
+      `}</style>
+    </div>
+  );
+}
