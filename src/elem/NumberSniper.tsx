@@ -28,6 +28,9 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
   const [currentTurn, setCurrentTurn] = useState<string | null>(null);
   const [lastShot, setLastShot] = useState<{ shooter: string, number: number, hits: string[] } | null>(null);
   const [winnerTeam, setWinnerTeam] = useState<Team | null>(null);
+  
+  // 💡 [준비 완료 인원 화면 표시용 상태]
+  const [readyCount, setReadyCount] = useState(0);
 
   const phaseRef = useRef(phase);
   const alivePlayersRef = useRef(alivePlayers);
@@ -41,23 +44,25 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
   useEffect(() => { alivePlayersRef.current = alivePlayers; }, [alivePlayers]);
   useEffect(() => { currentTurnRef.current = currentTurn; }, [currentTurn]);
 
-  // 1. 게임 초기 세팅
+  // 1. 게임 초기 세팅 및 안테나 장착
   useEffect(() => {
     const initGame = async () => {
       const initialAlive = players.map(p => p.student_id);
       setAlivePlayers(initialAlive);
+      secretNumbersRef.current = {};
+      setReadyCount(0);
       
       await supabase.from('game_rooms').update({ 
-        // 💡 [버그 해결] DB 업데이트 시 필수 정보(teams 등)를 모두 명시하여 날아가지 않게 보호합니다.
         game_data: { 
           gameMode: 'sniper',
           sniperPhase: 'hiding', 
           maxNumber,
-          teams, // 팀 정보 유지
+          teams,
           alivePlayers: initialAlive,
           shotNumbers: []
         } 
       }).eq('id', 'main_room');
+      
       setPhase('hiding');
       setTimeLeft(10);
     };
@@ -65,7 +70,15 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
 
     const channel = supabase.channel('sniper_host_listener')
       .on('broadcast', { event: 'hide_number' }, ({ payload }) => {
+        // 💡 [핵심 해결] 학생이 번호를 숨기면 즉시 기록하고 카운트를 화면에 반영합니다!
         secretNumbersRef.current[payload.studentId] = payload.number;
+        const currentReady = Object.keys(secretNumbersRef.current).length;
+        setReadyCount(currentReady);
+
+        // 만약 모든 생존자가 숫자를 다 숨겼다면 타이머를 기다리지 않고 즉시 저격 모드로 돌입!
+        if (phaseRef.current === 'hiding' && currentReady >= alivePlayersRef.current.length) {
+          startSnipingRound(alivePlayersRef.current);
+        }
       })
       .on('broadcast', { event: 'snipe_number' }, ({ payload }) => {
         handleSnipeShot(payload.studentId, payload.studentName, payload.number);
@@ -75,13 +88,14 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
     return () => { supabase.removeChannel(channel); };
   }, [maxNumber, players, teams]);
 
-  // 2. 10초 타이머
+  // 2. 10초 카운트다운 타이머
   useEffect(() => {
     if (phase === 'hiding') {
       if (timeLeft > 0) {
         const timer = setTimeout(() => setTimeLeft(prev => prev - 1), 1000);
         return () => clearTimeout(timer);
       } else {
+        // 시간 초과 시 안 고른 아이들은 랜덤 할당 후 시작
         alivePlayers.forEach(id => {
           if (!secretNumbersRef.current[id]) {
             secretNumbersRef.current[id] = Math.floor(Math.random() * maxNumber) + 1;
@@ -92,7 +106,7 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
     }
   }, [phase, timeLeft, alivePlayers, maxNumber]);
 
-  // 3. 턴 시작
+  // 3. 저격 턴 시작
   const startSnipingRound = async (currentAlive: string[]) => {
     if (currentAlive.length === 0) return;
     
@@ -107,7 +121,7 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
         gameMode: 'sniper',
         sniperPhase: 'sniping', 
         maxNumber, 
-        teams, // 팀 정보 유지
+        teams,
         alivePlayers: currentAlive,
         currentTurn: firstTurn,
         shotNumbers: shotNumbersRef.current
@@ -115,7 +129,7 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
     }).eq('id', 'main_room');
   };
 
-  // 4. 저격 판정 (자폭 포함)
+  // 4. 저격 발사 판정
   const handleSnipeShot = async (shooterId: string, shooterName: string, targetNumber: number) => {
     if (phaseRef.current !== 'sniping' || shooterId !== currentTurnRef.current) return;
     
@@ -137,7 +151,7 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
         gameMode: 'sniper',
         sniperPhase: 'shooting', 
         maxNumber, 
-        teams, // 팀 정보 유지
+        teams,
         alivePlayers: newAlivePlayers,
         lastShot: { shooter: shooterName, number: targetNumber, hitCount: hits.length, hitIds: hits },
         shotNumbers: shotNumbersRef.current
@@ -161,7 +175,6 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
 
     const activeTeams = teams.filter(t => aliveCountsByTeam[t.id] > 0);
 
-    // 💡 우승 조건 달성 시 (1팀 생존 OR 전멸)
     if (activeTeams.length <= 1) {
       setPhase('game_over');
       setWinnerTeam(activeTeams.length === 1 ? activeTeams[0] : null);
@@ -171,7 +184,7 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
           gameMode: 'sniper', 
           sniperPhase: 'game_over', 
           maxNumber, 
-          teams, // 끝날 때도 팀 정보를 보내야 학생 패드가 에러를 안 냅니다!
+          teams, 
           alivePlayers: currentAlive, 
           shotNumbers: shotNumbersRef.current,
           winner: activeTeams.length === 1 ? activeTeams[0].name : '무승부' 
@@ -205,8 +218,6 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
       }).eq('id', 'main_room');
     }
   };
-
-  const readyCount = Object.keys(secretNumbersRef.current).length;
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '40px', boxSizing: 'border-box' }}>
