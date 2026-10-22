@@ -11,12 +11,10 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
   const [roomData, setRoomData] = useState<any>(null);
   const [myTeam, setMyTeam] = useState<any>(null);
   
-  // 💡 정답 입력 관련 상태
   const [inputText, setInputText] = useState('');
-  const [hasSubmitted, setHasSubmitted] = useState(false); // 라운드당 1회 제출 제한
+  const [hasSubmitted, setHasSubmitted] = useState(false); 
 
   useEffect(() => {
-    // 1. 방에 입장하자마자 현재 방 상태 확인 및 내 팀 찾기
     const fetchRoomStatus = async () => {
       const { data } = await supabase.from('game_rooms').select('*').eq('id', 'main_room').single();
       if (data) {
@@ -31,20 +29,17 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
 
     fetchRoomStatus();
 
-    // 2. 원장님 관제탑(TV)의 신호를 실시간으로 감지
     const channel = supabase.channel('student_battle_listener')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_rooms', filter: 'id=eq.main_room' }, (payload) => {
         const newData = payload.new;
         setRoomData(newData);
 
-        // 내 팀 정보 실시간 업데이트
         const me = newData.players?.find((p: any) => p.student_id === studentId);
         if (me && newData.game_data?.teams) {
           const team = newData.game_data.teams.find((t: any) => t.id === me.teamId);
           setMyTeam(team);
         }
 
-        // 💡 새로운 라운드가 시작되면(playing 상태) 입력창 잠금을 풀어줍니다!
         if (newData.status === 'playing' || newData.status === 'waiting') {
           setHasSubmitted(false);
           setInputText('');
@@ -55,7 +50,6 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
     return () => { supabase.removeChannel(channel); };
   }, [studentId]);
 
-  // 3. 학생이 직접 [대기실 입장] 버튼을 누를 때 실행 (이름 등록)
   const handleJoinRoom = async () => {
     if (!roomData || roomData.status !== 'waiting') return alert("현재 입장할 수 있는 방이 없습니다.");
     
@@ -68,36 +62,31 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
     await supabase.from('game_rooms').update({ players: updatedPlayers }).eq('id', 'main_room');
   };
 
-  // 4. 정답 제출 로직 (관제탑으로 몰래 신호 쏘기 📡)
   const handleSubmit = async (answer: string) => {
     if (hasSubmitted || !myTeam || !roomData?.game_data?.currentQuestion) return;
 
-    setHasSubmitted(true); // 버튼 즉시 잠금!
+    setHasSubmitted(true); // 버튼 즉시 잠금
     
     const currentQ = roomData.game_data.currentQuestion;
     const gameMode = roomData.game_data.gameMode;
     let isCorrect = false;
 
-    // 모드별 정답 채점 (스피드 타자 & 스크램블은 스펠링 정확도 체크)
+    // 💡 [핵심] 이제 OX 모드도 진짜 정답 판별을 합니다!
     if (gameMode === 'typing' || gameMode === 'scramble') {
       isCorrect = answer.toLowerCase().trim() === currentQ.eng.toLowerCase().trim();
     } 
-    // OX 모드는 버튼 누르는 즉시 판별
     else if (gameMode === 'ox') {
-      isCorrect = true; 
+      isCorrect = answer === roomData.game_data.oxAnswer; 
     }
 
-    // 정답일 경우에만 관제탑(TV)으로 +1점 신호를 보냄!
-    if (isCorrect) {
-      await supabase.channel('main_room_host').send({
-        type: 'broadcast',
-        event: 'submit_answer',
-        payload: { isCorrect: true, teamId: myTeam.id }
-      });
-    }
+    // 💡 정답이든 오답이든 관제탑으로 무조건 제출 신호를 쏩니다! (조기 종료를 위해)
+    await supabase.channel('main_room_host').send({
+      type: 'broadcast',
+      event: 'submit_answer',
+      payload: { isCorrect, teamId: myTeam.id }
+    });
   };
 
-  // 아무것도 없을 때 (방이 안 열림)
   if (!roomData || roomData.status === 'closed') {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#f8fafc', fontFamily: 'sans-serif' }}>
@@ -108,7 +97,6 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
     );
   }
 
-  // 대기실 입장 버튼 화면
   if (roomData.status === 'waiting') {
     const isJoined = roomData.players?.some((p: any) => p.student_id === studentId);
     
@@ -132,14 +120,11 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
     );
   }
 
-  // 💡 게임 진행 화면 (카멜레온 리모컨!)
   if (roomData.status === 'playing') {
     const gameMode = roomData.game_data?.gameMode || 'typing';
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: myTeam?.color || '#0f172a', color: 'white', fontFamily: 'sans-serif', transition: 'background-color 0.5s' }}>
-        
-        {/* 상단 팀 정보 바 */}
         <div style={{ padding: '20px', backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{studentName}</div>
           <div style={{ fontSize: '24px', fontWeight: '900' }}>{myTeam?.name}</div>
@@ -148,21 +133,17 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           
           {hasSubmitted ? (
-            // 제출 완료 후 대기 화면
             <div style={{ textAlign: 'center', animation: 'popUp 0.3s ease-out' }}>
               <div style={{ fontSize: '80px', marginBottom: '20px' }}>⏳</div>
               <h2 style={{ fontSize: '28px', fontWeight: '900' }}>정답 제출 완료!</h2>
               <p style={{ fontSize: '18px', color: 'rgba(255,255,255,0.8)' }}>TV 화면의 결과를 확인하세요!</p>
             </div>
           ) : (
-            // 💡 아직 제출 전: 게임 모드에 따른 화면 변신!
             <div style={{ width: '100%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              
               <div style={{ fontSize: '24px', fontWeight: '900', textAlign: 'center', marginBottom: '10px' }}>
                 {gameMode === 'ox' ? '정답을 선택하세요!' : '영어 스펠링을 입력하세요!'}
               </div>
 
-              {/* 모드 1: 타자 / 스크램블 (입력창 제공) */}
               {(gameMode === 'typing' || gameMode === 'scramble') && (
                 <>
                   <input 
@@ -175,24 +156,14 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
                     autoCapitalize="none"
                     autoCorrect="off"
                   />
-                  <button 
-                    onClick={() => handleSubmit(inputText)}
-                    style={{ width: '100%', padding: '20px', fontSize: '24px', backgroundColor: '#111', color: 'white', border: 'none', borderRadius: '16px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 8px 0 rgba(0,0,0,0.5)' }}
-                  >
-                    제출하기 🚀
-                  </button>
+                  <button onClick={() => handleSubmit(inputText)} style={{ width: '100%', padding: '20px', fontSize: '24px', backgroundColor: '#111', color: 'white', border: 'none', borderRadius: '16px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 8px 0 rgba(0,0,0,0.5)' }}>제출하기 🚀</button>
                 </>
               )}
 
-              {/* 모드 2: OX 텔레파시 (대형 O X 버튼 제공) */}
               {gameMode === 'ox' && (
                 <div style={{ display: 'flex', gap: '15px' }}>
-                  <button onClick={() => handleSubmit('O')} style={{ flex: 1, height: '150px', fontSize: '80px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '24px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 10px 0 #1d4ed8' }}>
-                    O
-                  </button>
-                  <button onClick={() => handleSubmit('X')} style={{ flex: 1, height: '150px', fontSize: '80px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '24px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 10px 0 #b91c1c' }}>
-                    X
-                  </button>
+                  <button onClick={() => handleSubmit('O')} style={{ flex: 1, height: '150px', fontSize: '80px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '24px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 10px 0 #1d4ed8' }}>O</button>
+                  <button onClick={() => handleSubmit('X')} style={{ flex: 1, height: '150px', fontSize: '80px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '24px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 10px 0 #b91c1c' }}>X</button>
                 </div>
               )}
             </div>
@@ -204,7 +175,6 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
     );
   }
 
-  // 💡 라운드 종료 및 최종 결과 화면 (공통 대기)
   if (roomData.status === 'round_end' || roomData.status === 'result') {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: myTeam?.color || '#0f172a', color: 'white', fontFamily: 'sans-serif' }}>
