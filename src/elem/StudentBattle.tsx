@@ -40,7 +40,6 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
           setMyTeam(team);
         }
 
-        // 라운드가 바뀌거나 턴이 넘어갈 때 제출 잠금 해제
         if (newData.status === 'playing' || newData.status === 'waiting') {
           setHasSubmitted(false);
           setInputText('');
@@ -63,7 +62,6 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
     await supabase.from('game_rooms').update({ players: updatedPlayers }).eq('id', 'main_room');
   };
 
-  // 💡 기존 영어 게임 제출 로직
   const handleEnglishSubmit = async (answer: string) => {
     if (hasSubmitted || !myTeam || !roomData?.game_data?.currentQuestion) return;
     setHasSubmitted(true);
@@ -85,10 +83,9 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
     });
   };
 
-  // 🎯 스나이퍼 액션 로직 (은폐 및 저격 통합)
   const handleSniperAction = async (num: number, actionType: 'hide_number' | 'snipe_number') => {
     if (hasSubmitted) return;
-    setHasSubmitted(true); // 한 번 누르면 바로 잠금!
+    setHasSubmitted(true); 
     
     await supabase.channel('sniper_host_listener').send({
       type: 'broadcast',
@@ -97,16 +94,14 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
     });
   };
 
-  // 🎯 넘버 스나이퍼용 숫자 버튼 그리드 (바둑판)
   const renderNumberGrid = (maxNum: number, onClick: (num: number) => void, disabledNumbers: number[] = [], forceDisableAll: boolean = false) => {
     const numbers = Array.from({ length: maxNum }, (_, i) => i + 1);
     
-    // 최대 50번까지 깔끔하게 보이도록 5칸씩 배치
     return (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px', width: '100%', maxWidth: '500px', maxHeight: '55vh', overflowY: 'auto', padding: '10px' }}>
         {numbers.map(num => {
-          const isAlreadyShot = disabledNumbers.includes(num); // 이미 쏜 번호인지 체크
-          const isDisabled = forceDisableAll || isAlreadyShot; // 내 턴이 아니거나 이미 쏜 번호면 비활성화
+          const isAlreadyShot = disabledNumbers.includes(num); 
+          const isDisabled = forceDisableAll || isAlreadyShot; 
 
           return (
             <button
@@ -131,8 +126,6 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
       </div>
     );
   };
-
-  // ---------------- 화면 렌더링 시작 ----------------
 
   if (!roomData || roomData.status === 'closed') {
     return (
@@ -166,20 +159,19 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
 
   if (roomData.status === 'playing') {
     const gameMode = roomData.game_data?.gameMode;
-    
-    // 💡 [안전장치] 통신 지연 시 빈 화면 대기
     if (!gameMode) return <div style={{ backgroundColor: '#0f172a', height: '100vh' }} />;
 
-    // 🎯 [넘버 스나이퍼 모드]
     if (gameMode === 'sniper') {
       const phase = roomData.game_data.sniperPhase || 'hiding';
-      const alivePlayers = roomData.game_data.alivePlayers || [];
-      const isAlive = alivePlayers.length === 0 ? true : alivePlayers.includes(studentId);
+      
+      // 💡 [버그 해결] DB에서 생존자 정보가 올바르게 넘어왔는지 확인합니다.
+      const alivePlayers = roomData.game_data.alivePlayers;
+      const isAlive = alivePlayers ? alivePlayers.includes(studentId) : true;
+      
       const maxNum = roomData.game_data.maxNumber || 40;
       const isMyTurn = roomData.game_data.currentTurn === studentId;
-      const shotNumbers = roomData.game_data.shotNumbers || []; // TV에서 공유받은 이미 쏜 번호들
+      const shotNumbers = roomData.game_data.shotNumbers || []; 
 
-      // 💀 탈락자 관전 모드
       if (!isAlive) {
         return (
           <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: '#1e293b', color: '#94a3b8', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif' }}>
@@ -190,7 +182,6 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
         );
       }
 
-      // 생존자 모드
       return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: myTeam?.color || '#0f172a', color: 'white', fontFamily: 'sans-serif', transition: 'background-color 0.5s' }}>
           <div style={{ padding: '20px', backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -200,7 +191,6 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
 
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 10px' }}>
             
-            {/* 1. 은폐 모드 (모두가 누를 수 있음) */}
             {phase === 'hiding' && (
               <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
                 {hasSubmitted ? (
@@ -211,37 +201,41 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
                 ) : (
                   <>
                     <div style={{ fontSize: '22px', fontWeight: '900', marginBottom: '15px' }}>나만의 비밀 숫자를 터치해서 숨기세요!</div>
-                    {/* 은폐 모드에서는 비활성화되는 번호 없음 */}
                     {renderNumberGrid(maxNum, (num) => handleSniperAction(num, 'hide_number'))}
                   </>
                 )}
               </div>
             )}
 
-            {/* 2. 저격 모드 (내 턴일 때만 누를 수 있음) */}
             {phase === 'sniping' && (
               <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
                 {isMyTurn ? (
                   <>
                     <div style={{ fontSize: '24px', fontWeight: '900', marginBottom: '15px', color: '#fde047', animation: 'pulse 1s infinite' }}>🎯 내 차례입니다! 저격하세요!</div>
-                    {/* 내 턴: 이미 쏜 번호(shotNumbers)는 까맣게 비활성화됨 */}
                     {renderNumberGrid(maxNum, (num) => handleSniperAction(num, 'snipe_number'), shotNumbers, false)}
                   </>
                 ) : (
                   <>
                     <div style={{ fontSize: '20px', fontWeight: '900', marginBottom: '15px', color: '#cbd5e1' }}>다른 친구가 저격 중입니다...</div>
-                    {/* 다른 사람 턴: 구경만 하도록 모든 버튼을 살짝 흐리게 비활성화(forceDisableAll) */}
                     {renderNumberGrid(maxNum, () => {}, shotNumbers, true)}
                   </>
                 )}
               </div>
             )}
 
-            {/* 3. 쏘고 나서 결과 대기 */}
-            {(phase === 'shooting' || phase === 'game_over') && (
+            {phase === 'shooting' && (
               <div style={{ textAlign: 'center', marginTop: '50px', animation: 'popUp 0.3s ease-out' }}>
                 <div style={{ fontSize: '80px', marginBottom: '20px' }}>💥</div>
                 <h2 style={{ fontSize: '28px', fontWeight: '900' }}>저격 결과 확인 중!</h2>
+              </div>
+            )}
+
+            {/* 💡 [버그 해결] 게임 종료 시 학생 패드에도 '우승/종료' 화면을 명확히 띄워줍니다! */}
+            {phase === 'game_over' && (
+              <div style={{ textAlign: 'center', marginTop: '50px', animation: 'popUp 0.3s ease-out' }}>
+                <div style={{ fontSize: '80px', marginBottom: '20px' }}>🏆</div>
+                <h2 style={{ fontSize: '28px', fontWeight: '900' }}>게임 종료!</h2>
+                <p style={{ fontSize: '18px', color: 'rgba(255,255,255,0.8)', marginTop: '10px' }}>TV 화면에서 최종 우승팀을 확인하세요!</p>
               </div>
             )}
           </div>
@@ -250,7 +244,6 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
       );
     }
 
-    // 💡 [기존 영어 게임 모드 (타자/스크램블/OX)]
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: myTeam?.color || '#0f172a', color: 'white', fontFamily: 'sans-serif', transition: 'background-color 0.5s' }}>
         <div style={{ padding: '20px', backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
