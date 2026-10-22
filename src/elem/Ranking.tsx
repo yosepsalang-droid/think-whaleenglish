@@ -303,11 +303,20 @@ export default function Ranking({ onBack, studentName = "테스트학생" }: Ran
     📢 [공지] 10월 마라톤 랭킹전 상품 안내 🎁
   </div>
   <div style={{ fontSize: '14px', color: '#333', lineHeight: '1.7', wordBreak: 'keep-all' }}>
-    고래영어 친구들! 이번 달 1~3등을 달성한 친구들을 위한 특별한 선물을 공개합니다!<br/><br/>
-    🥇 <strong>1등:</strong> CU, GS25, 메가커피 상품권 중 택 1 <span style={{ color: '#777', fontSize: '13px' }}>(약 1만 원 상당)</span> 💳☕<br/>
-    🥈 <strong>2등:</strong> 카카오 이모티콘 또는 상품권 중 택 1 <span style={{ color: '#777', fontSize: '13px' }}>(약 5천 원 상당)</span> 🎀🎫<br/>
-    🥉 <strong>3등:</strong> 원하는 카카오 이모티콘 선물! ✨📱<br/><br/>
-    <span style={{ fontWeight: '800', color: '#007aff' }}>이번 달도 랭킹 1위를 향해 열심히 달려보자고요! 화이팅! 🐋🔥</span>
+    <div style={{ marginBottom: '12px' }}>
+      고래영어 친구들! 이번 달 1~3등을 달성한 친구들을 위한 특별한 선물을 공개합니다!
+    </div>
+    
+    {/* 💡 1~3등 줄맞춤을 위해 개별 div로 분리했습니다 */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
+      <div>🥇 <strong>1등:</strong> CU, GS25, 메가커피 상품권 중 택 1 <span style={{ color: '#777', fontSize: '13px' }}>(약 1만 원 상당)</span> 💳☕</div>
+      <div>🥈 <strong>2등:</strong> 카카오 이모티콘 또는 상품권 중 택 1 <span style={{ color: '#777', fontSize: '13px' }}>(약 5천 원 상당)</span> 🎀🎫</div>
+      <div>🥉 <strong>3등:</strong> 원하는 카카오 이모티콘 선물! ✨📱</div>
+    </div>
+
+    <div style={{ fontWeight: '800', color: '#007aff' }}>
+      이번 달도 랭킹 1위를 향해 열심히 달려보자고요! 화이팅! 🐋🔥
+    </div>
   </div>
 </div>
 
