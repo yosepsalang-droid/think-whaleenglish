@@ -299,15 +299,17 @@ export default function Ranking({ onBack, studentName = "테스트학생" }: Ran
       </div>
 
       <div style={{ backgroundColor: '#fffdf0', border: '1px solid #ffda79', borderRadius: '12px', padding: '16px', marginBottom: '24px', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
-        <div style={{ fontWeight: '900', color: '#cc8e00', fontSize: '15px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          📢 [공지] 랭킹 이벤트 10월 연기 안내
-        </div>
-        <div style={{ fontSize: '13.5px', color: '#555', lineHeight: '1.6', wordBreak: 'keep-all' }}>
-          고래영어 친구들! 현재 랭킹 점수판을 더 완벽하고 공정하게 업데이트하고 있어요. 🛠️<br/>
-          이에 따라 아쉽게도 9월 1~3등 시상 이벤트는 <strong>10월로 연기</strong>됩니다.<br/>
-          점수 오류로 불편을 드려 미안해요! 지금 열심히 공부한 실력은 그대로 남으니까, 10월 랭킹전을 위해 계속 파이팅해 봐요! 🐳✨
-        </div>
-      </div>
+  <div style={{ fontWeight: '900', color: '#cc8e00', fontSize: '16px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+    📢 [공지] 10월 마라톤 랭킹전 상품 안내 🎁
+  </div>
+  <div style={{ fontSize: '14px', color: '#333', lineHeight: '1.7', wordBreak: 'keep-all' }}>
+    고래영어 친구들! 이번 달 1~3등을 달성한 친구들을 위한 특별한 선물을 공개합니다!<br/><br/>
+    🥇 <strong>1등:</strong> CU, GS25, 메가커피 상품권 중 택 1 <span style={{ color: '#777', fontSize: '13px' }}>(약 1만 원 상당)</span> 💳☕<br/>
+    🥈 <strong>2등:</strong> 카카오 이모티콘 또는 상품권 중 택 1 <span style={{ color: '#777', fontSize: '13px' }}>(약 5천 원 상당)</span> 🎀🎫<br/>
+    🥉 <strong>3등:</strong> 원하는 카카오 이모티콘 선물! ✨📱<br/><br/>
+    <span style={{ fontWeight: '800', color: '#007aff' }}>이번 달도 랭킹 1위를 향해 열심히 달려보자고요! 화이팅! 🐋🔥</span>
+  </div>
+</div>
 
       <HonorRollCard 
         data={lastMonthRankings} 
