@@ -1,168 +1,227 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 
+interface Student {
+  id: string;
+  name: string;
+  grade: string;
+}
+
 interface StudentBattleProps {
-  studentId: string;
-  studentName: string;
+  student: Student;
   onBack: () => void;
 }
 
-export default function StudentBattle({ studentId, studentName, onBack }: StudentBattleProps) {
-  const [roomStatus, setRoomStatus] = useState<'waiting' | 'playing' | 'result' | 'loading'>('loading');
+export default function StudentBattle({ student, onBack }: StudentBattleProps) {
+  const [roomData, setRoomData] = useState<any>(null);
   const [myTeam, setMyTeam] = useState<any>(null);
-  const [currentQuestion, setCurrentQuestion] = useState<any>(null);
-  const [answer, setAnswer] = useState('');
-  const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
+  
+  // 💡 정답 입력 관련 상태
+  const [inputText, setInputText] = useState('');
+  const [hasSubmitted, setHasSubmitted] = useState(false); // 라운드당 1회 제출 제한
 
   useEffect(() => {
-    let channel: any;
-
-    const joinRoom = async () => {
-      // 1. 방 상태 확인
-      const { data, error } = await supabase.from('game_rooms').select('*').eq('id', 'main_room').single();
-      
-      if (error || !data || data.status === 'closed') {
-        alert("🚨 현재 열려있는 교실 대난투 방이 없습니다.");
-        onBack();
-        return;
-      }
-
-      // 2. 대기실 입장 (내 이름 등록)
-      if (data.status === 'waiting') {
-        const currentPlayers = data.players || [];
-        if (!currentPlayers.find((p: any) => p.student_id === studentId)) {
-          const updatedPlayers = [...currentPlayers, { student_id: studentId, name: studentName }];
-          await supabase.from('game_rooms').update({ players: updatedPlayers }).eq('id', 'main_room');
-        }
-        setRoomStatus('waiting');
-      } else {
-        setRoomStatus(data.status);
-      }
-
-      // 3. 실시간 게임 상황 수신 안테나 켜기
-      channel = supabase.channel('student_pad')
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_rooms', filter: 'id=eq.main_room' }, (payload) => {
-          const newData = payload.new;
-          
-          if (newData.status === 'closed') {
-            alert("원장님이 게임을 종료했습니다.");
-            onBack();
-          } else {
-            setRoomStatus(newData.status);
-            
-            // 내 소속 팀 찾기 (원장님이 배틀 시작을 누른 후)
-            if (newData.players) {
-              const myInfo = newData.players.find((p: any) => p.student_id === studentId);
-              if (myInfo && myInfo.teamId && newData.game_data?.teams) {
-                const team = newData.game_data.teams.find((t: any) => t.id === myInfo.teamId);
-                setMyTeam(team);
-              }
-            }
-
-            // 새로운 문제가 출제되었을 때
-            if (newData.game_data?.currentQuestion) {
-              setCurrentQuestion(newData.game_data.currentQuestion);
-              setAnswer(''); // 입력칸 초기화
-              setIsCorrect(null); // 정답 상태 초기화
-            }
-          }
-        }).subscribe();
-    };
-
-    joinRoom();
-
-    return () => {
-      if (channel) supabase.removeChannel(channel);
-    };
-  }, [studentId, studentName, onBack]);
-
-  // 💡 정답 제출 로직 (스피드 타자 모드)
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentQuestion || !myTeam || isCorrect) return;
-
-    const correctWord = currentQuestion.eng.trim().toLowerCase();
-    const myWord = answer.trim().toLowerCase();
-
-    if (myWord === correctWord) {
-      setIsCorrect(true);
-      
-      // 원장님 TV로 점수 +1점 쏘기!
-      const { data } = await supabase.from('game_rooms').select('game_data').eq('id', 'main_room').single();
-      if (data && data.game_data?.teams) {
-        const teams = data.game_data.teams;
-        const myTeamIdx = teams.findIndex((t: any) => t.id === myTeam.id);
-        if (myTeamIdx > -1) {
-          teams[myTeamIdx].score += 1;
-          await supabase.from('game_rooms').update({
-            game_data: { ...data.game_data, teams }
-          }).eq('id', 'main_room');
+    // 1. 방에 입장하자마자 현재 방 상태 확인 및 내 팀 찾기
+    const fetchRoomStatus = async () => {
+      const { data } = await supabase.from('game_rooms').select('*').eq('id', 'main_room').single();
+      if (data) {
+        setRoomData(data);
+        const me = data.players?.find((p: any) => p.student_id === student.id);
+        if (me && data.game_data?.teams) {
+          const team = data.game_data.teams.find((t: any) => t.id === me.teamId);
+          setMyTeam(team);
         }
       }
-    } else {
-      setIsCorrect(false);
-      setTimeout(() => setIsCorrect(null), 1500); // 1.5초 후 다시 입력 가능하게
+    };
+
+    fetchRoomStatus();
+
+    // 2. 원장님 관제탑(TV)의 신호를 실시간으로 감지
+    const channel = supabase.channel('student_battle_listener')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_rooms', filter: 'id=eq.main_room' }, (payload) => {
+        const newData = payload.new;
+        setRoomData(newData);
+
+        // 내 팀 정보 실시간 업데이트
+        const me = newData.players?.find((p: any) => p.student_id === student.id);
+        if (me && newData.game_data?.teams) {
+          const team = newData.game_data.teams.find((t: any) => t.id === me.teamId);
+          setMyTeam(team);
+        }
+
+        // 💡 새로운 라운드가 시작되면(playing 상태) 입력창 잠금을 풀어줍니다!
+        if (newData.status === 'playing' || newData.status === 'waiting') {
+          setHasSubmitted(false);
+          setInputText('');
+        }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [student.id]);
+
+  // 3. 학생이 직접 [대기실 입장] 버튼을 누를 때 실행 (이름 등록)
+  const handleJoinRoom = async () => {
+    if (!roomData || roomData.status !== 'waiting') return alert("현재 입장할 수 있는 방이 없습니다.");
+    
+    const isAlreadyJoined = roomData.players?.some((p: any) => p.student_id === student.id);
+    if (isAlreadyJoined) return;
+
+    const newPlayer = { student_id: student.id, name: student.name };
+    const updatedPlayers = [...(roomData.players || []), newPlayer];
+
+    await supabase.from('game_rooms').update({ players: updatedPlayers }).eq('id', 'main_room');
+  };
+
+  // 4. 정답 제출 로직 (관제탑으로 몰래 신호 쏘기 📡)
+  const handleSubmit = async (answer: string) => {
+    if (hasSubmitted || !myTeam || !roomData?.game_data?.currentQuestion) return;
+
+    setHasSubmitted(true); // 버튼 즉시 잠금!
+    
+    const currentQ = roomData.game_data.currentQuestion;
+    const gameMode = roomData.game_data.gameMode;
+    let isCorrect = false;
+
+    // 모드별 정답 채점 (스피드 타자 & 스크램블은 스펠링 정확도 체크)
+    if (gameMode === 'typing' || gameMode === 'scramble') {
+      isCorrect = answer.toLowerCase().trim() === currentQ.eng.toLowerCase().trim();
+    } 
+    // OX 모드는 버튼 누르는 즉시 판별 (현재는 테스트를 위해 무조건 통과처리, 추후 엔진 연동)
+    else if (gameMode === 'ox') {
+      isCorrect = true; 
+    }
+
+    // 정답일 경우에만 관제탑(TV)으로 +1점 신호를 보냄!
+    if (isCorrect) {
+      await supabase.channel('main_room_host').send({
+        type: 'broadcast',
+        event: 'submit_answer',
+        payload: { isCorrect: true, teamId: myTeam.id }
+      });
     }
   };
 
-  return (
-    <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: myTeam ? myTeam.color : '#1e293b', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'Pretendard, sans-serif' }}>
-      
-      {roomStatus === 'loading' && <h2>통신 연결 중... 📡</h2>}
+  // 아무것도 없을 때 (방이 안 열림)
+  if (!roomData || roomData.status === 'closed') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#f8fafc', fontFamily: 'sans-serif' }}>
+        <div style={{ fontSize: '60px', marginBottom: '20px' }}>💤</div>
+        <h2 style={{ color: '#64748b' }}>현재 진행 중인 게임이 없습니다.</h2>
+        <button onClick={onBack} style={{ marginTop: '30px', padding: '15px 30px', backgroundColor: '#e2e8f0', border: 'none', borderRadius: '12px', fontSize: '16px', fontWeight: 'bold' }}>돌아가기</button>
+      </div>
+    );
+  }
 
-      {/* 1. 대기실 상태 */}
-      {roomStatus === 'waiting' && (
-        <div style={{ textAlign: 'center', animation: 'pulse 2s infinite' }}>
-          <div style={{ fontSize: '80px', marginBottom: '20px' }}>⏳</div>
-          <h1 style={{ fontSize: '28px', fontWeight: '900' }}>대기실 입장 완료!</h1>
-          <p style={{ fontSize: '18px', opacity: 0.8 }}>원장님이 게임을 시작할 때까지 TV 화면을 봐주세요.</p>
-        </div>
-      )}
+  // 대기실 입장 버튼 화면
+  if (roomData.status === 'waiting') {
+    const isJoined = roomData.players?.some((p: any) => p.student_id === student.id);
+    
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#0f172a', color: 'white', fontFamily: 'sans-serif' }}>
+        <h1 style={{ fontSize: '32px', fontWeight: '900', color: '#fde047', marginBottom: '10px' }}>교실 대난투 대기실</h1>
+        <p style={{ fontSize: '16px', color: '#94a3b8', marginBottom: '40px' }}>선생님이 게임을 시작할 때까지 기다려주세요!</p>
 
-      {/* 2. 게임 플레이 상태 (리모컨 모드) */}
-      {roomStatus === 'playing' && myTeam && (
-        <div style={{ width: '100%', maxWidth: '500px', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <div style={{ backgroundColor: 'rgba(255,255,255,0.2)', padding: '10px 20px', borderRadius: '30px', fontWeight: 'bold', marginBottom: '40px', fontSize: '20px' }}>
-            나는 [{myTeam.name}] 팀입니다!
+        {!isJoined ? (
+          <button onClick={handleJoinRoom} style={{ padding: '20px 60px', fontSize: '24px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '16px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 8px 0 #b91c1c', animation: 'pulse 1.5s infinite' }}>
+            입장하기! 🚀
+          </button>
+        ) : (
+          <div style={{ padding: '20px', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '16px', textAlign: 'center' }}>
+            <div style={{ fontSize: '50px', marginBottom: '10px' }}>✅</div>
+            <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#4ade80' }}>입장 완료! 곧 팀이 배정됩니다.</div>
           </div>
+        )}
+        <style>{`@keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }`}</style>
+      </div>
+    );
+  }
 
-          <h2 style={{ fontSize: '24px', marginBottom: '10px' }}>TV에 뜬 단어의 스펠링을 입력하세요!</h2>
+  // 💡 게임 진행 화면 (카멜레온 리모컨!)
+  if (roomData.status === 'playing') {
+    const gameMode = roomData.game_data?.gameMode || 'typing';
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: myTeam?.color || '#0f172a', color: 'white', fontFamily: 'sans-serif', transition: 'background-color 0.5s' }}>
+        
+        {/* 상단 팀 정보 바 */}
+        <div style={{ padding: '20px', backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{student.name}</div>
+          <div style={{ fontSize: '24px', fontWeight: '900' }}>{myTeam?.name}</div>
+        </div>
+
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           
-          <form onSubmit={handleSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <input 
-              type="text" 
-              value={answer} 
-              onChange={(e) => setAnswer(e.target.value)}
-              disabled={isCorrect === true}
-              autoFocus
-              placeholder="스펠링 입력..."
-              style={{ width: '100%', padding: '20px', fontSize: '30px', borderRadius: '16px', border: 'none', textAlign: 'center', fontWeight: '900', outline: 'none', color: '#111', textTransform: 'lowercase' }}
-            />
-            
-            <button 
-              type="submit" 
-              disabled={isCorrect === true}
-              style={{ width: '100%', padding: '20px', fontSize: '24px', fontWeight: '900', borderRadius: '16px', border: 'none', backgroundColor: isCorrect ? '#4ade80' : 'white', color: isCorrect ? 'white' : '#111', cursor: isCorrect ? 'default' : 'pointer', transition: 'all 0.2s' }}
-            >
-              {isCorrect === true ? '✅ 정답입니다! (다음 문제 대기)' : (isCorrect === false ? '❌ 틀렸습니다! 다시!' : '🚀 정답 발사!')}
-            </button>
-          </form>
-        </div>
-      )}
+          {hasSubmitted ? (
+            // 제출 완료 후 대기 화면
+            <div style={{ textAlign: 'center', animation: 'popUp 0.3s ease-out' }}>
+              <div style={{ fontSize: '80px', marginBottom: '20px' }}>⏳</div>
+              <h2 style={{ fontSize: '28px', fontWeight: '900' }}>정답 제출 완료!</h2>
+              <p style={{ fontSize: '18px', color: 'rgba(255,255,255,0.8)' }}>TV 화면의 결과를 확인하세요!</p>
+            </div>
+          ) : (
+            // 💡 아직 제출 전: 게임 모드에 따른 화면 변신!
+            <div style={{ width: '100%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              
+              <div style={{ fontSize: '24px', fontWeight: '900', textAlign: 'center', marginBottom: '10px' }}>
+                {gameMode === 'ox' ? '정답을 선택하세요!' : '영어 스펠링을 입력하세요!'}
+              </div>
 
-      {/* 3. 결과 발표 상태 */}
-      {roomStatus === 'result' && (
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '80px', marginBottom: '20px' }}>🏆</div>
-          <h1 style={{ fontSize: '32px', fontWeight: '900' }}>게임 종료!</h1>
-          <p style={{ fontSize: '20px' }}>TV 화면에서 최종 우승팀을 확인하세요!</p>
-          <button onClick={onBack} style={{ marginTop: '40px', padding: '15px 30px', borderRadius: '12px', border: 'none', fontSize: '18px', fontWeight: 'bold' }}>메인 화면으로</button>
-        </div>
-      )}
+              {/* 모드 1: 타자 / 스크램블 (입력창 제공) */}
+              {(gameMode === 'typing' || gameMode === 'scramble') && (
+                <>
+                  <input 
+                    type="text" 
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    placeholder="여기에 입력하세요"
+                    style={{ width: '100%', padding: '20px', fontSize: '24px', borderRadius: '16px', border: 'none', textAlign: 'center', fontWeight: 'bold', outline: 'none', boxSizing: 'border-box' }}
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                  />
+                  <button 
+                    onClick={() => handleSubmit(inputText)}
+                    style={{ width: '100%', padding: '20px', fontSize: '24px', backgroundColor: '#111', color: 'white', border: 'none', borderRadius: '16px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 8px 0 rgba(0,0,0,0.5)' }}
+                  >
+                    제출하기 🚀
+                  </button>
+                </>
+              )}
 
-      <style>{`
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
-      `}</style>
-    </div>
-  );
+              {/* 모드 2: OX 텔레파시 (대형 O X 버튼 제공) */}
+              {gameMode === 'ox' && (
+                <div style={{ display: 'flex', gap: '15px' }}>
+                  <button onClick={() => handleSubmit('O')} style={{ flex: 1, height: '150px', fontSize: '80px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '24px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 10px 0 #1d4ed8' }}>
+                    O
+                  </button>
+                  <button onClick={() => handleSubmit('X')} style={{ flex: 1, height: '150px', fontSize: '80px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '24px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 10px 0 #b91c1c' }}>
+                    X
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+        </div>
+        <style>{`@keyframes popUp { 0% { transform: scale(0.5); opacity: 0; } 50% { transform: scale(1.1); } 100% { transform: scale(1); opacity: 1; } }`}</style>
+      </div>
+    );
+  }
+
+  // 💡 라운드 종료 및 최종 결과 화면 (공통 대기)
+  if (roomData.status === 'round_end' || roomData.status === 'result') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: myTeam?.color || '#0f172a', color: 'white', fontFamily: 'sans-serif' }}>
+        <div style={{ fontSize: '80px', marginBottom: '20px', animation: 'bounce 1s infinite' }}>👀</div>
+        <h2 style={{ fontSize: '32px', fontWeight: '900', textAlign: 'center' }}>
+          {roomData.status === 'round_end' ? '라운드 종료!' : '게임 종료!'}
+        </h2>
+        <p style={{ fontSize: '20px', color: 'rgba(255,255,255,0.8)', marginTop: '10px' }}>TV 화면을 주목해주세요!</p>
+        <style>{`@keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-20px); } }`}</style>
+      </div>
+    );
+  }
+
+  return null;
 }
