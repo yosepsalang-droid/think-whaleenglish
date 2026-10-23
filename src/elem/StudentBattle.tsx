@@ -14,7 +14,6 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
   const [inputText, setInputText] = useState('');
   const [hasSubmitted, setHasSubmitted] = useState(false); 
 
-  // 💡 [핵심 버그 해결] 화면이 제멋대로 리셋되는 것을 막기 위해, '상태/라운드/페이즈/턴' 중 하나가 진짜로 바뀔 때만 잠금을 풀어줍니다!
   const currentStatus = roomData?.status;
   const questionIndex = roomData?.game_data?.questionIndex;
   const sniperPhase = roomData?.game_data?.sniperPhase;
@@ -50,7 +49,6 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
           const team = newData.game_data.teams.find((t: any) => t.id === me.teamId);
           setMyTeam(team);
         }
-        // 🚫 툭하면 화면을 리셋하던 주범 코드를 삭제했습니다!
       })
       .subscribe();
 
@@ -90,11 +88,12 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
     });
   };
 
+  // 💡 [핵심] 학생이 번호를 누르면 main_room_host 채널을 통해 교사 화면으로 즉시 쏩니다.
   const handleSniperAction = async (num: number, actionType: 'hide_number' | 'snipe_number') => {
     if (hasSubmitted) return;
     setHasSubmitted(true); 
     
-    await supabase.channel('sniper_host_listener').send({
+    await supabase.channel('main_room_host').send({
       type: 'broadcast',
       event: actionType,
       payload: { studentId, studentName, number: num }
@@ -229,10 +228,18 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
               </div>
             )}
 
-            {(phase === 'shooting' || phase === 'game_over') && (
+            {phase === 'shooting' && (
               <div style={{ textAlign: 'center', marginTop: '50px', animation: 'popUp 0.3s ease-out' }}>
                 <div style={{ fontSize: '80px', marginBottom: '20px' }}>💥</div>
                 <h2 style={{ fontSize: '28px', fontWeight: '900' }}>저격 결과 확인 중!</h2>
+              </div>
+            )}
+
+            {phase === 'game_over' && (
+              <div style={{ textAlign: 'center', marginTop: '50px', animation: 'popUp 0.3s ease-out' }}>
+                <div style={{ fontSize: '80px', marginBottom: '20px' }}>🏆</div>
+                <h2 style={{ fontSize: '28px', fontWeight: '900' }}>게임 종료!</h2>
+                <p style={{ fontSize: '18px', color: 'rgba(255,255,255,0.8)', marginTop: '10px' }}>TV 화면에서 최종 우승팀을 확인하세요!</p>
               </div>
             )}
           </div>

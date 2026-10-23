@@ -29,7 +29,6 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
   const [lastShot, setLastShot] = useState<{ shooter: string, number: number, hits: string[] } | null>(null);
   const [winnerTeam, setWinnerTeam] = useState<Team | null>(null);
   
-  // 💡 [준비 완료 인원 화면 표시용 상태]
   const [readyCount, setReadyCount] = useState(0);
 
   const phaseRef = useRef(phase);
@@ -44,7 +43,7 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
   useEffect(() => { alivePlayersRef.current = alivePlayers; }, [alivePlayers]);
   useEffect(() => { currentTurnRef.current = currentTurn; }, [currentTurn]);
 
-  // 1. 게임 초기 세팅 및 안테나 장착
+  // 1. 게임 초기 세팅 및 통합 수신 안테나 장착 (main_room_host 단일화)
   useEffect(() => {
     const initGame = async () => {
       const initialAlive = players.map(p => p.student_id);
@@ -68,14 +67,13 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
     };
     initGame();
 
-    const channel = supabase.channel('sniper_host_listener')
+    // 💡 [핵심 해결] 학생들과 통신하는 채널명을 main_room_host로 통일하여 신호 누락을 원천 차단합니다.
+    const channel = supabase.channel('main_room_host')
       .on('broadcast', { event: 'hide_number' }, ({ payload }) => {
-        // 💡 [핵심 해결] 학생이 번호를 숨기면 즉시 기록하고 카운트를 화면에 반영합니다!
         secretNumbersRef.current[payload.studentId] = payload.number;
         const currentReady = Object.keys(secretNumbersRef.current).length;
         setReadyCount(currentReady);
 
-        // 만약 모든 생존자가 숫자를 다 숨겼다면 타이머를 기다리지 않고 즉시 저격 모드로 돌입!
         if (phaseRef.current === 'hiding' && currentReady >= alivePlayersRef.current.length) {
           startSnipingRound(alivePlayersRef.current);
         }
@@ -95,7 +93,6 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
         const timer = setTimeout(() => setTimeLeft(prev => prev - 1), 1000);
         return () => clearTimeout(timer);
       } else {
-        // 시간 초과 시 안 고른 아이들은 랜덤 할당 후 시작
         alivePlayers.forEach(id => {
           if (!secretNumbersRef.current[id]) {
             secretNumbersRef.current[id] = Math.floor(Math.random() * maxNumber) + 1;
