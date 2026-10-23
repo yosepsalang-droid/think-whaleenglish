@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-// 💡 방금 만든 넘버 스나이퍼 컴포넌트 불러오기
 import NumberSniper from './NumberSniper'; 
 
 interface TeamBattleProps {
@@ -26,9 +25,66 @@ interface Question {
   kor: string;
 }
 
+// 💡 [통합 사운드 엔진]
+const playSFX = (type: 'tick' | 'urgent' | 'correct' | 'timeout' | 'victory') => {
+  const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+  if (!AudioContext) return;
+  const ctx = new AudioContext();
+  const gain = ctx.createGain();
+  gain.connect(ctx.destination);
+
+  if (type === 'tick') {
+    const osc = ctx.createOscillator();
+    osc.connect(gain);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(400, ctx.currentTime);
+    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+    osc.start(); osc.stop(ctx.currentTime + 0.1);
+  } else if (type === 'urgent') {
+    const osc = ctx.createOscillator();
+    osc.connect(gain);
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(800, ctx.currentTime);
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+    osc.start(); osc.stop(ctx.currentTime + 0.1);
+  } else if (type === 'correct') {
+    const osc = ctx.createOscillator();
+    osc.connect(gain);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(600, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.1);
+    gain.gain.setValueAtTime(0.2, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+    osc.start(); osc.stop(ctx.currentTime + 0.3);
+  } else if (type === 'timeout') {
+    const osc = ctx.createOscillator();
+    osc.connect(gain);
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(150, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(50, ctx.currentTime + 0.5);
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+    osc.start(); osc.stop(ctx.currentTime + 0.5);
+  } else if (type === 'victory') {
+    const playNote = (freq: number, startTime: number, duration: number) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'triangle'; o.frequency.value = freq;
+      o.connect(g); g.connect(ctx.destination);
+      g.gain.setValueAtTime(0.2, startTime);
+      g.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+      o.start(startTime); o.stop(startTime + duration);
+    };
+    const now = ctx.currentTime;
+    playNote(440, now, 0.2); playNote(554.37, now + 0.2, 0.2);
+    playNote(659.25, now + 0.4, 0.4); playNote(880, now + 0.8, 0.8);
+  }
+};
+
 export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattleProps) {
   const [roomStatus, setRoomStatus] = useState<'closed' | 'waiting' | 'playing' | 'round_end' | 'result'>('closed');
-  
   const [allWords, setAllWords] = useState<Question[]>([]);
   const [books, setBooks] = useState<string[]>([]);
   
@@ -52,20 +108,20 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
   const submitCountRef = useRef(0);
   const playerCountRef = useRef(0);
 
+  // 💡 [추가] 라운드 정답자 명단 보관
+  const [roundWinners, setRoundWinners] = useState<string[]>([]);
+
   const TEAM_COLORS = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'];
   const TEAM_NAMES = ['레드 드래곤', '블루 샤크', '그린 타이거', '옐로우 라이온', '퍼플 울프'];
 
-  useEffect(() => {
-    playerCountRef.current = joinedPlayers.length;
-  }, [joinedPlayers]);
+  useEffect(() => { playerCountRef.current = joinedPlayers.length; }, [joinedPlayers]);
 
   useEffect(() => {
     const fetchWords = async () => {
       const { data } = await supabase.from(tableName).select('book, eng, kor');
       if (data) {
         setAllWords(data);
-        const uniqueBooks = Array.from(new Set(data.map(w => w.book))).sort() as string[];
-        setBooks(uniqueBooks);
+        setBooks(Array.from(new Set(data.map(w => w.book))).sort() as string[]);
       }
     };
     fetchWords();
@@ -85,8 +141,14 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
         submitCountRef.current += 1; 
         
         if (payload.isCorrect) {
+          playSFX('correct'); // 정답 실시간 사운드
           roundScoresRef.current[payload.teamId] = (roundScoresRef.current[payload.teamId] || 0) + 1;
           setRoundScores({ ...roundScoresRef.current }); 
+          
+          // 💡 [추가] 정답자 명단에 실시간 등록
+          if (payload.studentName) {
+            setRoundWinners(prev => [...prev, payload.studentName]);
+          }
         }
 
         if (submitCountRef.current >= playerCountRef.current && playerCountRef.current > 0) {
@@ -101,62 +163,52 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
     };
   }, [gameMode]);
 
+  // 💡 [타이머 사운드 연출]
   useEffect(() => {
     if (gameMode === 'sniper') return; 
+    
     if (roomStatus === 'playing' && timeLeft > 0) {
+      if (timeLeft <= 5) playSFX('urgent'); // 5초 이하면 긴장되는 소리
+      else playSFX('tick'); // 평소엔 똑딱 소리
+      
       const timer = setTimeout(() => setTimeLeft(prev => prev - 1), 1000);
       return () => clearTimeout(timer);
     } else if (roomStatus === 'playing' && timeLeft === 0) {
+      playSFX('timeout');
       handleRoundEnd(); 
     }
   }, [roomStatus, timeLeft, gameMode]);
 
   const handleOpenRoom = async () => {
     if (gameMode !== 'sniper' && !selectedBook) return alert("게임을 진행할 교재를 먼저 선택해주세요!");
-
     if (gameMode !== 'sniper') {
       let targetWords = selectedBook === 'random' 
         ? [...allWords].sort(() => Math.random() - 0.5).slice(0, 30)
         : allWords.filter(w => (w as any).book === selectedBook).sort(() => Math.random() - 0.5).slice(0, 30);
-      
       if (targetWords.length === 0) return alert("해당 교재에 단어가 없습니다.");
       setQuestions(targetWords);
     }
-    
     setCurrentIndex(0);
-
     await supabase.from('game_rooms').update({ 
-      status: 'waiting', 
-      players: [],
-      settings: { teamCount, book: selectedBook, gameMode, winScore, sniperRange }
+      status: 'waiting', players: [], settings: { teamCount, book: selectedBook, gameMode, winScore, sniperRange }
     }).eq('id', 'main_room');
-
     setRoomStatus('waiting');
   };
 
   const handleStartGame = async () => {
     if (joinedPlayers.length < teamCount) return alert(`최소 ${teamCount}명 이상의 학생이 접속해야 합니다!`);
-
     const initialTeams: Team[] = Array.from({ length: teamCount }).map((_, i) => ({
       id: i + 1, name: TEAM_NAMES[i], color: TEAM_COLORS[i], score: 0
     }));
-
-    const shuffledPlayers = [...joinedPlayers].sort(() => Math.random() - 0.5);
-    const assignedPlayers = shuffledPlayers.map((p, index) => ({
-      ...p,
-      teamId: initialTeams[index % teamCount].id
+    const assignedPlayers = [...joinedPlayers].sort(() => Math.random() - 0.5).map((p, index) => ({
+      ...p, teamId: initialTeams[index % teamCount].id
     }));
-
     setTeams(initialTeams);
     setJoinedPlayers(assignedPlayers);
 
     if (gameMode === 'sniper') {
       setRoomStatus('playing');
-      await supabase.from('game_rooms').update({ 
-        status: 'playing',
-        players: assignedPlayers,
-        game_data: { teams: initialTeams, gameMode }
-      }).eq('id', 'main_room');
+      await supabase.from('game_rooms').update({ status: 'playing', players: assignedPlayers, game_data: { teams: initialTeams, gameMode } }).eq('id', 'main_room');
     } else {
       startNewRound(0, initialTeams, assignedPlayers);
     }
@@ -166,6 +218,7 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
     roundScoresRef.current = {}; 
     submitCountRef.current = 0; 
     setRoundScores({});
+    setRoundWinners([]); // 매 라운드 명단 초기화
     setTimeLeft(15); 
     setCurrentIndex(index);
     setRoomStatus('playing');
@@ -174,26 +227,16 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
     let displayKor = questions[index]?.kor || '';
 
     if (gameMode === 'ox') {
-      if (Math.random() > 0.5) {
-        oxAnswer = 'O'; 
-      } else {
+      if (Math.random() > 0.5) oxAnswer = 'O'; 
+      else {
         oxAnswer = 'X'; 
-        const randomWrong = allWords[Math.floor(Math.random() * allWords.length)].kor;
-        displayKor = randomWrong;
+        displayKor = allWords[Math.floor(Math.random() * allWords.length)].kor;
       }
     }
     setCurrentOxData({ displayKor, oxAnswer });
 
     await supabase.from('game_rooms').update({ 
-      status: 'playing',
-      players: currentPlayers,
-      game_data: { 
-        teams: currentTeams, 
-        currentQuestion: questions[index], 
-        questionIndex: index,
-        gameMode,
-        oxAnswer 
-      }
+      status: 'playing', players: currentPlayers, game_data: { teams: currentTeams, currentQuestion: questions[index], questionIndex: index, gameMode, oxAnswer }
     }).eq('id', 'main_room');
   };
 
@@ -226,25 +269,20 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
     setRoomStatus('round_end');
 
     await supabase.from('game_rooms').update({ 
-      status: 'round_end',
-      game_data: { 
-        teams: updatedTeams, 
-        currentQuestion: questions[currentIndex], 
-        gameMode,
-        roundResultText: resultText
-      }
+      status: 'round_end', game_data: { teams: updatedTeams, currentQuestion: questions[currentIndex], gameMode, roundResultText: resultText }
     }).eq('id', 'main_room');
   };
 
   const handleNextRoundAction = async () => {
     const isGameOver = teams.some(t => t.score >= winScore);
-    
     if (isGameOver) {
+      playSFX('victory');
       setRoomStatus('result');
       await supabase.from('game_rooms').update({ status: 'result' }).eq('id', 'main_room');
     } else if (currentIndex + 1 < questions.length) {
       startNewRound(currentIndex + 1);
     } else {
+      playSFX('victory');
       setRoomStatus('result');
       await supabase.from('game_rooms').update({ status: 'result' }).eq('id', 'main_room');
     }
@@ -325,7 +363,6 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
           <p style={{ fontSize: '20px', color: '#94a3b8', marginBottom: '30px' }}>
             선택된 게임: {gameMode === 'sniper' ? `🎯 넘버 스나이퍼 (1~${sniperRange})` : gameMode === 'ox' ? '⭕❌ OX 텔레파시' : '영어 배틀'}
           </p>
-
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', justifyContent: 'center', width: '900px', minHeight: '250px', backgroundColor: 'rgba(255,255,255,0.05)', padding: '30px', borderRadius: '24px' }}>
             {joinedPlayers.length === 0 ? (
               <div style={{ fontSize: '24px', color: '#64748b', display: 'flex', alignItems: 'center' }}>학생들의 접속을 기다리는 중... ⏳</div>
@@ -335,7 +372,6 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
               ))
             )}
           </div>
-
           <div style={{ marginTop: '40px', display: 'flex', gap: '20px', alignItems: 'center' }}>
             <div style={{ fontSize: '24px', fontWeight: 'bold' }}>현재 인원: <span style={{ color: '#fde047', fontSize: '32px' }}>{joinedPlayers.length}</span>명</div>
             <button onClick={handleStartGame} style={{ marginLeft: '30px', padding: '20px 50px', fontSize: '28px', fontWeight: '900', backgroundColor: '#ec4899', color: 'white', border: 'none', borderRadius: '20px', cursor: 'pointer', boxShadow: '0 8px 0 #be185d' }}>배틀 시작! 🚀</button>
@@ -343,17 +379,11 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
         </div>
       )}
 
-      {/* 💡 넘버 스나이퍼 모드일 때만 외부 컴포넌트 렌더링 */}
       {roomStatus === 'playing' && gameMode === 'sniper' && (
-        <NumberSniper 
-          teams={teams} 
-          players={joinedPlayers} 
-          maxNumber={sniperRange}
-          onGameEnd={handleForceClose}
-        />
+        <NumberSniper teams={teams} players={joinedPlayers} maxNumber={sniperRange} onGameEnd={handleForceClose} />
       )}
 
-      {/* 기존 영어 게임용 플레이 화면 */}
+      {/* 💡 [UI 겹침 완벽 해결] flex gap을 주어 요소 간 간격을 강제하고 마진을 초기화했습니다. */}
       {roomStatus === 'playing' && gameMode !== 'sniper' && (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           
@@ -373,73 +403,82 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
             ))}
           </div>
 
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '40px' }}>
-            <div style={{ fontSize: '120px', fontWeight: '900', color: timeLeft <= 5 ? '#ef4444' : '#fde047', textShadow: '0 10px 30px rgba(0,0,0,0.5)', animation: timeLeft <= 5 ? 'pulse 0.5s infinite' : 'none', marginBottom: '20px' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '40px', gap: '40px' }}>
+            <div style={{ fontSize: '140px', fontWeight: '900', color: timeLeft <= 5 ? '#ef4444' : '#fde047', textShadow: '0 10px 30px rgba(0,0,0,0.5)', margin: 0, lineHeight: 1, animation: timeLeft <= 5 ? 'shake 0.3s infinite' : 'none' }}>
               ⏳ {timeLeft}초
             </div>
             
-            <div style={{ textAlign: 'center' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
               {gameMode === 'typing' && (
                 <>
-                  <div style={{ fontSize: '32px', color: '#94a3b8', marginBottom: '20px' }}>아래 뜻을 보고 영어 단어를 입력하세요!</div>
-                  <div style={{ fontSize: '100px', fontWeight: '900', color: 'white' }}>{questions[currentIndex]?.kor}</div>
+                  <div style={{ fontSize: '36px', color: '#94a3b8', margin: 0, lineHeight: 1 }}>아래 뜻을 보고 영어 단어를 입력하세요!</div>
+                  <div style={{ fontSize: '100px', fontWeight: '900', color: 'white', margin: 0, lineHeight: 1 }}>{questions[currentIndex]?.kor}</div>
                 </>
               )}
               {gameMode === 'scramble' && (
                 <>
-                  <div style={{ fontSize: '32px', color: '#94a3b8', marginBottom: '20px' }}>알파벳을 조합하여 올바른 단어를 만드세요!</div>
-                  <div style={{ fontSize: '100px', fontWeight: '900', color: 'white', letterSpacing: '10px' }}>
+                  <div style={{ fontSize: '36px', color: '#94a3b8', margin: 0, lineHeight: 1 }}>알파벳을 조합하여 올바른 단어를 만드세요!</div>
+                  <div style={{ fontSize: '100px', fontWeight: '900', color: 'white', letterSpacing: '15px', margin: 0, lineHeight: 1 }}>
                     {questions[currentIndex]?.eng.split('').sort(() => Math.random() - 0.5).join(' ')}
                   </div>
-                  <div style={{ fontSize: '40px', color: '#4ade80', marginTop: '20px' }}>({questions[currentIndex]?.kor})</div>
+                  <div style={{ fontSize: '40px', color: '#4ade80', margin: 0, lineHeight: 1 }}>({questions[currentIndex]?.kor})</div>
                 </>
               )}
               {gameMode === 'ox' && (
                 <>
-                  <div style={{ fontSize: '32px', color: '#94a3b8', marginBottom: '20px' }}>단어와 뜻이 올바르게 짝지어졌나요?</div>
-                  <div style={{ fontSize: '100px', fontWeight: '900', color: 'white' }}>{questions[currentIndex]?.eng}</div>
-                  <div style={{ fontSize: '60px', color: '#fde047', marginTop: '20px' }}>뜻 : {currentOxData.displayKor}</div>
+                  <div style={{ fontSize: '36px', color: '#94a3b8', margin: 0, lineHeight: 1 }}>단어와 뜻이 올바르게 짝지어졌나요?</div>
+                  <div style={{ fontSize: '100px', fontWeight: '900', color: 'white', margin: 0, lineHeight: 1 }}>{questions[currentIndex]?.eng}</div>
+                  <div style={{ fontSize: '70px', color: '#fde047', margin: 0, lineHeight: 1 }}>뜻 : {currentOxData.displayKor}</div>
                 </>
               )}
             </div>
+
+            {/* 💡 [실시간 영웅 출력] 쏜살같이 맞힌 아이들 칭찬하기 */}
+            {roundWinners.length > 0 && (
+              <div style={{ fontSize: '32px', color: '#4ade80', fontWeight: 'bold', padding: '15px 30px', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '20px', animation: 'popUp 0.3s ease-out' }}>
+                🎉 현재 정답자: {roundWinners.join(', ')}
+              </div>
+            )}
           </div>
         </div>
       )}
 
+      {/* 💡 [UI 겹침 해결] 라운드 종료 화면 간격 조정 */}
       {roomStatus === 'round_end' && gameMode !== 'sniper' && (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '40px' }}>
-          <h1 style={{ fontSize: '50px', color: '#f59e0b', fontWeight: '900', marginBottom: '20px' }}>라운드 종료!</h1>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '40px', gap: '30px' }}>
+          <h1 style={{ fontSize: '60px', color: '#f59e0b', fontWeight: '900', margin: 0, lineHeight: 1 }}>라운드 종료!</h1>
           
           {gameMode === 'ox' ? (
-            <>
-              <div style={{ fontSize: '40px', color: '#94a3b8', marginBottom: '10px' }}>정답은?</div>
-              <div style={{ fontSize: '60px', fontWeight: '900', color: currentOxData.oxAnswer === 'O' ? '#4ade80' : '#ef4444', marginBottom: '40px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px' }}>
+              <div style={{ fontSize: '40px', color: '#94a3b8', margin: 0, lineHeight: 1 }}>정답은?</div>
+              <div style={{ fontSize: '60px', fontWeight: '900', color: currentOxData.oxAnswer === 'O' ? '#4ade80' : '#ef4444', margin: 0, lineHeight: 1 }}>
                 {currentOxData.oxAnswer === 'O' ? '⭕ 올바른 뜻이었습니다!' : `❌ 틀린 뜻이었습니다! (진짜 뜻: ${questions[currentIndex]?.kor})`}
               </div>
-            </>
+            </div>
           ) : (
-            <>
-              <div style={{ fontSize: '40px', color: '#94a3b8', marginBottom: '10px' }}>정답은?</div>
-              <div style={{ fontSize: '100px', fontWeight: '900', color: '#4ade80', marginBottom: '40px', letterSpacing: '5px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px' }}>
+              <div style={{ fontSize: '40px', color: '#94a3b8', margin: 0, lineHeight: 1 }}>정답은?</div>
+              <div style={{ fontSize: '100px', fontWeight: '900', color: '#4ade80', margin: 0, lineHeight: 1, letterSpacing: '5px' }}>
                 {questions[currentIndex]?.eng}
               </div>
-            </>
+            </div>
           )}
 
-          <div style={{ fontSize: '50px', fontWeight: '900', color: 'white', backgroundColor: 'rgba(255,255,255,0.1)', padding: '30px 60px', borderRadius: '30px', animation: 'popUp 0.5s ease-out' }}>
+          <div style={{ fontSize: '50px', fontWeight: '900', color: 'white', backgroundColor: 'rgba(255,255,255,0.1)', padding: '30px 60px', borderRadius: '30px', animation: 'popUp 0.5s ease-out', margin: 0 }}>
             {roundResultText}
           </div>
 
-          <button onClick={handleNextRoundAction} style={{ marginTop: '60px', padding: '20px 60px', fontSize: '28px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '16px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 8px 0 #1d4ed8' }}>
+          <button onClick={handleNextRoundAction} style={{ marginTop: '20px', padding: '20px 60px', fontSize: '28px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '16px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 8px 0 #1d4ed8' }}>
             {teams.some(t => t.score >= winScore) ? '최종 결과 발표 보기 🏆' : '다음 라운드 준비 ⏭️'}
           </button>
         </div>
       )}
 
+      {/* 💡 [UI 겹침 해결] 최종 결과 화면 간격 조정 */}
       {roomStatus === 'result' && gameMode !== 'sniper' && (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
-          <div style={{ fontSize: '100px', marginBottom: '20px', animation: 'bounce 1s infinite' }}>🎉</div>
-          <h1 style={{ fontSize: '60px', fontWeight: '900', color: '#fde047', marginBottom: '50px' }}>최종 우승팀 탄생!</h1>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '40px' }}>
+          <div style={{ fontSize: '120px', animation: 'bounce 1s infinite', margin: 0, lineHeight: 1 }}>🎉</div>
+          <h1 style={{ fontSize: '70px', fontWeight: '900', color: '#fde047', margin: 0, lineHeight: 1 }}>최종 우승팀 탄생!</h1>
           
           <div style={{ display: 'flex', gap: '30px', alignItems: 'flex-end', height: '350px' }}>
             {[...teams].sort((a, b) => b.score - a.score).map((team, idx) => (
@@ -453,8 +492,8 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
             ))}
           </div>
 
-          <button onClick={handleForceClose} style={{ marginTop: '60px', padding: '20px 50px', fontSize: '28px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '16px', fontWeight: '900', cursor: 'pointer' }}>
-            대기실 닫기 및 메인으로
+          <button onClick={handleForceClose} style={{ padding: '20px 50px', fontSize: '28px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '16px', fontWeight: '900', cursor: 'pointer' }}>
+            대기실 닫기 및 메인으로 🏠
           </button>
         </div>
       )}
@@ -462,7 +501,7 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
       <style>{`
         @keyframes popUp { 0% { transform: scale(0.5); opacity: 0; } 50% { transform: scale(1.1); } 100% { transform: scale(1); opacity: 1; } }
         @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-30px); } }
-        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); color: #dc2626; } 100% { transform: scale(1); } }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-10px); } 75% { transform: translateX(10px); } }
       `}</style>
     </div>
   );

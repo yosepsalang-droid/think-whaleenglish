@@ -57,16 +57,14 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
 
   const handleJoinRoom = async () => {
     if (!roomData || roomData.status !== 'waiting') return;
-    
     const isAlreadyJoined = roomData.players?.some((p: any) => p.student_id === studentId);
     if (isAlreadyJoined) return;
-
     const newPlayer = { student_id: studentId, name: studentName };
     const updatedPlayers = [...(roomData.players || []), newPlayer];
-
     await supabase.from('game_rooms').update({ players: updatedPlayers }).eq('id', 'main_room');
   };
 
+  // 💡 [핵심 업데이트] 정답을 제출할 때 TV로 내 이름을 당당하게 쏴줍니다!
   const handleEnglishSubmit = async (answer: string) => {
     if (hasSubmitted || !myTeam || !roomData?.game_data?.currentQuestion) return;
     setHasSubmitted(true);
@@ -84,15 +82,13 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
     await supabase.channel('main_room_host').send({
       type: 'broadcast',
       event: 'submit_answer',
-      payload: { isCorrect, teamId: myTeam.id }
+      payload: { isCorrect, teamId: myTeam.id, studentName } // <-- 이름 추가!
     });
   };
 
-  // 💡 [핵심] 학생이 번호를 누르면 main_room_host 채널을 통해 교사 화면으로 즉시 쏩니다.
   const handleSniperAction = async (num: number, actionType: 'hide_number' | 'snipe_number') => {
     if (hasSubmitted) return;
     setHasSubmitted(true); 
-    
     await supabase.channel('main_room_host').send({
       type: 'broadcast',
       event: actionType,
@@ -102,18 +98,13 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
 
   const renderNumberGrid = (maxNum: number, onClick: (num: number) => void, disabledNumbers: number[] = [], forceDisableAll: boolean = false) => {
     const numbers = Array.from({ length: maxNum }, (_, i) => i + 1);
-    
     return (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px', width: '100%', maxWidth: '500px', maxHeight: '55vh', overflowY: 'auto', padding: '10px' }}>
         {numbers.map(num => {
           const isAlreadyShot = disabledNumbers.includes(num); 
           const isDisabled = forceDisableAll || isAlreadyShot; 
-
           return (
-            <button
-              key={num}
-              disabled={isDisabled}
-              onClick={() => onClick(num)}
+            <button key={num} disabled={isDisabled} onClick={() => onClick(num)}
               style={{
                 padding: '12px 0', fontSize: '20px', fontWeight: '900',
                 backgroundColor: isAlreadyShot ? '#1e293b' : (forceDisableAll ? '#94a3b8' : 'white'),
@@ -123,8 +114,7 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
                 boxShadow: isDisabled ? 'none' : '0 4px 0 rgba(0,0,0,0.2)',
                 opacity: isAlreadyShot ? 0.3 : (forceDisableAll ? 0.7 : 1),
                 transition: 'all 0.2s'
-              }}
-            >
+              }}>
               {num}
             </button>
           );
@@ -169,10 +159,8 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
 
     if (gameMode === 'sniper') {
       const phase = roomData.game_data.sniperPhase || 'hiding';
-      
       const alivePlayers = roomData.game_data.alivePlayers;
       const isAlive = alivePlayers ? alivePlayers.includes(studentId) : true;
-      
       const maxNum = roomData.game_data.maxNumber || 40;
       const isMyTurn = roomData.game_data.currentTurn === studentId;
       const shotNumbers = roomData.game_data.shotNumbers || []; 
@@ -195,7 +183,6 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
           </div>
 
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 10px' }}>
-            
             {phase === 'hiding' && (
               <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
                 {hasSubmitted ? (
@@ -211,7 +198,6 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
                 )}
               </div>
             )}
-
             {phase === 'sniping' && (
               <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
                 {isMyTurn ? (
@@ -227,19 +213,10 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
                 )}
               </div>
             )}
-
-            {phase === 'shooting' && (
+            {(phase === 'shooting' || phase === 'game_over') && (
               <div style={{ textAlign: 'center', marginTop: '50px', animation: 'popUp 0.3s ease-out' }}>
                 <div style={{ fontSize: '80px', marginBottom: '20px' }}>💥</div>
                 <h2 style={{ fontSize: '28px', fontWeight: '900' }}>저격 결과 확인 중!</h2>
-              </div>
-            )}
-
-            {phase === 'game_over' && (
-              <div style={{ textAlign: 'center', marginTop: '50px', animation: 'popUp 0.3s ease-out' }}>
-                <div style={{ fontSize: '80px', marginBottom: '20px' }}>🏆</div>
-                <h2 style={{ fontSize: '28px', fontWeight: '900' }}>게임 종료!</h2>
-                <p style={{ fontSize: '18px', color: 'rgba(255,255,255,0.8)', marginTop: '10px' }}>TV 화면에서 최종 우승팀을 확인하세요!</p>
               </div>
             )}
           </div>
