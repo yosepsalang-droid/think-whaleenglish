@@ -21,13 +21,71 @@ interface NumberSniperProps {
   onGameEnd: () => void;
 }
 
+// 💡 [사운드 엔진] 별도의 파일 없이 브라우저 내장 오디오를 사용해 효과음을 만듭니다!
+const playSFX = (type: 'shoot' | 'hit' | 'miss' | 'victory') => {
+  const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+  if (!AudioContext) return;
+  const ctx = new AudioContext();
+  const gain = ctx.createGain();
+  gain.connect(ctx.destination);
+
+  if (type === 'shoot') {
+    const osc = ctx.createOscillator();
+    osc.connect(gain);
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(800, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.2);
+    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.2);
+  } else if (type === 'hit') {
+    const osc = ctx.createOscillator();
+    osc.connect(gain);
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(150, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(40, ctx.currentTime + 0.4);
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.4);
+  } else if (type === 'miss') {
+    const osc = ctx.createOscillator();
+    osc.connect(gain);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(400, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.3);
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.3);
+  } else if (type === 'victory') {
+    const playNote = (freq: number, startTime: number, duration: number) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'triangle';
+      o.frequency.value = freq;
+      o.connect(g);
+      g.connect(ctx.destination);
+      g.gain.setValueAtTime(0.2, startTime);
+      g.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+      o.start(startTime);
+      o.stop(startTime + duration);
+    };
+    const now = ctx.currentTime;
+    playNote(440, now, 0.2);     // 빰
+    playNote(554.37, now + 0.2, 0.2); // 빠
+    playNote(659.25, now + 0.4, 0.4); // 바
+    playNote(880, now + 0.8, 0.8);    // 밤!
+  }
+};
+
 export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: NumberSniperProps) {
   const [phase, setPhase] = useState<'init' | 'hiding' | 'sniping' | 'shooting' | 'game_over'>('init');
   const [alivePlayers, setAlivePlayers] = useState<string[]>(players.map(p => p.student_id));
   const [timeLeft, setTimeLeft] = useState(10);
   const [currentTurn, setCurrentTurn] = useState<string | null>(null);
   
-  // 💡 [추가] 저격 결과 (맞은 사람 이름들 포함)
   const [lastShot, setLastShot] = useState<{ shooter: string, number: number, hits: string[], hitNames: string[] } | null>(null);
   const [winnerTeam, setWinnerTeam] = useState<Team | null>(null);
   const [readyCount, setReadyCount] = useState(0);
@@ -37,15 +95,28 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
   const currentTurnRef = useRef(currentTurn);
   
   const secretNumbersRef = useRef<Record<string, number>>({});
-  const turnQueueRef = useRef<string[]>([]); // 고정 턴 순서 배열
-  const turnIndexRef = useRef(0); // 현재 몇 번째 사람 차례인지 인덱스
+  const turnQueueRef = useRef<string[]>([]);
+  const turnIndexRef = useRef(0); 
   const shotNumbersRef = useRef<number[]>([]);
 
   useEffect(() => { phaseRef.current = phase; }, [phase]);
   useEffect(() => { alivePlayersRef.current = alivePlayers; }, [alivePlayers]);
   useEffect(() => { currentTurnRef.current = currentTurn; }, [currentTurn]);
 
-  // 1. 게임 초기 세팅
+  // 💡 [사운드 재생 로직] 화면 상태가 바뀔 때 효과음을 쏴줍니다!
+  useEffect(() => {
+    if (phase === 'shooting' && lastShot) {
+      playSFX('shoot'); // 발사음
+      const timer = setTimeout(() => {
+        if (lastShot.hits.length > 0) playSFX('hit'); // 명중음
+        else playSFX('miss'); // 빗나감 음
+      }, 300); // 0.3초 뒤에 결과음 재생
+      return () => clearTimeout(timer);
+    } else if (phase === 'game_over') {
+      playSFX('victory'); // 승리 팡파르
+    }
+  }, [phase, lastShot]);
+
   useEffect(() => {
     const initGame = async () => {
       const initialAlive = players.map(p => p.student_id);
@@ -54,14 +125,7 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
       setReadyCount(0);
       
       await supabase.from('game_rooms').update({ 
-        game_data: { 
-          gameMode: 'sniper',
-          sniperPhase: 'hiding', 
-          maxNumber,
-          teams,
-          alivePlayers: initialAlive,
-          shotNumbers: []
-        } 
+        game_data: { gameMode: 'sniper', sniperPhase: 'hiding', maxNumber, teams, alivePlayers: initialAlive, shotNumbers: [] } 
       }).eq('id', 'main_room');
       
       setPhase('hiding');
@@ -87,7 +151,6 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
     return () => { supabase.removeChannel(channel); };
   }, [maxNumber, players, teams]);
 
-  // 2. 10초 타이머
   useEffect(() => {
     if (phase === 'hiding') {
       if (timeLeft > 0) {
@@ -104,36 +167,22 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
     }
   }, [phase, timeLeft, alivePlayers, maxNumber]);
 
-  // 3. 💡 [고정 턴제 시작] 1-2-3-4 순번 최초 임의 부여
   const startSnipingGame = async (currentAlive: string[]) => {
     if (currentAlive.length === 0) return;
-    
-    // 처음에만 랜덤으로 섞고, 그 순서를 유지합니다 (1-2-3-4 순서 고정)
     const shuffledQueue = [...currentAlive].sort(() => Math.random() - 0.5);
     turnQueueRef.current = shuffledQueue;
     turnIndexRef.current = 0;
-
     const firstTurn = shuffledQueue[0];
     setCurrentTurn(firstTurn);
     setPhase('sniping');
 
     await supabase.from('game_rooms').update({ 
-      game_data: { 
-        gameMode: 'sniper',
-        sniperPhase: 'sniping', 
-        maxNumber, 
-        teams,
-        alivePlayers: currentAlive,
-        currentTurn: firstTurn,
-        shotNumbers: shotNumbersRef.current
-      } 
+      game_data: { gameMode: 'sniper', sniperPhase: 'sniping', maxNumber, teams, alivePlayers: currentAlive, currentTurn: firstTurn, shotNumbers: shotNumbersRef.current } 
     }).eq('id', 'main_room');
   };
 
-  // 4. 저격 판정 (누가 들고 있었는지 이름 추출 포함)
   const handleSnipeShot = async (shooterId: string, shooterName: string, targetNumber: number) => {
     if (phaseRef.current !== 'sniping' || shooterId !== currentTurnRef.current) return;
-    
     setPhase('shooting');
     shotNumbersRef.current.push(targetNumber);
 
@@ -149,59 +198,34 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
     });
 
     setLastShot({ shooter: shooterName, number: targetNumber, hits, hitNames });
-
     const newAlivePlayers = alivePlayersRef.current.filter(id => !hits.includes(id));
     setAlivePlayers(newAlivePlayers);
 
     await supabase.from('game_rooms').update({ 
-      game_data: { 
-        gameMode: 'sniper',
-        sniperPhase: 'shooting', 
-        maxNumber, 
-        teams,
-        alivePlayers: newAlivePlayers,
-        lastShot: { shooter: shooterName, number: targetNumber, hitCount: hits.length, hitNames },
-        shotNumbers: shotNumbersRef.current
-      } 
+      game_data: { gameMode: 'sniper', sniperPhase: 'shooting', maxNumber, teams, alivePlayers: newAlivePlayers, lastShot: { shooter: shooterName, number: targetNumber, hitCount: hits.length, hitNames }, shotNumbers: shotNumbersRef.current } 
     }).eq('id', 'main_room');
 
-    setTimeout(() => {
-      processNextTurn(newAlivePlayers);
-    }, 4500);
+    setTimeout(() => { processNextTurn(newAlivePlayers); }, 4500);
   };
 
-  // 5. 💡 [깔끔한 턴 넘기기] 죽은 사람은 건너뛰고 1-2-3-4 순서대로 순환
   const processNextTurn = async (currentAlive: string[]) => {
     const aliveCountsByTeam: Record<number, number> = {};
     teams.forEach(t => aliveCountsByTeam[t.id] = 0);
-    
     currentAlive.forEach(id => {
       const p = players.find(p => p.student_id === id);
       if (p && p.teamId) aliveCountsByTeam[p.teamId]++;
     });
-
     const activeTeams = teams.filter(t => aliveCountsByTeam[t.id] > 0);
 
-    // 게임 종료 조건
     if (activeTeams.length <= 1) {
       setPhase('game_over');
       setWinnerTeam(activeTeams.length === 1 ? activeTeams[0] : null);
-      
       await supabase.from('game_rooms').update({ 
-        game_data: { 
-          gameMode: 'sniper', 
-          sniperPhase: 'game_over', 
-          maxNumber, 
-          teams, 
-          alivePlayers: currentAlive, 
-          shotNumbers: shotNumbersRef.current,
-          winner: activeTeams.length === 1 ? activeTeams[0].name : '무승부' 
-        } 
+        game_data: { gameMode: 'sniper', sniperPhase: 'game_over', maxNumber, teams, alivePlayers: currentAlive, shotNumbers: shotNumbersRef.current, winner: activeTeams.length === 1 ? activeTeams[0].name : '무승부' } 
       }).eq('id', 'main_room');
       return;
     }
 
-    // 다음 살아있는 사람 찾을 때까지 인덱스 증가 (죽은 사람 자동 건너뛰기)
     let nextIndex = turnIndexRef.current;
     let nextTurnId: string | null = null;
     
@@ -220,22 +244,13 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
     setPhase('sniping');
 
     await supabase.from('game_rooms').update({ 
-      game_data: { 
-        gameMode: 'sniper',
-        sniperPhase: 'sniping', 
-        maxNumber, 
-        teams,
-        alivePlayers: currentAlive,
-        currentTurn: nextTurnId,
-        shotNumbers: shotNumbersRef.current
-      } 
+      game_data: { gameMode: 'sniper', sniperPhase: 'sniping', maxNumber, teams, alivePlayers: currentAlive, currentTurn: nextTurnId, shotNumbers: shotNumbersRef.current } 
     }).eq('id', 'main_room');
   };
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '40px', boxSizing: 'border-box', backgroundColor: '#0f172a', color: 'white' }}>
       
-      {/* 상단 생존자 현황판 */}
       <div style={{ display: 'flex', justifyContent: 'space-around', marginBottom: '40px', backgroundColor: 'rgba(0,0,0,0.5)', padding: '20px', borderRadius: '24px' }}>
         {teams.map(team => {
           const teamPlayers = players.filter(p => p.teamId === team.id);
@@ -284,39 +299,39 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
           </div>
         )}
 
+        {/* 💡 [겹침 버그 완벽 해결] flex 레이아웃으로 간격을 벌리고 margin과 lineHeight를 리셋했습니다. */}
         {phase === 'shooting' && lastShot && (
-          <div style={{ textAlign: 'center', animation: 'zoomIn 0.5s ease-out' }}>
-            <h2 style={{ fontSize: '40px', color: '#fde047' }}>[{lastShot.shooter}]의 저격 발사!</h2>
-            <div style={{ fontSize: '140px', fontWeight: '900', color: 'white', textShadow: '0 0 40px #ef4444', margin: '10px 0' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '30px', animation: 'zoomIn 0.5s ease-out' }}>
+            <h2 style={{ fontSize: '40px', color: '#fde047', margin: 0, lineHeight: 1 }}>[{lastShot.shooter}]의 저격 발사!</h2>
+            <div style={{ fontSize: '140px', fontWeight: '900', color: 'white', textShadow: '0 0 40px #ef4444', margin: 0, lineHeight: 1 }}>
               {lastShot.number}번
             </div>
             {lastShot.hits.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px' }}>
-                <div style={{ fontSize: '48px', color: '#ef4444', fontWeight: '900', animation: 'shake 0.5s' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
+                <div style={{ fontSize: '48px', color: '#ef4444', fontWeight: '900', margin: 0, lineHeight: 1, animation: 'shake 0.5s' }}>
                   💥 명중! {lastShot.hits.length}명 즉사!
                 </div>
-                {/* 💡 누가 들고 있었는지 범인 공개! */}
-                <div style={{ fontSize: '36px', color: '#fde047', fontWeight: 'bold', backgroundColor: 'rgba(255,255,255,0.1)', padding: '15px 30px', borderRadius: '20px' }}>
+                <div style={{ fontSize: '36px', color: '#fde047', fontWeight: 'bold', backgroundColor: 'rgba(255,255,255,0.1)', padding: '15px 30px', borderRadius: '20px', margin: 0, lineHeight: 1 }}>
                   🕵️‍♂️ 정체 발각: <span style={{ color: '#4ade80' }}>{lastShot.hitNames.join(', ')}</span> 님의 번호였습니다!
                 </div>
               </div>
             ) : (
-              <div style={{ fontSize: '48px', color: '#4ade80', fontWeight: '900' }}>
+              <div style={{ fontSize: '48px', color: '#4ade80', fontWeight: '900', margin: 0, lineHeight: 1 }}>
                 💨 빗나갔습니다! (아무도 없음)
               </div>
             )}
           </div>
         )}
 
-        {/* 💡 [대폭 강화된 화려한 승리 화면] */}
+        {/* 💡 [겹침 버그 완벽 해결] 트로피와 글자가 겹치지 않게 flex gap을 적용했습니다. */}
         {phase === 'game_over' && (
-          <div style={{ textAlign: 'center', animation: 'popUp 0.5s ease-out' }}>
-            <div style={{ fontSize: '120px', marginBottom: '10px', animation: 'bounce 1s infinite' }}>🏆</div>
-            <h1 style={{ fontSize: '70px', color: '#fde047', fontWeight: '900', textShadow: '0 0 30px rgba(253,224,71,0.6)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '30px', animation: 'popUp 0.5s ease-out' }}>
+            <div style={{ fontSize: '120px', animation: 'bounce 1s infinite', margin: 0, lineHeight: 1 }}>🏆</div>
+            <h1 style={{ fontSize: '70px', color: '#fde047', fontWeight: '900', textShadow: '0 0 30px rgba(253,224,71,0.6)', margin: 0, lineHeight: 1 }}>
               {winnerTeam ? `🎉 ${winnerTeam.name} 최종 우승! 🎉` : '모두 전멸... 무승부!'}
             </h1>
-            <p style={{ fontSize: '28px', color: '#94a3b8', marginTop: '10px' }}>치열했던 생존 서바이벌 배틀이 종료되었습니다.</p>
-            <button onClick={onGameEnd} style={{ marginTop: '50px', padding: '20px 60px', fontSize: '28px', backgroundColor: '#3b82f6', color: 'white', borderRadius: '20px', border: 'none', fontWeight: '900', cursor: 'pointer', boxShadow: '0 8px 0 #1d4ed8' }}>
+            <p style={{ fontSize: '28px', color: '#94a3b8', margin: 0, lineHeight: 1 }}>치열했던 생존 서바이벌 배틀이 종료되었습니다.</p>
+            <button onClick={onGameEnd} style={{ marginTop: '30px', padding: '20px 60px', fontSize: '28px', backgroundColor: '#3b82f6', color: 'white', borderRadius: '20px', border: 'none', fontWeight: '900', cursor: 'pointer', boxShadow: '0 8px 0 #1d4ed8' }}>
               메인으로 돌아가기 🏠
             </button>
           </div>
