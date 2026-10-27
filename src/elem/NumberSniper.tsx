@@ -18,10 +18,10 @@ interface NumberSniperProps {
   teams: Team[];
   players: Player[];
   maxNumber: number;
+  matchType: 'team' | 'solo'; // 💡 개인전 속성 추가!
   onGameEnd: () => void;
 }
 
-// 💡 [사운드 엔진 업데이트] 타이머 똑딱(tick/urgent) 소리를 추가했습니다!
 const playSFX = (type: 'tick' | 'urgent' | 'shoot' | 'hit' | 'miss' | 'victory') => {
   const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
   if (!AudioContext) return;
@@ -88,13 +88,12 @@ const playSFX = (type: 'tick' | 'urgent' | 'shoot' | 'hit' | 'miss' | 'victory')
   }
 };
 
-export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: NumberSniperProps) {
+export default function NumberSniper({ teams, players, maxNumber, matchType, onGameEnd }: NumberSniperProps) {
   const [phase, setPhase] = useState<'init' | 'hiding' | 'sniping' | 'shooting' | 'game_over'>('init');
   const [alivePlayers, setAlivePlayers] = useState<string[]>(players.map(p => p.student_id));
-  const [timeLeft, setTimeLeft] = useState(15); // 💡 은폐 모드 기본 15초로 변경
+  const [timeLeft, setTimeLeft] = useState(15); 
   const [currentTurn, setCurrentTurn] = useState<string | null>(null);
   
-  // 💡 [isTimeout 추가] 시간 초과로 자폭했는지 여부를 판단합니다.
   const [lastShot, setLastShot] = useState<{ shooter: string, number: number, hits: string[], hitNames: string[], isTimeout?: boolean } | null>(null);
   const [winnerTeam, setWinnerTeam] = useState<Team | null>(null);
   const [readyCount, setReadyCount] = useState(0);
@@ -121,7 +120,7 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
       }, 300); 
       return () => clearTimeout(timer);
     } else if (phase === 'shooting' && lastShot && lastShot.isTimeout) {
-      playSFX('hit'); // 💡 자폭했을 때도 묵직한 타격음 재생
+      playSFX('hit'); 
     } else if (phase === 'game_over') {
       playSFX('victory'); 
     }
@@ -134,12 +133,13 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
       secretNumbersRef.current = {};
       setReadyCount(0);
       
+      // 💡 [핵심] DB 업데이트 시 sniperMatchType 보존
       await supabase.from('game_rooms').update({ 
-        game_data: { gameMode: 'sniper', sniperPhase: 'hiding', maxNumber, teams, alivePlayers: initialAlive, shotNumbers: [] } 
+        game_data: { gameMode: 'sniper', sniperPhase: 'hiding', maxNumber, teams, alivePlayers: initialAlive, shotNumbers: [], sniperMatchType: matchType } 
       }).eq('id', 'main_room');
       
       setPhase('hiding');
-      setTimeLeft(15); // 💡 은폐 모드 15초
+      setTimeLeft(15);
     };
     initGame();
 
@@ -159,20 +159,18 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [maxNumber, players, teams]);
+  }, [maxNumber, players, teams, matchType]);
 
-  // 💡 [핵심 버그 해결] 10초 타이머 로직 (은폐 모드 & 저격 모드 둘 다 작동)
   useEffect(() => {
     if (phase === 'hiding' || phase === 'sniping') {
       if (timeLeft > 0) {
-        if (timeLeft <= 3) playSFX('urgent'); // 3초 이하는 긴박한 소리
-        else playSFX('tick'); // 평소엔 똑딱
+        if (timeLeft <= 3) playSFX('urgent'); 
+        else playSFX('tick'); 
         
         const timer = setTimeout(() => setTimeLeft(prev => prev - 1), 1000);
         return () => clearTimeout(timer);
       } else {
         if (phase === 'hiding') {
-          // 은폐 시간 초과 시 안 숨긴 애들 자동 할당
           alivePlayers.forEach(id => {
             if (!secretNumbersRef.current[id]) {
               secretNumbersRef.current[id] = Math.floor(Math.random() * maxNumber) + 1;
@@ -180,7 +178,6 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
           });
           startSnipingGame(alivePlayers);
         } else if (phase === 'sniping') {
-          // 🚨 저격 10초 시간 초과 시 해당 학생 자폭 처리!
           handleTurnTimeout();
         }
       }
@@ -195,10 +192,10 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
     const firstTurn = shuffledQueue[0];
     setCurrentTurn(firstTurn);
     setPhase('sniping');
-    setTimeLeft(10); // 💡 저격 턴은 10초 부여
+    setTimeLeft(10); 
 
     await supabase.from('game_rooms').update({ 
-      game_data: { gameMode: 'sniper', sniperPhase: 'sniping', maxNumber, teams, alivePlayers: currentAlive, currentTurn: firstTurn, shotNumbers: shotNumbersRef.current } 
+      game_data: { gameMode: 'sniper', sniperPhase: 'sniping', maxNumber, teams, alivePlayers: currentAlive, currentTurn: firstTurn, shotNumbers: shotNumbersRef.current, sniperMatchType: matchType } 
     }).eq('id', 'main_room');
   };
 
@@ -223,52 +220,72 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
     setAlivePlayers(newAlivePlayers);
 
     await supabase.from('game_rooms').update({ 
-      game_data: { gameMode: 'sniper', sniperPhase: 'shooting', maxNumber, teams, alivePlayers: newAlivePlayers, lastShot: { shooter: shooterName, number: targetNumber, hitCount: hits.length, hitNames }, shotNumbers: shotNumbersRef.current } 
+      game_data: { gameMode: 'sniper', sniperPhase: 'shooting', maxNumber, teams, alivePlayers: newAlivePlayers, lastShot: { shooter: shooterName, number: targetNumber, hitCount: hits.length, hitNames }, shotNumbers: shotNumbersRef.current, sniperMatchType: matchType } 
     }).eq('id', 'main_room');
 
     setTimeout(() => { processNextTurn(newAlivePlayers); }, 4500);
   };
 
-  // 🚨 [새로운 함수] 저격 시간 초과(자폭) 처리 로직
   const handleTurnTimeout = async () => {
     if (phaseRef.current !== 'sniping' || !currentTurnRef.current) return;
-    setPhase('shooting'); // 이중 실행 방지
+    setPhase('shooting'); 
     
     const timedOutPlayerId = currentTurnRef.current;
     const timedOutPlayer = players.find(p => p.student_id === timedOutPlayerId);
     const shooterName = timedOutPlayer?.name || '알 수 없음';
     
-    // 시간 초과한 학생 본인을 명중(사망) 리스트에 넣습니다.
     const hits = [timedOutPlayerId];
     const hitNames = [shooterName];
     
     setLastShot({ shooter: shooterName, number: 0, hits, hitNames, isTimeout: true });
-    
     const newAlivePlayers = alivePlayersRef.current.filter(id => id !== timedOutPlayerId);
     setAlivePlayers(newAlivePlayers);
     
     await supabase.from('game_rooms').update({ 
-      game_data: { gameMode: 'sniper', sniperPhase: 'shooting', maxNumber, teams, alivePlayers: newAlivePlayers, lastShot: { shooter: shooterName, number: 0, hitCount: hits.length, hitNames, isTimeout: true }, shotNumbers: shotNumbersRef.current } 
+      game_data: { gameMode: 'sniper', sniperPhase: 'shooting', maxNumber, teams, alivePlayers: newAlivePlayers, lastShot: { shooter: shooterName, number: 0, hitCount: hits.length, hitNames, isTimeout: true }, shotNumbers: shotNumbersRef.current, sniperMatchType: matchType } 
     }).eq('id', 'main_room');
     
-    // 연출 보여준 뒤 다음 턴으로
     setTimeout(() => { processNextTurn(newAlivePlayers); }, 4500);
   };
 
   const processNextTurn = async (currentAlive: string[]) => {
-    const aliveCountsByTeam: Record<number, number> = {};
-    teams.forEach(t => aliveCountsByTeam[t.id] = 0);
-    currentAlive.forEach(id => {
-      const p = players.find(p => p.student_id === id);
-      if (p && p.teamId) aliveCountsByTeam[p.teamId]++;
-    });
-    const activeTeams = teams.filter(t => aliveCountsByTeam[t.id] > 0);
+    let isGameOver = false;
+    let winnerNameStr = '무승부';
+    let winnerObj: Team | null = null;
 
-    if (activeTeams.length <= 1) {
+    // 💡 [핵심 분기] 개인전 vs 팀전 승리 조건
+    if (matchType === 'solo') {
+      if (currentAlive.length <= 1) {
+        isGameOver = true;
+        if (currentAlive.length === 1) {
+          const wp = players.find(p => p.student_id === currentAlive[0]);
+          winnerNameStr = wp ? wp.name : '알 수 없음';
+          winnerObj = { id: 0, name: winnerNameStr, color: '#fde047', score: 0 };
+        }
+      }
+    } else {
+      const aliveCountsByTeam: Record<number, number> = {};
+      teams.forEach(t => aliveCountsByTeam[t.id] = 0);
+      currentAlive.forEach(id => {
+        const p = players.find(p => p.student_id === id);
+        if (p && p.teamId) aliveCountsByTeam[p.teamId]++;
+      });
+      const activeTeams = teams.filter(t => aliveCountsByTeam[t.id] > 0);
+
+      if (activeTeams.length <= 1) {
+        isGameOver = true;
+        if (activeTeams.length === 1) {
+          winnerObj = activeTeams[0];
+          winnerNameStr = winnerObj.name;
+        }
+      }
+    }
+
+    if (isGameOver) {
       setPhase('game_over');
-      setWinnerTeam(activeTeams.length === 1 ? activeTeams[0] : null);
+      setWinnerTeam(winnerObj);
       await supabase.from('game_rooms').update({ 
-        game_data: { gameMode: 'sniper', sniperPhase: 'game_over', maxNumber, teams, alivePlayers: currentAlive, shotNumbers: shotNumbersRef.current, winner: activeTeams.length === 1 ? activeTeams[0].name : '무승부' } 
+        game_data: { gameMode: 'sniper', sniperPhase: 'game_over', maxNumber, teams, alivePlayers: currentAlive, shotNumbers: shotNumbersRef.current, winner: winnerNameStr, sniperMatchType: matchType } 
       }).eq('id', 'main_room');
       return;
     }
@@ -289,38 +306,59 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
     turnIndexRef.current = nextIndex;
     setCurrentTurn(nextTurnId);
     setPhase('sniping');
-    setTimeLeft(10); // 💡 다음 턴 시작 시 10초 리셋
+    setTimeLeft(10); 
 
     await supabase.from('game_rooms').update({ 
-      game_data: { gameMode: 'sniper', sniperPhase: 'sniping', maxNumber, teams, alivePlayers: currentAlive, currentTurn: nextTurnId, shotNumbers: shotNumbersRef.current } 
+      game_data: { gameMode: 'sniper', sniperPhase: 'sniping', maxNumber, teams, alivePlayers: currentAlive, currentTurn: nextTurnId, shotNumbers: shotNumbersRef.current, sniperMatchType: matchType } 
     }).eq('id', 'main_room');
   };
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '40px', boxSizing: 'border-box', backgroundColor: '#0f172a', color: 'white' }}>
       
-      <div style={{ display: 'flex', justifyContent: 'space-around', marginBottom: '40px', backgroundColor: 'rgba(0,0,0,0.5)', padding: '20px', borderRadius: '24px' }}>
-        {teams.map(team => {
-          const teamPlayers = players.filter(p => p.teamId === team.id);
-          const aliveCount = teamPlayers.filter(p => alivePlayers.includes(p.student_id)).length;
-          return (
-            <div key={team.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: aliveCount === 0 ? 0.3 : 1 }}>
-              <div style={{ fontSize: '24px', fontWeight: '900', color: team.color }}>{team.name}</div>
-              <div style={{ fontSize: '40px', fontWeight: '900' }}>생존: {aliveCount}명</div>
-              <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-                {teamPlayers.map(p => {
-                  const isAlive = alivePlayers.includes(p.student_id);
-                  return (
-                    <span key={p.student_id} style={{ padding: '6px 12px', borderRadius: '8px', backgroundColor: isAlive ? team.color : '#334155', color: isAlive ? 'white' : '#94a3b8', textDecoration: isAlive ? 'none' : 'line-through', fontWeight: 'bold' }}>
-                      {p.name}
-                    </span>
-                  );
-                })}
+      {/* 💡 [UI 분기] 개인전일 때는 팀 박스 대신 전체 인원의 생존 현황을 태그로 보여줍니다. */}
+      {matchType === 'solo' ? (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', justifyContent: 'center', marginBottom: '40px', backgroundColor: 'rgba(0,0,0,0.5)', padding: '20px', borderRadius: '24px' }}>
+          {players.map(p => {
+            const isAlive = alivePlayers.includes(p.student_id);
+            return (
+              <div key={p.student_id} style={{
+                padding: '10px 20px', borderRadius: '12px',
+                backgroundColor: isAlive ? '#3b82f6' : '#1e293b',
+                color: isAlive ? 'white' : '#64748b',
+                textDecoration: isAlive ? 'none' : 'line-through',
+                fontWeight: 'bold', fontSize: '24px',
+                border: isAlive ? '2px solid #60a5fa' : 'none'
+              }}>
+                {p.name} {isAlive ? '🏃' : '💀'}
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', justifyContent: 'space-around', marginBottom: '40px', backgroundColor: 'rgba(0,0,0,0.5)', padding: '20px', borderRadius: '24px' }}>
+          {teams.map(team => {
+            const teamPlayers = players.filter(p => p.teamId === team.id);
+            const aliveCount = teamPlayers.filter(p => alivePlayers.includes(p.student_id)).length;
+            return (
+              <div key={team.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: aliveCount === 0 ? 0.3 : 1 }}>
+                <div style={{ fontSize: '24px', fontWeight: '900', color: team.color }}>{team.name}</div>
+                <div style={{ fontSize: '40px', fontWeight: '900' }}>생존: {aliveCount}명</div>
+                <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                  {teamPlayers.map(p => {
+                    const isAlive = alivePlayers.includes(p.student_id);
+                    return (
+                      <span key={p.student_id} style={{ padding: '6px 12px', borderRadius: '8px', backgroundColor: isAlive ? team.color : '#334155', color: isAlive ? 'white' : '#94a3b8', textDecoration: isAlive ? 'none' : 'line-through', fontWeight: 'bold' }}>
+                        {p.name}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
         
@@ -337,7 +375,6 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
           </div>
         )}
 
-        {/* 💡 저격 모드 화면에 긴장감 넘치는 타이머 추가 */}
         {phase === 'sniping' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '30px' }}>
             <div style={{ fontSize: '120px', fontWeight: '900', color: timeLeft <= 3 ? '#ef4444' : '#fde047', margin: 0, lineHeight: 1, animation: timeLeft <= 3 ? 'shake 0.3s infinite' : 'none' }}>
@@ -350,7 +387,6 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
           </div>
         )}
 
-        {/* 💡 시간 초과 자폭 vs 일반 저격 결과 화면 분기 처리 */}
         {phase === 'shooting' && lastShot && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '30px', animation: 'zoomIn 0.5s ease-out' }}>
             {lastShot.isTimeout ? (
@@ -389,8 +425,8 @@ export default function NumberSniper({ teams, players, maxNumber, onGameEnd }: N
         {phase === 'game_over' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '30px', animation: 'popUp 0.5s ease-out' }}>
             <div style={{ fontSize: '120px', animation: 'bounce 1s infinite', margin: 0, lineHeight: 1 }}>🏆</div>
-            <h1 style={{ fontSize: '70px', color: '#fde047', fontWeight: '900', textShadow: '0 0 30px rgba(253,224,71,0.6)', margin: 0, lineHeight: 1 }}>
-              {winnerTeam ? `🎉 ${winnerTeam.name} 최종 우승! 🎉` : '모두 전멸... 무승부!'}
+            <h1 style={{ fontSize: '70px', color: '#fde047', fontWeight: '900', textShadow: '0 0 30px rgba(253,224,71,0.6)', margin: 0, lineHeight: 1, textAlign: 'center' }}>
+              {winnerTeam ? `🎉 ${winnerTeam.name} ${matchType === 'solo' ? '최종 우승!' : '팀 최종 우승!'} 🎉` : '모두 전멸... 무승부!'}
             </h1>
             <p style={{ fontSize: '28px', color: '#94a3b8', margin: 0, lineHeight: 1 }}>치열했던 생존 서바이벌 배틀이 종료되었습니다.</p>
             <button onClick={onGameEnd} style={{ marginTop: '30px', padding: '20px 60px', fontSize: '28px', backgroundColor: '#3b82f6', color: 'white', borderRadius: '20px', border: 'none', fontWeight: '900', cursor: 'pointer', boxShadow: '0 8px 0 #1d4ed8' }}>

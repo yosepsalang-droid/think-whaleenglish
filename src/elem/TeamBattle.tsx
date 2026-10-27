@@ -25,7 +25,6 @@ interface Question {
   kor: string;
 }
 
-// 💡 [통합 사운드 엔진]
 const playSFX = (type: 'tick' | 'urgent' | 'correct' | 'timeout' | 'victory') => {
   const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
   if (!AudioContext) return;
@@ -91,6 +90,8 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
   const [selectedBook, setSelectedBook] = useState<string>('');
   const [teamCount, setTeamCount] = useState<number>(2);
   const [gameMode, setGameMode] = useState<'typing' | 'scramble' | 'ox' | 'sniper'>('typing');
+  // 💡 [개인전/팀전 상태 추가]
+  const [sniperMatchType, setSniperMatchType] = useState<'team' | 'solo'>('team');
   const [winScore, setWinScore] = useState<number>(3); 
   const [sniperRange, setSniperRange] = useState<number>(40);
 
@@ -103,12 +104,9 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
   const roundScoresRef = useRef<Record<number, number>>({}); 
   const [roundScores, setRoundScores] = useState<Record<number, number>>({});
   const [roundResultText, setRoundResultText] = useState<string>('');
-  
   const [currentOxData, setCurrentOxData] = useState({ displayKor: '', oxAnswer: 'O' });
   const submitCountRef = useRef(0);
   const playerCountRef = useRef(0);
-
-  // 💡 [추가] 라운드 정답자 명단 보관
   const [roundWinners, setRoundWinners] = useState<string[]>([]);
 
   const TEAM_COLORS = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'];
@@ -141,11 +139,10 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
         submitCountRef.current += 1; 
         
         if (payload.isCorrect) {
-          playSFX('correct'); // 정답 실시간 사운드
+          playSFX('correct'); 
           roundScoresRef.current[payload.teamId] = (roundScoresRef.current[payload.teamId] || 0) + 1;
           setRoundScores({ ...roundScoresRef.current }); 
           
-          // 💡 [추가] 정답자 명단에 실시간 등록
           if (payload.studentName) {
             setRoundWinners(prev => [...prev, payload.studentName]);
           }
@@ -163,13 +160,11 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
     };
   }, [gameMode]);
 
-  // 💡 [타이머 사운드 연출]
   useEffect(() => {
     if (gameMode === 'sniper') return; 
-    
     if (roomStatus === 'playing' && timeLeft > 0) {
-      if (timeLeft <= 5) playSFX('urgent'); // 5초 이하면 긴장되는 소리
-      else playSFX('tick'); // 평소엔 똑딱 소리
+      if (timeLeft <= 5) playSFX('urgent'); 
+      else playSFX('tick'); 
       
       const timer = setTimeout(() => setTimeLeft(prev => prev - 1), 1000);
       return () => clearTimeout(timer);
@@ -190,48 +185,58 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
     }
     setCurrentIndex(0);
     await supabase.from('game_rooms').update({ 
-      status: 'waiting', players: [], settings: { teamCount, book: selectedBook, gameMode, winScore, sniperRange }
+      status: 'waiting', players: [], settings: { teamCount, book: selectedBook, gameMode, winScore, sniperRange, sniperMatchType }
     }).eq('id', 'main_room');
     setRoomStatus('waiting');
   };
 
   const handleStartGame = async () => {
-    if (joinedPlayers.length < teamCount) return alert(`최소 ${teamCount}명 이상의 학생이 접속해야 합니다!`);
-    const initialTeams: Team[] = Array.from({ length: teamCount }).map((_, i) => ({
-      id: i + 1, name: TEAM_NAMES[i], color: TEAM_COLORS[i], score: 0
-    }));
-    const assignedPlayers = [...joinedPlayers].sort(() => Math.random() - 0.5).map((p, index) => ({
-      ...p, teamId: initialTeams[index % teamCount].id
-    }));
-    setTeams(initialTeams);
+    // 개인전일 때는 팀 인원수 제한 무시
+    if (gameMode !== 'sniper' || sniperMatchType === 'team') {
+      if (joinedPlayers.length < teamCount) return alert(`최소 ${teamCount}명 이상의 학생이 접속해야 합니다!`);
+    } else if (gameMode === 'sniper' && sniperMatchType === 'solo') {
+      if (joinedPlayers.length < 2) return alert('개인전은 최소 2명 이상 접속해야 합니다!');
+    }
+
+    let initialTeams: Team[] = [];
+    let assignedPlayers = [...joinedPlayers].sort(() => Math.random() - 0.5);
+
+    // 💡 [개인전 로직 분기]
+    if (gameMode !== 'sniper' || sniperMatchType === 'team') {
+      initialTeams = Array.from({ length: teamCount }).map((_, i) => ({
+        id: i + 1, name: TEAM_NAMES[i], color: TEAM_COLORS[i], score: 0
+      }));
+      assignedPlayers = assignedPlayers.map((p, index) => ({
+        ...p, teamId: initialTeams[index % teamCount].id
+      }));
+      setTeams(initialTeams);
+    } else {
+      // 개인전은 팀 정보 삭제
+      setTeams([]);
+      assignedPlayers = assignedPlayers.map(p => ({ ...p, teamId: 0 }));
+    }
+    
     setJoinedPlayers(assignedPlayers);
 
     if (gameMode === 'sniper') {
       setRoomStatus('playing');
-      await supabase.from('game_rooms').update({ status: 'playing', players: assignedPlayers, game_data: { teams: initialTeams, gameMode } }).eq('id', 'main_room');
+      await supabase.from('game_rooms').update({ 
+        status: 'playing', players: assignedPlayers, game_data: { teams: initialTeams, gameMode, sniperMatchType } 
+      }).eq('id', 'main_room');
     } else {
       startNewRound(0, initialTeams, assignedPlayers);
     }
   };
 
   const startNewRound = async (index: number, currentTeams = teams, currentPlayers = joinedPlayers) => {
-    roundScoresRef.current = {}; 
-    submitCountRef.current = 0; 
-    setRoundScores({});
-    setRoundWinners([]); // 매 라운드 명단 초기화
-    setTimeLeft(15); 
-    setCurrentIndex(index);
-    setRoomStatus('playing');
+    roundScoresRef.current = {}; submitCountRef.current = 0; 
+    setRoundScores({}); setRoundWinners([]); setTimeLeft(15); 
+    setCurrentIndex(index); setRoomStatus('playing');
 
-    let oxAnswer = 'O';
-    let displayKor = questions[index]?.kor || '';
-
+    let oxAnswer = 'O'; let displayKor = questions[index]?.kor || '';
     if (gameMode === 'ox') {
       if (Math.random() > 0.5) oxAnswer = 'O'; 
-      else {
-        oxAnswer = 'X'; 
-        displayKor = allWords[Math.floor(Math.random() * allWords.length)].kor;
-      }
+      else { oxAnswer = 'X'; displayKor = allWords[Math.floor(Math.random() * allWords.length)].kor; }
     }
     setCurrentOxData({ displayKor, oxAnswer });
 
@@ -242,8 +247,7 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
 
   const handleRoundEnd = async () => {
     const scores = roundScoresRef.current;
-    let maxScore = -1;
-    let winners: number[] = [];
+    let maxScore = -1; let winners: number[] = [];
 
     teams.forEach(t => {
       const s = scores[t.id] || 0;
@@ -251,8 +255,7 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
       else if (s === maxScore) { winners.push(t.id); }
     });
 
-    let resultText = "무승부";
-    let updatedTeams = [...teams];
+    let resultText = "무승부"; let updatedTeams = [...teams];
 
     if (winners.length === 1 && maxScore > 0) {
        const winnerTeam = teams.find(t => t.id === winners[0]);
@@ -264,9 +267,7 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
        resultText = "앗, 동점입니다! (승점 획득 실패)";
     }
 
-    setTeams(updatedTeams);
-    setRoundResultText(resultText);
-    setRoomStatus('round_end');
+    setTeams(updatedTeams); setRoundResultText(resultText); setRoomStatus('round_end');
 
     await supabase.from('game_rooms').update({ 
       status: 'round_end', game_data: { teams: updatedTeams, currentQuestion: questions[currentIndex], gameMode, roundResultText: resultText }
@@ -276,14 +277,12 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
   const handleNextRoundAction = async () => {
     const isGameOver = teams.some(t => t.score >= winScore);
     if (isGameOver) {
-      playSFX('victory');
-      setRoomStatus('result');
+      playSFX('victory'); setRoomStatus('result');
       await supabase.from('game_rooms').update({ status: 'result' }).eq('id', 'main_room');
     } else if (currentIndex + 1 < questions.length) {
       startNewRound(currentIndex + 1);
     } else {
-      playSFX('victory');
-      setRoomStatus('result');
+      playSFX('victory'); setRoomStatus('result');
       await supabase.from('game_rooms').update({ status: 'result' }).eq('id', 'main_room');
     }
   };
@@ -299,7 +298,7 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
 
       {roomStatus === 'closed' && (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflowY: 'auto', padding: '40px 0' }}>
-          <h1 style={{ fontSize: '50px', fontWeight: '900', color: '#fde047', marginBottom: '40px' }}>⚔️ 교실 대난투 : 팀 배틀 생성 ⚔️</h1>
+          <h1 style={{ fontSize: '50px', fontWeight: '900', color: '#fde047', marginBottom: '40px' }}>⚔️ 교실 대난투 : 배틀 생성 ⚔️</h1>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '25px', backgroundColor: 'rgba(255,255,255,0.1)', padding: '40px', borderRadius: '32px', width: '800px' }}>
             
             <div>
@@ -312,7 +311,27 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
               </div>
             </div>
 
-            {gameMode !== 'sniper' ? (
+            {gameMode === 'sniper' && (
+              <>
+                <div>
+                  <h2 style={{ fontSize: '20px', marginBottom: '10px', color: '#c084fc' }}>2. 게임 방식 (개인전 / 팀전)</h2>
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <button onClick={() => setSniperMatchType('solo')} style={{ flex: 1, padding: '15px', fontSize: '20px', fontWeight: 'bold', borderRadius: '12px', border: 'none', cursor: 'pointer', backgroundColor: sniperMatchType === 'solo' ? '#a855f7' : '#334155', color: 'white' }}>👤 개인전 (최후의 1인)</button>
+                    <button onClick={() => setSniperMatchType('team')} style={{ flex: 1, padding: '15px', fontSize: '20px', fontWeight: 'bold', borderRadius: '12px', border: 'none', cursor: 'pointer', backgroundColor: sniperMatchType === 'team' ? '#a855f7' : '#334155', color: 'white' }}>👥 팀전 (팀 서바이벌)</button>
+                  </div>
+                </div>
+                <div>
+                  <h2 style={{ fontSize: '20px', marginBottom: '10px', color: '#c084fc' }}>3. 숫자 범위 설정</h2>
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    {[20, 30, 40, 50].map(range => (
+                      <button key={range} onClick={() => setSniperRange(range)} style={{ flex: 1, padding: '15px', fontSize: '20px', fontWeight: 'bold', borderRadius: '12px', border: 'none', cursor: 'pointer', backgroundColor: sniperRange === range ? '#a855f7' : '#334155', color: 'white' }}>1 ~ {range}까지</button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {gameMode !== 'sniper' && (
               <>
                 <div>
                   <h2 style={{ fontSize: '20px', marginBottom: '10px', color: '#94a3b8' }}>2. 승리 조건 (세트 스코어)</h2>
@@ -331,25 +350,19 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
                   </select>
                 </div>
               </>
-            ) : (
+            )}
+
+            {/* 개인전일 때는 팀 개수 선택 창 숨기기 */}
+            {(gameMode !== 'sniper' || (gameMode === 'sniper' && sniperMatchType === 'team')) && (
               <div>
-                <h2 style={{ fontSize: '20px', marginBottom: '10px', color: '#c084fc' }}>2. 숫자 범위 설정 (넘버 스나이퍼)</h2>
+                <h2 style={{ fontSize: '20px', marginBottom: '10px', color: '#94a3b8' }}>{gameMode === 'sniper' ? '4' : '4'}. 팀 개수 선택</h2>
                 <div style={{ display: 'flex', gap: '12px' }}>
-                  {[20, 30, 40, 50].map(range => (
-                    <button key={range} onClick={() => setSniperRange(range)} style={{ flex: 1, padding: '15px', fontSize: '20px', fontWeight: 'bold', borderRadius: '12px', border: 'none', cursor: 'pointer', backgroundColor: sniperRange === range ? '#a855f7' : '#334155', color: 'white' }}>1 ~ {range}까지</button>
+                  {[2, 3, 4].map(num => (
+                    <button key={num} onClick={() => setTeamCount(num)} style={{ flex: 1, padding: '15px', fontSize: '20px', fontWeight: 'bold', borderRadius: '12px', border: 'none', cursor: 'pointer', backgroundColor: teamCount === num ? '#10b981' : '#334155', color: 'white' }}>{num}팀전</button>
                   ))}
                 </div>
               </div>
             )}
-
-            <div>
-              <h2 style={{ fontSize: '20px', marginBottom: '10px', color: '#94a3b8' }}>{gameMode === 'sniper' ? '3' : '4'}. 팀 개수 선택</h2>
-              <div style={{ display: 'flex', gap: '12px' }}>
-                {[2, 3, 4].map(num => (
-                  <button key={num} onClick={() => setTeamCount(num)} style={{ flex: 1, padding: '15px', fontSize: '20px', fontWeight: 'bold', borderRadius: '12px', border: 'none', cursor: 'pointer', backgroundColor: teamCount === num ? '#10b981' : '#334155', color: 'white' }}>{num}팀전</button>
-                ))}
-              </div>
-            </div>
 
             <button onClick={handleOpenRoom} style={{ marginTop: '10px', width: '100%', padding: '24px', fontSize: '28px', fontWeight: '900', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '20px', cursor: 'pointer', boxShadow: '0 8px 0 #b45309' }}>📡 게임 방 열고 아이들 소집하기!</button>
           </div>
@@ -361,7 +374,7 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
           <div style={{ fontSize: '80px', animation: 'bounce 1s infinite' }}>🚨</div>
           <h1 style={{ fontSize: '40px', fontWeight: '900', color: '#4ade80', marginBottom: '10px' }}>학생들의 태블릿에 입장 버튼이 나타났습니다!</h1>
           <p style={{ fontSize: '20px', color: '#94a3b8', marginBottom: '30px' }}>
-            선택된 게임: {gameMode === 'sniper' ? `🎯 넘버 스나이퍼 (1~${sniperRange})` : gameMode === 'ox' ? '⭕❌ OX 텔레파시' : '영어 배틀'}
+            선택된 게임: {gameMode === 'sniper' ? `🎯 넘버 스나이퍼 (${sniperMatchType === 'solo' ? '개인전' : '팀전'})` : gameMode === 'ox' ? '⭕❌ OX 텔레파시' : '영어 배틀'}
           </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', justifyContent: 'center', width: '900px', minHeight: '250px', backgroundColor: 'rgba(255,255,255,0.05)', padding: '30px', borderRadius: '24px' }}>
             {joinedPlayers.length === 0 ? (
@@ -379,11 +392,11 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
         </div>
       )}
 
+      {/* 💡 [수정] NumberSniper 컴포넌트에 matchType 속성 전달 */}
       {roomStatus === 'playing' && gameMode === 'sniper' && (
-        <NumberSniper teams={teams} players={joinedPlayers} maxNumber={sniperRange} onGameEnd={handleForceClose} />
+        <NumberSniper teams={teams} players={joinedPlayers} maxNumber={sniperRange} matchType={sniperMatchType} onGameEnd={handleForceClose} />
       )}
 
-      {/* 💡 [UI 겹침 완벽 해결] flex gap을 주어 요소 간 간격을 강제하고 마진을 초기화했습니다. */}
       {roomStatus === 'playing' && gameMode !== 'sniper' && (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           
@@ -433,7 +446,6 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
               )}
             </div>
 
-            {/* 💡 [실시간 영웅 출력] 쏜살같이 맞힌 아이들 칭찬하기 */}
             {roundWinners.length > 0 && (
               <div style={{ fontSize: '32px', color: '#4ade80', fontWeight: 'bold', padding: '15px 30px', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '20px', animation: 'popUp 0.3s ease-out' }}>
                 🎉 현재 정답자: {roundWinners.join(', ')}
@@ -443,7 +455,6 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
         </div>
       )}
 
-      {/* 💡 [UI 겹침 해결] 라운드 종료 화면 간격 조정 */}
       {roomStatus === 'round_end' && gameMode !== 'sniper' && (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '40px', gap: '30px' }}>
           <h1 style={{ fontSize: '60px', color: '#f59e0b', fontWeight: '900', margin: 0, lineHeight: 1 }}>라운드 종료!</h1>
@@ -474,7 +485,6 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
         </div>
       )}
 
-      {/* 💡 [UI 겹침 해결] 최종 결과 화면 간격 조정 */}
       {roomStatus === 'result' && gameMode !== 'sniper' && (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '40px' }}>
           <div style={{ fontSize: '120px', animation: 'bounce 1s infinite', margin: 0, lineHeight: 1 }}>🎉</div>

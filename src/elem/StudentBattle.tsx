@@ -64,7 +64,6 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
     await supabase.from('game_rooms').update({ players: updatedPlayers }).eq('id', 'main_room');
   };
 
-  // 💡 [핵심 업데이트] 정답을 제출할 때 TV로 내 이름을 당당하게 쏴줍니다!
   const handleEnglishSubmit = async (answer: string) => {
     if (hasSubmitted || !myTeam || !roomData?.game_data?.currentQuestion) return;
     setHasSubmitted(true);
@@ -82,7 +81,7 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
     await supabase.channel('main_room_host').send({
       type: 'broadcast',
       event: 'submit_answer',
-      payload: { isCorrect, teamId: myTeam.id, studentName } // <-- 이름 추가!
+      payload: { isCorrect, teamId: myTeam.id, studentName }
     });
   };
 
@@ -135,6 +134,9 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
 
   if (roomData.status === 'waiting') {
     const isJoined = roomData.players?.some((p: any) => p.student_id === studentId);
+    const gameMode = roomData.settings?.gameMode || 'typing';
+    const isSniperSolo = gameMode === 'sniper' && roomData.settings?.sniperMatchType === 'solo';
+
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#0f172a', color: 'white', fontFamily: 'sans-serif' }}>
         <h1 style={{ fontSize: '32px', fontWeight: '900', color: '#fde047', marginBottom: '10px' }}>교실 대난투 대기실</h1>
@@ -145,7 +147,9 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
         ) : (
           <div style={{ padding: '20px', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '16px', textAlign: 'center' }}>
             <div style={{ fontSize: '50px', marginBottom: '10px' }}>✅</div>
-            <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#4ade80' }}>입장 완료! 곧 팀이 배정됩니다.</div>
+            <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#4ade80' }}>
+              입장 완료! 곧 {isSniperSolo ? '게임' : '팀 배정'}이 시작됩니다.
+            </div>
           </div>
         )}
         <style>{`@keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }`}</style>
@@ -155,7 +159,12 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
 
   if (roomData.status === 'playing') {
     const gameMode = roomData.game_data?.gameMode;
+    const sniperMatchType = roomData.game_data?.sniperMatchType || 'team';
     if (!gameMode) return <div style={{ backgroundColor: '#0f172a', height: '100vh' }} />;
+
+    // 💡 [배경색 설정] 개인전이면 무조건 다크블루, 팀전이면 팀 색상
+    const isSniperSolo = gameMode === 'sniper' && sniperMatchType === 'solo';
+    const bgColor = isSniperSolo ? '#0f172a' : (myTeam?.color || '#0f172a');
 
     if (gameMode === 'sniper') {
       const phase = roomData.game_data.sniperPhase || 'hiding';
@@ -176,10 +185,12 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
       }
 
       return (
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: myTeam?.color || '#0f172a', color: 'white', fontFamily: 'sans-serif', transition: 'background-color 0.5s' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: bgColor, color: 'white', fontFamily: 'sans-serif', transition: 'background-color 0.5s' }}>
           <div style={{ padding: '20px', backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{studentName} (생존 🏃)</div>
-            <div style={{ fontSize: '24px', fontWeight: '900' }}>{myTeam?.name}</div>
+            <div style={{ fontSize: '24px', fontWeight: '900', color: isSniperSolo ? '#fde047' : 'white' }}>
+              {isSniperSolo ? '🏆 개인전' : myTeam?.name}
+            </div>
           </div>
 
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 10px' }}>
@@ -225,8 +236,9 @@ export default function StudentBattle({ studentId, studentName, onBack }: Studen
       );
     }
 
+    // 영어 게임
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: myTeam?.color || '#0f172a', color: 'white', fontFamily: 'sans-serif', transition: 'background-color 0.5s' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: bgColor, color: 'white', fontFamily: 'sans-serif', transition: 'background-color 0.5s' }}>
         <div style={{ padding: '20px', backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{studentName}</div>
           <div style={{ fontSize: '24px', fontWeight: '900' }}>{myTeam?.name}</div>
