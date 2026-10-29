@@ -1,95 +1,43 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
-interface Player {
-  student_id: string;
-  name: string;
-  teamId?: number;
-}
-
-interface Team {
-  id: number;
-  name: string;
-  color: string;
-  score: number;
-}
-
-interface NumberSniperProps {
-  teams: Team[];
-  players: Player[];
-  maxNumber: number;
-  matchType: 'team' | 'solo'; // 💡 개인전 속성 추가!
-  onGameEnd: () => void;
-}
+interface Player { student_id: string; name: string; teamId?: number; }
+interface Team { id: number; name: string; color: string; score: number; }
+interface NumberSniperProps { teams: Team[]; players: Player[]; maxNumber: number; matchType: 'team' | 'solo'; onGameEnd: () => void; }
 
 const playSFX = (type: 'tick' | 'urgent' | 'shoot' | 'hit' | 'miss' | 'victory') => {
   const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
   if (!AudioContext) return;
-  const ctx = new AudioContext();
-  const gain = ctx.createGain();
-  gain.connect(ctx.destination);
-
+  const ctx = new AudioContext(); const gain = ctx.createGain(); gain.connect(ctx.destination);
   if (type === 'tick') {
-    const osc = ctx.createOscillator();
-    osc.connect(gain);
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(400, ctx.currentTime);
-    gain.gain.setValueAtTime(0.1, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+    const osc = ctx.createOscillator(); osc.connect(gain); osc.type = 'sine'; osc.frequency.setValueAtTime(400, ctx.currentTime);
+    gain.gain.setValueAtTime(0.1, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
     osc.start(); osc.stop(ctx.currentTime + 0.1);
   } else if (type === 'urgent') {
-    const osc = ctx.createOscillator();
-    osc.connect(gain);
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(800, ctx.currentTime);
-    gain.gain.setValueAtTime(0.15, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+    const osc = ctx.createOscillator(); osc.connect(gain); osc.type = 'square'; osc.frequency.setValueAtTime(800, ctx.currentTime);
+    gain.gain.setValueAtTime(0.15, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
     osc.start(); osc.stop(ctx.currentTime + 0.1);
   } else if (type === 'shoot') {
-    const osc = ctx.createOscillator();
-    osc.connect(gain);
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(800, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.2);
-    gain.gain.setValueAtTime(0.1, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+    const osc = ctx.createOscillator(); osc.connect(gain); osc.type = 'square'; osc.frequency.setValueAtTime(800, ctx.currentTime); osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.2);
+    gain.gain.setValueAtTime(0.1, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
     osc.start(); osc.stop(ctx.currentTime + 0.2);
   } else if (type === 'hit') {
-    const osc = ctx.createOscillator();
-    osc.connect(gain);
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(150, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(40, ctx.currentTime + 0.4);
-    gain.gain.setValueAtTime(0.3, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+    const osc = ctx.createOscillator(); osc.connect(gain); osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, ctx.currentTime); osc.frequency.exponentialRampToValueAtTime(40, ctx.currentTime + 0.4);
+    gain.gain.setValueAtTime(0.3, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
     osc.start(); osc.stop(ctx.currentTime + 0.4);
   } else if (type === 'miss') {
-    const osc = ctx.createOscillator();
-    osc.connect(gain);
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(400, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.3);
-    gain.gain.setValueAtTime(0.15, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+    const osc = ctx.createOscillator(); osc.connect(gain); osc.type = 'sine'; osc.frequency.setValueAtTime(400, ctx.currentTime); osc.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.3);
+    gain.gain.setValueAtTime(0.15, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
     osc.start(); osc.stop(ctx.currentTime + 0.3);
   } else if (type === 'victory') {
-    const playNote = (freq: number, startTime: number, duration: number) => {
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = 'triangle'; o.frequency.value = freq;
-      o.connect(g); g.connect(ctx.destination);
-      g.gain.setValueAtTime(0.2, startTime);
-      g.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
-      o.start(startTime); o.stop(startTime + duration);
-    };
-    const now = ctx.currentTime;
-    playNote(440, now, 0.2); playNote(554.37, now + 0.2, 0.2);
-    playNote(659.25, now + 0.4, 0.4); playNote(880, now + 0.8, 0.8);
+    const playNote = (f: number, s: number, d: number) => { const o = ctx.createOscillator(); const g = ctx.createGain(); o.type = 'triangle'; o.frequency.value = f; o.connect(g); g.connect(ctx.destination); g.gain.setValueAtTime(0.2, s); g.gain.exponentialRampToValueAtTime(0.01, s + d); o.start(s); o.stop(s + d); };
+    const now = ctx.currentTime; playNote(440, now, 0.2); playNote(554.37, now + 0.2, 0.2); playNote(659.25, now + 0.4, 0.4); playNote(880, now + 0.8, 0.8);
   }
 };
 
 export default function NumberSniper({ teams, players, maxNumber, matchType, onGameEnd }: NumberSniperProps) {
-  const [phase, setPhase] = useState<'init' | 'hiding' | 'sniping' | 'shooting' | 'game_over'>('init');
+  // 💡 [흐름 제어] 숫자를 다 숨기면 'ready_to_snipe' 상태로 넘어가서 팀 대진표를 보여줍니다.
+  const [phase, setPhase] = useState<'init' | 'hiding' | 'ready_to_snipe' | 'sniping' | 'shooting' | 'game_over'>('init');
   const [alivePlayers, setAlivePlayers] = useState<string[]>(players.map(p => p.student_id));
   const [timeLeft, setTimeLeft] = useState(15); 
   const [currentTurn, setCurrentTurn] = useState<string | null>(null);
@@ -133,7 +81,6 @@ export default function NumberSniper({ teams, players, maxNumber, matchType, onG
       secretNumbersRef.current = {};
       setReadyCount(0);
       
-      // 💡 [핵심] DB 업데이트 시 sniperMatchType 보존
       await supabase.from('game_rooms').update({ 
         game_data: { gameMode: 'sniper', sniperPhase: 'hiding', maxNumber, teams, alivePlayers: initialAlive, shotNumbers: [], sniperMatchType: matchType } 
       }).eq('id', 'main_room');
@@ -144,13 +91,17 @@ export default function NumberSniper({ teams, players, maxNumber, matchType, onG
     initGame();
 
     const channel = supabase.channel('main_room_host')
-      .on('broadcast', { event: 'hide_number' }, ({ payload }) => {
+      .on('broadcast', { event: 'hide_number' }, async ({ payload }) => {
         secretNumbersRef.current[payload.studentId] = payload.number;
         const currentReady = Object.keys(secretNumbersRef.current).length;
         setReadyCount(currentReady);
 
+        // 💡 [변경 지점] 모든 학생이 숫자를 다 숨기면 ➔ 대진표 확인 화면으로 이동!
         if (phaseRef.current === 'hiding' && currentReady >= alivePlayersRef.current.length) {
-          startSnipingGame(alivePlayersRef.current);
+          setPhase('ready_to_snipe');
+          await supabase.from('game_rooms').update({ 
+            game_data: { gameMode: 'sniper', sniperPhase: 'ready_to_snipe', maxNumber, teams, alivePlayers: alivePlayersRef.current, shotNumbers: shotNumbersRef.current, sniperMatchType: matchType } 
+          }).eq('id', 'main_room');
         }
       })
       .on('broadcast', { event: 'snipe_number' }, ({ payload }) => {
@@ -176,7 +127,11 @@ export default function NumberSniper({ teams, players, maxNumber, matchType, onG
               secretNumbersRef.current[id] = Math.floor(Math.random() * maxNumber) + 1;
             }
           });
-          startSnipingGame(alivePlayers);
+          // 💡 [변경 지점] 시간이 다 끝나도 바로 저격 시작 안 하고 ➔ 대진표 확인 화면으로 이동!
+          setPhase('ready_to_snipe');
+          supabase.from('game_rooms').update({ 
+            game_data: { gameMode: 'sniper', sniperPhase: 'ready_to_snipe', maxNumber, teams, alivePlayers, shotNumbers: shotNumbersRef.current, sniperMatchType: matchType } 
+          }).eq('id', 'main_room');
         } else if (phase === 'sniping') {
           handleTurnTimeout();
         }
@@ -184,6 +139,7 @@ export default function NumberSniper({ teams, players, maxNumber, matchType, onG
     }
   }, [phase, timeLeft, alivePlayers, maxNumber]);
 
+  // 💡 선생님이 TV에서 '배틀 시작' 버튼을 누를 때 발동!
   const startSnipingGame = async (currentAlive: string[]) => {
     if (currentAlive.length === 0) return;
     const shuffledQueue = [...currentAlive].sort(() => Math.random() - 0.5);
@@ -192,7 +148,7 @@ export default function NumberSniper({ teams, players, maxNumber, matchType, onG
     const firstTurn = shuffledQueue[0];
     setCurrentTurn(firstTurn);
     setPhase('sniping');
-    setTimeLeft(10); 
+    setTimeLeft(10); // 저격 턴 타이머 10초 부여
 
     await supabase.from('game_rooms').update({ 
       game_data: { gameMode: 'sniper', sniperPhase: 'sniping', maxNumber, teams, alivePlayers: currentAlive, currentTurn: firstTurn, shotNumbers: shotNumbersRef.current, sniperMatchType: matchType } 
@@ -253,7 +209,6 @@ export default function NumberSniper({ teams, players, maxNumber, matchType, onG
     let winnerNameStr = '무승부';
     let winnerObj: Team | null = null;
 
-    // 💡 [핵심 분기] 개인전 vs 팀전 승리 조건
     if (matchType === 'solo') {
       if (currentAlive.length <= 1) {
         isGameOver = true;
@@ -316,62 +271,91 @@ export default function NumberSniper({ teams, players, maxNumber, matchType, onG
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '40px', boxSizing: 'border-box', backgroundColor: '#0f172a', color: 'white' }}>
       
-      {/* 💡 [UI 분기] 개인전일 때는 팀 박스 대신 전체 인원의 생존 현황을 태그로 보여줍니다. */}
-      {matchType === 'solo' ? (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', justifyContent: 'center', marginBottom: '40px', backgroundColor: 'rgba(0,0,0,0.5)', padding: '20px', borderRadius: '24px' }}>
-          {players.map(p => {
-            const isAlive = alivePlayers.includes(p.student_id);
-            return (
-              <div key={p.student_id} style={{
-                padding: '10px 20px', borderRadius: '12px',
-                backgroundColor: isAlive ? '#3b82f6' : '#1e293b',
-                color: isAlive ? 'white' : '#64748b',
-                textDecoration: isAlive ? 'none' : 'line-through',
-                fontWeight: 'bold', fontSize: '24px',
-                border: isAlive ? '2px solid #60a5fa' : 'none'
-              }}>
-                {p.name} {isAlive ? '🏃' : '💀'}
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <div style={{ display: 'flex', justifyContent: 'space-around', marginBottom: '40px', backgroundColor: 'rgba(0,0,0,0.5)', padding: '20px', borderRadius: '24px' }}>
-          {teams.map(team => {
-            const teamPlayers = players.filter(p => p.teamId === team.id);
-            const aliveCount = teamPlayers.filter(p => alivePlayers.includes(p.student_id)).length;
-            return (
-              <div key={team.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: aliveCount === 0 ? 0.3 : 1 }}>
-                <div style={{ fontSize: '24px', fontWeight: '900', color: team.color }}>{team.name}</div>
-                <div style={{ fontSize: '40px', fontWeight: '900' }}>생존: {aliveCount}명</div>
-                <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-                  {teamPlayers.map(p => {
-                    const isAlive = alivePlayers.includes(p.student_id);
-                    return (
-                      <span key={p.student_id} style={{ padding: '6px 12px', borderRadius: '8px', backgroundColor: isAlive ? team.color : '#334155', color: isAlive ? 'white' : '#94a3b8', textDecoration: isAlive ? 'none' : 'line-through', fontWeight: 'bold' }}>
-                        {p.name}
-                      </span>
-                    );
-                  })}
+      {/* 상단 미니 팀 현황 (시작 전이나 진행 중 공통) */}
+      {phase !== 'ready_to_snipe' && (
+        matchType === 'solo' ? (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', justifyContent: 'center', marginBottom: '40px', backgroundColor: 'rgba(0,0,0,0.5)', padding: '20px', borderRadius: '24px' }}>
+            {players.map(p => {
+              const isAlive = alivePlayers.includes(p.student_id);
+              return (
+                <div key={p.student_id} style={{ padding: '10px 20px', borderRadius: '12px', backgroundColor: isAlive ? '#3b82f6' : '#1e293b', color: isAlive ? 'white' : '#64748b', textDecoration: isAlive ? 'none' : 'line-through', fontWeight: 'bold', fontSize: '24px', border: isAlive ? '2px solid #60a5fa' : 'none' }}>
+                  {p.name} {isAlive ? '🏃' : '💀'}
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', justifyContent: 'space-around', marginBottom: '40px', backgroundColor: 'rgba(0,0,0,0.5)', padding: '20px', borderRadius: '24px' }}>
+            {teams.map(team => {
+              const teamPlayers = players.filter(p => p.teamId === team.id);
+              const aliveCount = teamPlayers.filter(p => alivePlayers.includes(p.student_id)).length;
+              return (
+                <div key={team.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: aliveCount === 0 ? 0.3 : 1 }}>
+                  <div style={{ fontSize: '24px', fontWeight: '900', color: team.color }}>{team.name}</div>
+                  <div style={{ fontSize: '40px', fontWeight: '900' }}>생존: {aliveCount}명</div>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                    {teamPlayers.map(p => {
+                      const isAlive = alivePlayers.includes(p.student_id);
+                      return (
+                        <span key={p.student_id} style={{ padding: '6px 12px', borderRadius: '8px', backgroundColor: isAlive ? team.color : '#334155', color: isAlive ? 'white' : '#94a3b8', textDecoration: isAlive ? 'none' : 'line-through', fontWeight: 'bold' }}>
+                          {p.name}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )
       )}
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
         
         {phase === 'hiding' && (
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '100px', fontWeight: '900', color: timeLeft <= 5 ? '#ef4444' : '#fde047', marginBottom: '20px' }}>
+            <div style={{ fontSize: '100px', fontWeight: '900', color: timeLeft <= 5 ? '#ef4444' : '#fde047', margin: 0, lineHeight: 1 }}>
               ⏳ {timeLeft}초
             </div>
-            <h1 style={{ fontSize: '48px', color: '#4ade80', fontWeight: '900' }}>은폐 모드 진행 중...</h1>
-            <p style={{ fontSize: '24px', color: '#94a3b8' }}>태블릿에서 1 ~ {maxNumber} 사이의 비밀 숫자를 선택하세요!</p>
-            <div style={{ marginTop: '30px', fontSize: '32px', fontWeight: 'bold' }}>
+            <h1 style={{ fontSize: '48px', color: '#4ade80', fontWeight: '900', margin: '20px 0', lineHeight: 1 }}>은폐 모드 진행 중...</h1>
+            <p style={{ fontSize: '24px', color: '#94a3b8', margin: 0, lineHeight: 1 }}>태블릿에서 1 ~ {maxNumber} 사이의 비밀 숫자를 선택하세요!</p>
+            <div style={{ marginTop: '30px', fontSize: '32px', fontWeight: 'bold', margin: '30px 0 0 0', lineHeight: 1 }}>
               준비 완료: <span style={{ color: '#4ade80' }}>{readyCount}</span> / {alivePlayers.length}명
             </div>
+          </div>
+        )}
+
+        {/* 💡 [새로 추가된 대진표 화면] 모든 요원이 숨으면 여기서 멈춰서 팀을 크게 보여줍니다! */}
+        {phase === 'ready_to_snipe' && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', animation: 'popUp 0.5s ease-out' }}>
+            <h1 style={{ fontSize: '60px', color: '#fde047', fontWeight: '900', margin: 0, lineHeight: 1 }}>은폐 완료! 대진표 확인</h1>
+            <p style={{ fontSize: '24px', color: '#94a3b8', margin: '0 0 20px 0', lineHeight: 1 }}>
+              {matchType === 'solo' ? '누가 살아남을 것인가? 경쟁자들을 확인하세요!' : '누가 우리 팀인지 확인하고 배틀을 시작하세요!'}
+            </p>
+            
+            <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap', justifyContent: 'center', width: '100%' }}>
+              {matchType === 'solo' ? (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', justifyContent: 'center', padding: '30px', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '24px', maxWidth: '800px' }}>
+                  {players.map(p => <div key={p.student_id} style={{ padding: '15px 30px', fontSize: '24px', fontWeight: 'bold', backgroundColor: '#3b82f6', borderRadius: '16px' }}>{p.name}</div>)}
+                </div>
+              ) : (
+                teams.map(team => {
+                  const members = players.filter(p => p.teamId === team.id);
+                  return (
+                    <div key={team.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)', padding: '30px', borderRadius: '24px', borderTop: `10px solid ${team.color}`, width: '250px' }}>
+                      <div style={{ fontSize: '32px', fontWeight: '900', color: team.color, marginBottom: '20px' }}>{team.name}</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
+                        {members.map(m => <div key={m.student_id} style={{ fontSize: '24px', fontWeight: 'bold', textAlign: 'center', backgroundColor: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '10px' }}>{m.name}</div>)}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <button onClick={() => startSnipingGame(alivePlayers)} style={{ marginTop: '30px', padding: '20px 60px', fontSize: '32px', backgroundColor: '#ef4444', color: 'white', borderRadius: '20px', border: 'none', fontWeight: '900', cursor: 'pointer', boxShadow: '0 10px 0 #b91c1c', animation: 'pulse 1.5s infinite' }}>
+              본격 저격 배틀 시작! 🚀
+            </button>
           </div>
         )}
 
@@ -442,6 +426,7 @@ export default function NumberSniper({ teams, players, maxNumber, matchType, onG
         @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-20px); } }
         @keyframes zoomIn { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
         @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-10px); } 75% { transform: translateX(10px); } }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
       `}</style>
     </div>
   );

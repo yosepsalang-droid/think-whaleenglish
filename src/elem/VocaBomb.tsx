@@ -54,11 +54,8 @@ export default function VocaBomb({ teams, players, questions, matchType, onGameE
   const [phase, setPhase] = useState<'ready' | 'playing' | 'explosion' | 'game_over'>('ready');
   const [alivePlayers, setAlivePlayers] = useState<string[]>(players.map(p => p.student_id));
   const [currentTurn, setCurrentTurn] = useState<string | null>(null);
-  
-  // 💡 [변경] 시작 타이머를 10초로 세팅
   const [timeLeft, setTimeLeft] = useState(10);
   const [currentWord, setCurrentWord] = useState<Question | null>(null);
-  
   const [explodedPlayer, setExplodedPlayer] = useState<{ name: string, word: string } | null>(null);
   const [winnerName, setWinnerName] = useState<string>('');
 
@@ -74,7 +71,6 @@ export default function VocaBomb({ teams, players, questions, matchType, onGameE
   useEffect(() => { alivePlayersRef.current = alivePlayers; }, [alivePlayers]);
   useEffect(() => { currentTurnRef.current = currentTurn; }, [currentTurn]);
 
-  // 💡 [변경] 바퀴 수에 따른 타이머 계산 (10 -> 8 -> 6 -> 4 -> 3)
   const getCycleTime = () => Math.max(3, 10 - (cycleCountRef.current - 1) * 2);
 
   useEffect(() => {
@@ -83,7 +79,6 @@ export default function VocaBomb({ teams, players, questions, matchType, onGameE
       setAlivePlayers(initialAlive);
       const shuffledQueue = [...initialAlive].sort(() => Math.random() - 0.5);
       turnQueueRef.current = shuffledQueue;
-      
       setTimeout(() => startNextTurn(shuffledQueue, true), 3000); 
     };
     initGame();
@@ -91,21 +86,14 @@ export default function VocaBomb({ teams, players, questions, matchType, onGameE
     const channel = supabase.channel('bomb_host_listener')
       .on('broadcast', { event: 'submit_answer' }, ({ payload }) => {
         if (phaseRef.current !== 'playing' || payload.studentId !== currentTurnRef.current) return;
-        
         if (payload.isCorrect) {
-          playSFX('correct');
-          turnIndexRef.current += 1;
-          if (turnIndexRef.current >= turnQueueRef.current.length) {
-            turnIndexRef.current = 0;
-            cycleCountRef.current += 1; 
-          }
+          playSFX('correct'); turnIndexRef.current += 1;
+          if (turnIndexRef.current >= turnQueueRef.current.length) { turnIndexRef.current = 0; cycleCountRef.current += 1; }
           startNextTurn(alivePlayersRef.current);
         } else {
           playSFX('wrong'); 
         }
-      })
-      .subscribe();
-
+      }).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
 
@@ -115,24 +103,15 @@ export default function VocaBomb({ teams, players, questions, matchType, onGameE
         if (timeLeft <= 3) playSFX('urgent'); else playSFX('tick');
         const timer = setTimeout(() => setTimeLeft(prev => prev - 1), 1000);
         return () => clearTimeout(timer);
-      } else {
-        handleExplosion();
-      }
+      } else { handleExplosion(); }
     }
   }, [phase, timeLeft]);
 
   const startNextTurn = async (currentAlive: string[], isFirst = false) => {
-    const nextTurnId = turnQueueRef.current[turnIndexRef.current];
-    setCurrentTurn(nextTurnId);
-    
-    const qIdx = questionIndexRef.current % questions.length;
-    const nextQ = questions[qIdx];
-    setCurrentWord(nextQ);
-    questionIndexRef.current += 1;
-
-    const newTime = getCycleTime();
-    setTimeLeft(newTime);
-    setPhase('playing');
+    const nextTurnId = turnQueueRef.current[turnIndexRef.current]; setCurrentTurn(nextTurnId);
+    const qIdx = questionIndexRef.current % questions.length; const nextQ = questions[qIdx];
+    setCurrentWord(nextQ); questionIndexRef.current += 1;
+    const newTime = getCycleTime(); setTimeLeft(newTime); setPhase('playing');
 
     await supabase.from('game_rooms').update({ 
       game_data: { gameMode: 'bomb', bombPhase: 'playing', teams, alivePlayers: currentAlive, currentTurn: nextTurnId, currentQuestion: nextQ, bombTimeLimit: newTime, bombMatchType: matchType } 
@@ -140,59 +119,30 @@ export default function VocaBomb({ teams, players, questions, matchType, onGameE
   };
 
   const handleExplosion = async () => {
-    setPhase('explosion');
-    playSFX('explosion');
-    
-    const deadId = currentTurnRef.current;
-    const deadPlayer = players.find(p => p.student_id === deadId);
+    setPhase('explosion'); playSFX('explosion');
+    const deadId = currentTurnRef.current; const deadPlayer = players.find(p => p.student_id === deadId);
     setExplodedPlayer({ name: deadPlayer?.name || '알 수 없음', word: currentWord?.eng || '' });
-
-    const newAlive = alivePlayersRef.current.filter(id => id !== deadId);
-    const newQueue = turnQueueRef.current.filter(id => id !== deadId);
-    setAlivePlayers(newAlive);
-    turnQueueRef.current = newQueue;
-
-    if (turnIndexRef.current >= newQueue.length) {
-      turnIndexRef.current = 0;
-      cycleCountRef.current += 1;
-    }
-
-    await supabase.from('game_rooms').update({ 
-      game_data: { gameMode: 'bomb', bombPhase: 'explosion', alivePlayers: newAlive, explodedName: deadPlayer?.name } 
-    }).eq('id', 'main_room');
-
+    const newAlive = alivePlayersRef.current.filter(id => id !== deadId); const newQueue = turnQueueRef.current.filter(id => id !== deadId);
+    setAlivePlayers(newAlive); turnQueueRef.current = newQueue;
+    if (turnIndexRef.current >= newQueue.length) { turnIndexRef.current = 0; cycleCountRef.current += 1; }
+    await supabase.from('game_rooms').update({ game_data: { gameMode: 'bomb', bombPhase: 'explosion', alivePlayers: newAlive, explodedName: deadPlayer?.name } }).eq('id', 'main_room');
     setTimeout(() => { processNextTurn(newAlive); }, 4000);
   };
 
   const processNextTurn = async (currentAlive: string[]) => {
-    let isGameOver = false;
-    let wName = '무승부';
-
+    let isGameOver = false; let wName = '무승부';
     if (matchType === 'solo') {
-      if (currentAlive.length <= 1) {
-        isGameOver = true;
-        if (currentAlive.length === 1) wName = players.find(p => p.student_id === currentAlive[0])?.name || '';
-      }
+      if (currentAlive.length <= 1) { isGameOver = true; if (currentAlive.length === 1) wName = players.find(p => p.student_id === currentAlive[0])?.name || ''; }
     } else {
-      const aliveCountsByTeam: Record<number, number> = {};
-      teams.forEach(t => aliveCountsByTeam[t.id] = 0);
-      currentAlive.forEach(id => {
-        const p = players.find(p => p.student_id === id);
-        if (p && p.teamId) aliveCountsByTeam[p.teamId]++;
-      });
+      const aliveCountsByTeam: Record<number, number> = {}; teams.forEach(t => aliveCountsByTeam[t.id] = 0);
+      currentAlive.forEach(id => { const p = players.find(p => p.student_id === id); if (p && p.teamId) aliveCountsByTeam[p.teamId]++; });
       const activeTeams = teams.filter(t => aliveCountsByTeam[t.id] > 0);
-      if (activeTeams.length <= 1) {
-        isGameOver = true;
-        if (activeTeams.length === 1) wName = activeTeams[0].name + ' 팀';
-      }
+      if (activeTeams.length <= 1) { isGameOver = true; if (activeTeams.length === 1) wName = activeTeams[0].name + ' 팀'; }
     }
-
     if (isGameOver) {
       setPhase('game_over'); setWinnerName(wName); playSFX('victory');
       await supabase.from('game_rooms').update({ game_data: { gameMode: 'bomb', bombPhase: 'game_over', alivePlayers: currentAlive, winner: wName } }).eq('id', 'main_room');
-    } else {
-      startNextTurn(currentAlive);
-    }
+    } else { startNextTurn(currentAlive); }
   };
 
   return (
@@ -200,75 +150,64 @@ export default function VocaBomb({ teams, players, questions, matchType, onGameE
       
       {matchType === 'solo' ? (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', justifyContent: 'center', marginBottom: '20px', backgroundColor: 'rgba(0,0,0,0.5)', padding: '20px', borderRadius: '24px' }}>
-          {players.map(p => {
-            const isAlive = alivePlayers.includes(p.student_id);
-            return (
-              <div key={p.student_id} style={{ padding: '10px 20px', borderRadius: '12px', backgroundColor: isAlive ? '#3b82f6' : '#1e293b', color: isAlive ? 'white' : '#64748b', textDecoration: isAlive ? 'none' : 'line-through', fontWeight: 'bold', fontSize: '24px' }}>
-                {p.name} {isAlive ? '🏃' : '💀'}
-              </div>
-            );
-          })}
+          {players.map(p => { const isAlive = alivePlayers.includes(p.student_id); return (<div key={p.student_id} style={{ padding: '10px 20px', borderRadius: '12px', backgroundColor: isAlive ? '#3b82f6' : '#1e293b', color: isAlive ? 'white' : '#64748b', textDecoration: isAlive ? 'none' : 'line-through', fontWeight: 'bold', fontSize: '24px' }}>{p.name} {isAlive ? '🏃' : '💀'}</div>); })}
         </div>
       ) : (
         <div style={{ display: 'flex', justifyContent: 'space-around', marginBottom: '20px', backgroundColor: 'rgba(0,0,0,0.5)', padding: '20px', borderRadius: '24px' }}>
           {teams.map(team => {
             const aliveCount = players.filter(p => p.teamId === team.id && alivePlayers.includes(p.student_id)).length;
-            return (
-              <div key={team.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: aliveCount === 0 ? 0.3 : 1 }}>
-                <div style={{ fontSize: '24px', fontWeight: '900', color: team.color }}>{team.name}</div>
-                <div style={{ fontSize: '40px', fontWeight: '900' }}>생존: {aliveCount}명</div>
-              </div>
-            );
+            return ( <div key={team.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: aliveCount === 0 ? 0.3 : 1 }}><div style={{ fontSize: '24px', fontWeight: '900', color: team.color }}>{team.name}</div><div style={{ fontSize: '40px', fontWeight: '900' }}>생존: {aliveCount}명</div></div> );
           })}
         </div>
       )}
 
+      {/* 💡 [겹침 완벽 해결] margin: 0 과 lineHeight: 1 고정 적용 */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '30px' }}>
         {phase === 'ready' && (
-          <div style={{ textAlign: 'center', animation: 'pulse 1s infinite' }}>
-            <div style={{ fontSize: '150px', margin: 0 }}>💣</div>
-            <h1 style={{ fontSize: '60px', color: '#fde047', fontWeight: '900', margin: 0 }}>폭탄 돌리기 시작!</h1>
-            <p style={{ fontSize: '30px', color: '#94a3b8' }}>긴장하세요! 곧 첫 번째 타자에게 폭탄이 떨어집니다.</p>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', animation: 'pulse 1s infinite' }}>
+            <div style={{ fontSize: '150px', margin: 0, lineHeight: 1 }}>💣</div>
+            <h1 style={{ fontSize: '60px', color: '#fde047', fontWeight: '900', margin: 0, lineHeight: 1 }}>폭탄 돌리기 시작!</h1>
+            <p style={{ fontSize: '30px', color: '#94a3b8', margin: 0, lineHeight: 1 }}>긴장하세요! 곧 첫 번째 타자에게 폭탄이 떨어집니다.</p>
           </div>
         )}
 
         {phase === 'playing' && currentWord && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', width: '100%' }}>
-            <div style={{ fontSize: '150px', fontWeight: '900', color: timeLeft <= 3 ? '#ef4444' : '#fde047', lineHeight: 1, animation: timeLeft <= 3 ? 'shake 0.2s infinite' : 'none' }}>
+            <div style={{ fontSize: '150px', fontWeight: '900', color: timeLeft <= 3 ? '#ef4444' : '#fde047', margin: 0, lineHeight: 1, animation: timeLeft <= 3 ? 'shake 0.2s infinite' : 'none' }}>
               {timeLeft}초
             </div>
             
-            <div style={{ fontSize: '40px', color: '#94a3b8', margin: 0 }}>이 단어의 스펠링은?</div>
-            <div style={{ fontSize: '120px', fontWeight: '900', color: 'white', margin: 0, textShadow: '0 0 30px rgba(255,255,255,0.3)' }}>
+            <div style={{ fontSize: '40px', color: '#94a3b8', margin: 0, lineHeight: 1 }}>이 단어의 스펠링은?</div>
+            <div style={{ fontSize: '120px', fontWeight: '900', color: 'white', margin: 0, lineHeight: 1, textShadow: '0 0 30px rgba(255,255,255,0.3)' }}>
               {currentWord.kor}
             </div>
 
-            <div style={{ fontSize: '50px', fontWeight: '900', color: '#111', backgroundColor: '#4ade80', padding: '20px 50px', borderRadius: '30px', marginTop: '20px', animation: 'zoomIn 0.3s' }}>
+            <div style={{ fontSize: '50px', fontWeight: '900', color: '#111', backgroundColor: '#4ade80', padding: '20px 50px', borderRadius: '30px', margin: 0, lineHeight: 1, animation: 'zoomIn 0.3s' }}>
               🚨 턴: [{players.find(p => p.student_id === currentTurn)?.name}] 해제 중!
             </div>
           </div>
         )}
 
         {phase === 'explosion' && explodedPlayer && (
-          <div style={{ textAlign: 'center', animation: 'zoomIn 0.3s ease-out' }}>
-            <div style={{ fontSize: '180px', margin: 0, animation: 'shake 0.5s' }}>💥</div>
-            <h1 style={{ fontSize: '70px', color: 'white', fontWeight: '900', margin: 0 }}>쾅! 시간 초과!</h1>
-            <div style={{ fontSize: '40px', fontWeight: 'bold', color: '#fde047', marginTop: '20px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', animation: 'zoomIn 0.3s ease-out' }}>
+            <div style={{ fontSize: '180px', margin: 0, lineHeight: 1, animation: 'shake 0.5s' }}>💥</div>
+            <h1 style={{ fontSize: '70px', color: 'white', fontWeight: '900', margin: 0, lineHeight: 1 }}>쾅! 시간 초과!</h1>
+            <div style={{ fontSize: '40px', fontWeight: 'bold', color: '#fde047', margin: 0, lineHeight: 1 }}>
               [{explodedPlayer.name}] 님 폭사! 탈락입니다 💀
             </div>
-            <div style={{ fontSize: '30px', color: '#cbd5e1', marginTop: '10px' }}>
+            <div style={{ fontSize: '30px', color: '#cbd5e1', margin: 0, lineHeight: 1 }}>
               정답 스펠링: {explodedPlayer.word}
             </div>
           </div>
         )}
 
         {phase === 'game_over' && (
-          <div style={{ textAlign: 'center', animation: 'popUp 0.5s ease-out' }}>
-            <div style={{ fontSize: '150px', margin: 0, animation: 'bounce 1s infinite' }}>🏆</div>
-            <h1 style={{ fontSize: '80px', color: '#fde047', fontWeight: '900', margin: 0, textShadow: '0 0 30px rgba(253,224,71,0.6)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', animation: 'popUp 0.5s ease-out' }}>
+            <div style={{ fontSize: '150px', margin: 0, lineHeight: 1, animation: 'bounce 1s infinite' }}>🏆</div>
+            <h1 style={{ fontSize: '80px', color: '#fde047', fontWeight: '900', margin: 0, lineHeight: 1, textShadow: '0 0 30px rgba(253,224,71,0.6)' }}>
               {winnerName} 최종 우승! 🎉
             </h1>
-            <button onClick={onGameEnd} style={{ marginTop: '50px', padding: '20px 60px', fontSize: '30px', backgroundColor: '#3b82f6', color: 'white', borderRadius: '20px', border: 'none', fontWeight: '900', cursor: 'pointer' }}>
+            <button onClick={onGameEnd} style={{ marginTop: '30px', padding: '20px 60px', fontSize: '30px', backgroundColor: '#3b82f6', color: 'white', borderRadius: '20px', border: 'none', fontWeight: '900', cursor: 'pointer' }}>
               메인으로 돌아가기 🏠
             </button>
           </div>

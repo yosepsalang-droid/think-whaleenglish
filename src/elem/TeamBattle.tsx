@@ -1,13 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import NumberSniper from './NumberSniper'; 
-import VocaBomb from './VocaBomb'; // 💡 폭탄 게임 컴포넌트 임포트
+import VocaBomb from './VocaBomb';
 
-interface TeamBattleProps {
-  onBack: () => void;
-  tableName?: 'words_mid' | 'words_high' | 'words';
-}
-
+interface TeamBattleProps { onBack: () => void; tableName?: 'words_mid' | 'words_high' | 'words'; }
 interface Player { student_id: string; name: string; teamId?: number; }
 interface Team { id: number; name: string; color: string; score: number; }
 interface Question { eng: string; kor: string; }
@@ -39,14 +35,15 @@ const playSFX = (type: 'tick' | 'urgent' | 'correct' | 'timeout' | 'victory') =>
 };
 
 export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattleProps) {
-  const [roomStatus, setRoomStatus] = useState<'closed' | 'waiting' | 'playing' | 'round_end' | 'result'>('closed');
+  // 💡 [핵심] 상태에 'team_check' 추가!
+  const [roomStatus, setRoomStatus] = useState<'closed' | 'waiting' | 'team_check' | 'playing' | 'round_end' | 'result'>('closed');
   const [allWords, setAllWords] = useState<Question[]>([]);
   const [books, setBooks] = useState<string[]>([]);
   
   const [selectedBook, setSelectedBook] = useState<string>('');
   const [teamCount, setTeamCount] = useState<number>(2);
-  const [gameMode, setGameMode] = useState<'typing' | 'scramble' | 'ox' | 'sniper' | 'bomb'>('typing'); // 💡 모드 추가
-  const [matchType, setMatchType] = useState<'team' | 'solo'>('team'); // 통합 매치 타입 (스나이퍼, 폭탄 공용)
+  const [gameMode, setGameMode] = useState<'typing' | 'scramble' | 'ox' | 'sniper' | 'bomb'>('typing');
+  const [matchType, setMatchType] = useState<'team' | 'solo'>('team');
   const [winScore, setWinScore] = useState<number>(3); 
   const [sniperRange, setSniperRange] = useState<number>(40);
 
@@ -72,40 +69,29 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
   useEffect(() => {
     const fetchWords = async () => {
       const { data } = await supabase.from(tableName).select('book, eng, kor');
-      if (data) {
-        setAllWords(data);
-        setBooks(Array.from(new Set(data.map(w => w.book))).sort() as string[]);
-      }
+      if (data) { setAllWords(data); setBooks(Array.from(new Set(data.map(w => w.book))).sort() as string[]); }
     };
     fetchWords();
   }, [tableName]);
 
   useEffect(() => {
     supabase.from('game_rooms').update({ status: 'closed', players: [], game_data: {} }).eq('id', 'main_room');
-
     const channel = supabase.channel('main_room_host')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_rooms', filter: 'id=eq.main_room' }, (payload) => {
-        const newData = payload.new;
-        if (newData.players) setJoinedPlayers(newData.players);
+        const newData = payload.new; if (newData.players) setJoinedPlayers(newData.players);
       })
       .on('broadcast', { event: 'submit_answer' }, ({ payload }) => {
-        if (gameMode === 'sniper' || gameMode === 'bomb') return; // 서바이벌 게임들은 자체 리스너 사용
-
+        if (gameMode === 'sniper' || gameMode === 'bomb') return; 
         submitCountRef.current += 1; 
         if (payload.isCorrect) {
-          playSFX('correct'); 
-          roundScoresRef.current[payload.teamId] = (roundScoresRef.current[payload.teamId] || 0) + 1;
+          playSFX('correct'); roundScoresRef.current[payload.teamId] = (roundScoresRef.current[payload.teamId] || 0) + 1;
           setRoundScores({ ...roundScoresRef.current }); 
           if (payload.studentName) setRoundWinners(prev => [...prev, payload.studentName]);
         }
         if (submitCountRef.current >= playerCountRef.current && playerCountRef.current > 0) setTimeLeft(0);
-      })
-      .subscribe();
+      }).subscribe();
 
-    return () => {
-      supabase.from('game_rooms').update({ status: 'closed', players: [], game_data: {} }).eq('id', 'main_room');
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.from('game_rooms').update({ status: 'closed', players: [], game_data: {} }).eq('id', 'main_room'); supabase.removeChannel(channel); };
   }, [gameMode]);
 
   useEffect(() => {
@@ -122,22 +108,18 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
   const handleOpenRoom = async () => {
     if (gameMode !== 'sniper' && !selectedBook) return alert("게임을 진행할 교재를 먼저 선택해주세요!");
     if (gameMode !== 'sniper') {
-      // 💡 폭탄 게임은 단어가 많이 필요하므로 100개 추출 (랜덤 섞기)
       const countLimit = gameMode === 'bomb' ? 100 : 30;
-      let targetWords = selectedBook === 'random' 
-        ? [...allWords].sort(() => Math.random() - 0.5).slice(0, countLimit)
-        : allWords.filter(w => (w as any).book === selectedBook).sort(() => Math.random() - 0.5).slice(0, countLimit);
+      let targetWords = selectedBook === 'random' ? [...allWords].sort(() => Math.random() - 0.5).slice(0, countLimit) : allWords.filter(w => (w as any).book === selectedBook).sort(() => Math.random() - 0.5).slice(0, countLimit);
       if (targetWords.length === 0) return alert("해당 교재에 단어가 없습니다.");
       setQuestions(targetWords);
     }
     setCurrentIndex(0);
-    await supabase.from('game_rooms').update({ 
-      status: 'waiting', players: [], settings: { teamCount, book: selectedBook, gameMode, winScore, sniperRange, matchType }
-    }).eq('id', 'main_room');
+    await supabase.from('game_rooms').update({ status: 'waiting', players: [], settings: { teamCount, book: selectedBook, gameMode, winScore, sniperRange, matchType } }).eq('id', 'main_room');
     setRoomStatus('waiting');
   };
 
-  const handleStartGame = async () => {
+  // 💡 [수정] 바로 게임을 시작하지 않고 '팀 배정 결과(team_check)' 화면으로 넘어갑니다.
+  const handleStartTeamCheck = async () => {
     const isSurvival = gameMode === 'sniper' || gameMode === 'bomb';
     if (!isSurvival || matchType === 'team') {
       if (joinedPlayers.length < teamCount) return alert(`최소 ${teamCount}명 이상의 학생이 접속해야 합니다!`);
@@ -158,52 +140,47 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
     }
     setJoinedPlayers(assignedPlayers);
 
-    if (gameMode === 'sniper') {
+    setRoomStatus('team_check');
+    await supabase.from('game_rooms').update({ 
+      status: 'team_check', players: assignedPlayers, game_data: { teams: initialTeams, gameMode, matchType } 
+    }).eq('id', 'main_room');
+  };
+
+  // 💡 [추가] 선생님이 팀 확인 후 '진짜 시작' 버튼을 눌렀을 때 발동
+  const handleRealStartGame = async () => {
+    if (gameMode === 'sniper' || gameMode === 'bomb') {
       setRoomStatus('playing');
-      await supabase.from('game_rooms').update({ status: 'playing', players: assignedPlayers, game_data: { teams: initialTeams, gameMode, matchType } }).eq('id', 'main_room');
-    } else if (gameMode === 'bomb') {
-      setRoomStatus('playing');
-      await supabase.from('game_rooms').update({ status: 'playing', players: assignedPlayers, game_data: { teams: initialTeams, gameMode, matchType } }).eq('id', 'main_room');
+      await supabase.from('game_rooms').update({ status: 'playing' }).eq('id', 'main_room');
     } else {
-      startNewRound(0, initialTeams, assignedPlayers);
+      startNewRound(0, teams, joinedPlayers);
     }
   };
 
   const startNewRound = async (index: number, currentTeams = teams, currentPlayers = joinedPlayers) => {
     roundScoresRef.current = {}; submitCountRef.current = 0; setRoundScores({}); setRoundWinners([]); setTimeLeft(15); setCurrentIndex(index); setRoomStatus('playing');
     let oxAnswer = 'O'; let displayKor = questions[index]?.kor || '';
-    if (gameMode === 'ox') {
-      if (Math.random() > 0.5) oxAnswer = 'O'; 
-      else { oxAnswer = 'X'; displayKor = allWords[Math.floor(Math.random() * allWords.length)].kor; }
-    }
+    if (gameMode === 'ox') { if (Math.random() > 0.5) oxAnswer = 'O'; else { oxAnswer = 'X'; displayKor = allWords[Math.floor(Math.random() * allWords.length)].kor; } }
     setCurrentOxData({ displayKor, oxAnswer });
     await supabase.from('game_rooms').update({ status: 'playing', players: currentPlayers, game_data: { teams: currentTeams, currentQuestion: questions[index], questionIndex: index, gameMode, oxAnswer } }).eq('id', 'main_room');
   };
 
   const handleRoundEnd = async () => {
-    const scores = roundScoresRef.current;
-    let maxScore = -1; let winners: number[] = [];
+    const scores = roundScoresRef.current; let maxScore = -1; let winners: number[] = [];
     teams.forEach(t => { const s = scores[t.id] || 0; if (s > maxScore) { maxScore = s; winners = [t.id]; } else if (s === maxScore) { winners.push(t.id); } });
     let resultText = "무승부"; let updatedTeams = [...teams];
-    if (winners.length === 1 && maxScore > 0) {
-       const winnerTeam = teams.find(t => t.id === winners[0]); resultText = `${winnerTeam?.name} 승리! (+1점 획득)`; updatedTeams = updatedTeams.map(t => t.id === winners[0] ? { ...t, score: t.score + 1 } : t);
-    } else if (maxScore === 0) { resultText = "아무도 정답을 맞히지 못했습니다!"; } else { resultText = "앗, 동점입니다! (승점 획득 실패)"; }
+    if (winners.length === 1 && maxScore > 0) { const winnerTeam = teams.find(t => t.id === winners[0]); resultText = `${winnerTeam?.name} 승리! (+1점 획득)`; updatedTeams = updatedTeams.map(t => t.id === winners[0] ? { ...t, score: t.score + 1 } : t); } else if (maxScore === 0) { resultText = "아무도 정답을 맞히지 못했습니다!"; } else { resultText = "앗, 동점입니다! (승점 획득 실패)"; }
     setTeams(updatedTeams); setRoundResultText(resultText); setRoomStatus('round_end');
     await supabase.from('game_rooms').update({ status: 'round_end', game_data: { teams: updatedTeams, currentQuestion: questions[currentIndex], gameMode, roundResultText: resultText } }).eq('id', 'main_room');
   };
 
   const handleNextRoundAction = async () => {
     const isGameOver = teams.some(t => t.score >= winScore);
-    if (isGameOver) {
-      playSFX('victory'); setRoomStatus('result'); await supabase.from('game_rooms').update({ status: 'result' }).eq('id', 'main_room');
+    if (isGameOver) { playSFX('victory'); setRoomStatus('result'); await supabase.from('game_rooms').update({ status: 'result' }).eq('id', 'main_room');
     } else if (currentIndex + 1 < questions.length) { startNewRound(currentIndex + 1); } 
     else { playSFX('victory'); setRoomStatus('result'); await supabase.from('game_rooms').update({ status: 'result' }).eq('id', 'main_room'); }
   };
 
-  const handleForceClose = async () => {
-    await supabase.from('game_rooms').update({ status: 'closed', players: [], game_data: {} }).eq('id', 'main_room');
-    onBack();
-  };
+  const handleForceClose = async () => { await supabase.from('game_rooms').update({ status: 'closed', players: [], game_data: {} }).eq('id', 'main_room'); onBack(); };
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: '#0f172a', color: 'white', display: 'flex', flexDirection: 'column', fontFamily: 'Pretendard, sans-serif', zIndex: 3000 }}>
@@ -213,7 +190,6 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflowY: 'auto', padding: '40px 0' }}>
           <h1 style={{ fontSize: '50px', fontWeight: '900', color: '#fde047', marginBottom: '40px' }}>⚔️ 교실 대난투 : 배틀 생성 ⚔️</h1>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '25px', backgroundColor: 'rgba(255,255,255,0.1)', padding: '40px', borderRadius: '32px', width: '900px' }}>
-            
             <div>
               <h2 style={{ fontSize: '20px', marginBottom: '10px', color: '#94a3b8' }}>1. 게임 모드 선택</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px' }}>
@@ -260,11 +236,7 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
                 )}
                 <div>
                   <h2 style={{ fontSize: '20px', marginBottom: '10px', color: '#94a3b8' }}>{gameMode === 'bomb' ? '3' : '3'}. 출제 교재 선택</h2>
-                  <select value={selectedBook} onChange={e => setSelectedBook(e.target.value)} style={{ width: '100%', padding: '15px', fontSize: '20px', borderRadius: '12px', fontWeight: 'bold', outline: 'none', cursor: 'pointer', backgroundColor: '#fff', color: '#111' }}>
-                    <option value="">교재를 선택하세요</option>
-                    <option value="random">🌟 모든 단어 전체 랜덤</option>
-                    {books.map(b => <option key={b} value={b}>{b}</option>)}
-                  </select>
+                  <select value={selectedBook} onChange={e => setSelectedBook(e.target.value)} style={{ width: '100%', padding: '15px', fontSize: '20px', borderRadius: '12px', fontWeight: 'bold', outline: 'none', cursor: 'pointer', backgroundColor: '#fff', color: '#111' }}><option value="">교재를 선택하세요</option><option value="random">🌟 모든 단어 전체 랜덤</option>{books.map(b => <option key={b} value={b}>{b}</option>)}</select>
                 </div>
               </>
             )}
@@ -279,7 +251,6 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
                 </div>
               </div>
             )}
-
             <button onClick={handleOpenRoom} style={{ marginTop: '10px', width: '100%', padding: '24px', fontSize: '28px', fontWeight: '900', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '20px', cursor: 'pointer', boxShadow: '0 8px 0 #b45309' }}>📡 게임 방 열고 아이들 소집하기!</button>
           </div>
         </div>
@@ -295,13 +266,41 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
           </div>
           <div style={{ marginTop: '40px', display: 'flex', gap: '20px', alignItems: 'center' }}>
             <div style={{ fontSize: '24px', fontWeight: 'bold' }}>현재 인원: <span style={{ color: '#fde047', fontSize: '32px' }}>{joinedPlayers.length}</span>명</div>
-            <button onClick={handleStartGame} style={{ marginLeft: '30px', padding: '20px 50px', fontSize: '28px', fontWeight: '900', backgroundColor: '#ec4899', color: 'white', border: 'none', borderRadius: '20px', cursor: 'pointer', boxShadow: '0 8px 0 #be185d' }}>배틀 시작! 🚀</button>
+            <button onClick={handleStartTeamCheck} style={{ marginLeft: '30px', padding: '20px 50px', fontSize: '28px', fontWeight: '900', backgroundColor: '#ec4899', color: 'white', border: 'none', borderRadius: '20px', cursor: 'pointer', boxShadow: '0 8px 0 #be185d' }}>팀 확인 & 배틀 준비! 🚀</button>
           </div>
         </div>
       )}
 
+      {/* 💡 [새로 추가된 팀 확인 대기 화면] */}
+      {roomStatus === 'team_check' && (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: '60px' }}>
+          <h1 style={{ fontSize: '60px', fontWeight: '900', color: '#fde047', marginBottom: '20px' }}>{matchType === 'solo' ? '개인전 엔트리 확인!' : '팀 배정 완료!'}</h1>
+          <p style={{ fontSize: '24px', color: '#94a3b8', marginBottom: '40px' }}>아이들이 자신의 패드에서 소속을 확인할 수 있도록 잠시 대기해 주세요.</p>
+          
+          <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap', justifyContent: 'center', width: '90%' }}>
+            {matchType === 'solo' ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', justifyContent: 'center', padding: '30px', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '24px' }}>
+                {joinedPlayers.map(p => <div key={p.student_id} style={{ padding: '15px 30px', fontSize: '24px', fontWeight: 'bold', backgroundColor: '#3b82f6', borderRadius: '16px' }}>{p.name}</div>)}
+              </div>
+            ) : (
+              teams.map(team => {
+                const members = joinedPlayers.filter(p => p.teamId === team.id);
+                return (
+                  <div key={team.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)', padding: '30px', borderRadius: '24px', borderTop: `10px solid ${team.color}`, width: '300px' }}>
+                    <div style={{ fontSize: '32px', fontWeight: '900', color: team.color, marginBottom: '20px' }}>{team.name}</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
+                      {members.map(m => <div key={m.student_id} style={{ fontSize: '24px', fontWeight: 'bold', textAlign: 'center', backgroundColor: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '10px' }}>{m.name}</div>)}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+          <button onClick={handleRealStartGame} style={{ marginTop: '50px', padding: '24px 80px', fontSize: '32px', fontWeight: '900', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '20px', cursor: 'pointer', boxShadow: '0 10px 0 #b91c1c', animation: 'pulse 1.5s infinite' }}>진짜 배틀 시작! 💥</button>
+        </div>
+      )}
+
       {roomStatus === 'playing' && gameMode === 'sniper' && <NumberSniper teams={teams} players={joinedPlayers} maxNumber={sniperRange} matchType={matchType} onGameEnd={handleForceClose} />}
-      {/* 💡 폭탄 게임 컴포넌트 연결 */}
       {roomStatus === 'playing' && gameMode === 'bomb' && <VocaBomb teams={teams} players={joinedPlayers} questions={questions} matchType={matchType} onGameEnd={handleForceClose} />}
 
       {roomStatus === 'playing' && (gameMode === 'typing' || gameMode === 'scramble' || gameMode === 'ox') && (
@@ -344,7 +343,7 @@ export default function TeamBattle({ onBack, tableName = 'words' }: TeamBattlePr
         </div>
       )}
 
-      <style>{`@keyframes popUp { 0% { transform: scale(0.5); opacity: 0; } 50% { transform: scale(1.1); } 100% { transform: scale(1); opacity: 1; } } @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-30px); } } @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-10px); } 75% { transform: translateX(10px); } }`}</style>
+      <style>{`@keyframes popUp { 0% { transform: scale(0.5); opacity: 0; } 50% { transform: scale(1.1); } 100% { transform: scale(1); opacity: 1; } } @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-30px); } } @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-10px); } 75% { transform: translateX(10px); } } @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }`}</style>
     </div>
   );
 }
