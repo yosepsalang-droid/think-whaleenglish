@@ -212,41 +212,14 @@ export default function Ranking({ onBack, studentName = "테스트학생" }: Ran
           }
         }
 
-        let allStudents: any[] = [];
-        let studentFrom = 0;
-        let isFetchingStudents = true;
-        
-        while (isFetchingStudents) {
-          const { data, error } = await supabase
-            .from('students')
-            .select('student_id, grade')
-            .order('student_id', { ascending: true })
-            .range(studentFrom, studentFrom + step - 1);
-
-          if (error) throw error;
-
-          if (data && data.length > 0) {
-            allStudents = [...allStudents, ...data];
-            studentFrom += step;
-            if (data.length < step) isFetchingStudents = false;
-          } else {
-            isFetchingStudents = false;
-          }
-        }
-
-        const gradeMap = new Map<string, string>();
-        allStudents.forEach(s => {
-          if (s.student_id) gradeMap.set(s.student_id, s.grade || '');
-        });
-
         const thisMonthMap = new Map<string, number>();
         const lastMonthMap = new Map<string, number>();
 
         allLogs.forEach(log => {
           if (!log.student_name || typeof log.score !== 'number') return;
           
-          const studentGrade = gradeMap.get(log.student_id) || '';
-          if (!studentGrade.includes('초')) return; 
+          // 💡 [수정] 범인이었던 '초등학생 필터(studentGrade.includes('초'))' 코드를 삭제했습니다!
+          // 이제 중학생이든 고등학생이든 점수만 있으면 무조건 랭킹에 합산됩니다.
 
           const logDate = new Date(log.created_at);
 
@@ -296,7 +269,6 @@ export default function Ranking({ onBack, studentName = "테스트학생" }: Ran
         <div style={{ width: '80px' }}></div>
       </div>
 
-      {/* 💡 깔끔하게 정리된 공지사항 영역 */}
       <div style={{ backgroundColor: '#fffdf0', border: '1px solid #ffda79', borderRadius: '12px', padding: '16px', marginBottom: '24px', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
         <div style={{ fontWeight: '900', color: '#cc8e00', fontSize: '16px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
           📢 [공지] 10월 마라톤 랭킹전 상품 안내 🎁
