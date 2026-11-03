@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+// 💡 [중요] PhonicsData 파일의 경로가 맞는지 꼭 확인해 주세요! (경로가 다르면 에러가 날 수 있습니다)
+import { PHONICS_DB } from './PhonicsData'; 
 
 interface CardGameProps {
   onBack: () => void;
@@ -16,16 +18,19 @@ interface Word {
   kor: string;
 }
 
+// 💡 [변경] 카드 타입에 'image'와 이미지 주소를 담을 'imageUrl'을 추가했습니다.
 interface Card {
   uid: string; 
   wordId: number; 
   text: string; 
-  type: 'eng' | 'kor'; 
+  type: 'eng' | 'kor' | 'image'; 
+  imageUrl?: string;
 }
 
 export default function CardGame({ onBack, studentId, studentName, currentBook, tableName = 'words', onGameComplete }: CardGameProps) {
   const [allWordsDb, setAllWordsDb] = useState<Word[]>([]);
   const [gameState, setGameState] = useState<'intro' | 'playing' | 'stageClear' | 'gameOver' | 'result'>('intro');
+  const [gameMode, setGameMode] = useState<'normal' | 'phonics'>('normal'); // 💡 현재 게임 모드 상태 추가
   
   const [cards, setCards] = useState<Card[]>([]);
   const [flippedIndices, setFlippedIndices] = useState<number[]>([]);
@@ -89,7 +94,7 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
       await supabase.from('learning_logs').insert([{
         student_id: studentId,
         student_name: studentName,
-        task_type: '단어 카드게임',
+        task_type: gameMode === 'phonics' ? '파닉스 카드게임' : '단어 카드게임',
         book_info: `Stage ${finalStage} (${statusText})`,
         score: finalScore,
         status: '완료', 
@@ -103,31 +108,51 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
     }
   };
 
-  const startNewGame = () => {
-    if (allWordsDb.length < 5) {
-      return alert(`[${currentBook}] 교재의 단어가 부족합니다. (최소 5개 이상 필요)`);
+  // 💡 [변경] 어떤 모드(normal/phonics)를 눌렀는지 파악해서 게임을 시작합니다.
+  const startNewGame = (selectedMode: 'normal' | 'phonics') => {
+    setGameMode(selectedMode);
+
+    if (selectedMode === 'normal' && allWordsDb.length < 5) {
+      return alert(`[${currentBook}] 교재의 일반 단어가 부족합니다. (최소 5개 이상 필요)`);
+    } else if (selectedMode === 'phonics' && PHONICS_DB.length < 5) {
+      return alert(`파닉스 데이터가 부족합니다.`);
     }
+
     setStage(1);
     setHearts(5);
     setScore(0);
-    generateStage(1, 0); 
+    generateStage(1, 0, selectedMode); 
   };
 
-  const generateStage = (targetStage: number, currentScore: number) => {
+  const generateStage = (targetStage: number, currentScore: number, mode: 'normal' | 'phonics') => {
     const wordCountForStage = targetStage;
     
-    if (wordCountForStage > allWordsDb.length) {
+    // 모드에 따라 데이터 소스를 다르게 가져옵니다.
+    const sourceDb = mode === 'normal' 
+      ? allWordsDb 
+      : PHONICS_DB.map(p => ({ id: p.id, eng: p.word, kor: p.word })); // 파닉스는 kor 대신 이미지를 쓸 것이므로 임시 처리
+
+    if (wordCountForStage > sourceDb.length) {
        setGameState('result');
        saveLogToDB(currentScore, targetStage - 1, '올클리어'); 
        return;
     }
 
-    const shuffledWords = [...allWordsDb].sort(() => Math.random() - 0.5).slice(0, wordCountForStage);
+    const shuffledWords = [...sourceDb].sort(() => Math.random() - 0.5).slice(0, wordCountForStage);
     const gameCards: Card[] = [];
     
     shuffledWords.forEach((word) => {
+      // 1. 영어 카드는 공통으로 추가
       gameCards.push({ uid: `${word.id}-eng`, wordId: word.id, text: word.eng, type: 'eng' });
-      gameCards.push({ uid: `${word.id}-kor`, wordId: word.id, text: word.kor, type: 'kor' });
+      
+      // 2. 모드에 따라 반대쪽 카드를 뜻(kor) 또는 그림(image)으로 추가
+      if (mode === 'normal') {
+        gameCards.push({ uid: `${word.id}-kor`, wordId: word.id, text: word.kor, type: 'kor' });
+      } else {
+        // 💡 [마법의 코드] 원장님이 올리신 긴 파일 이름을 알아서 조합해서 주소를 만듭니다!
+        const imageUrl = supabase.storage.from('phonics').getPublicUrl(`${word.eng}-removebg-preview.png`).data.publicUrl;
+        gameCards.push({ uid: `${word.id}-image`, wordId: word.id, text: word.eng, type: 'image', imageUrl });
+      }
     });
 
     gameCards.sort(() => Math.random() - 0.5);
@@ -136,8 +161,6 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
     setMatchedIds([]);
     setGameState('playing');
 
-    // 💡 [원장님 황금 밸런스 룰 적용]
-    // 1~3단계: 3초 / 4단계: 5초 / 그 이후: 1초씩 증가
     let calculatedSeconds = 3;
     if (targetStage >= 4) {
       calculatedSeconds = 5 + (targetStage - 4); 
@@ -162,7 +185,8 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
     const newFlipped = [...flippedIndices, index];
     setFlippedIndices(newFlipped);
 
-    if (cards[index].type === 'eng') {
+    // 영어 카드를 누르거나, 파닉스 모드에서 그림 카드를 눌렀을 때도 소리를 내줍니다!
+    if (cards[index].type === 'eng' || cards[index].type === 'image') {
       speakText(cards[index].text);
     }
 
@@ -207,7 +231,7 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
   };
 
   const handleNextStage = () => {
-    generateStage(stage + 1, score);
+    generateStage(stage + 1, score, gameMode);
     setStage((prev) => prev + 1);
   };
 
@@ -226,60 +250,14 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
       
       <style>
         {`
-          .card-container {
-            perspective: 1000px;
-            cursor: pointer;
-            aspect-ratio: 3 / 4;
-            max-width: 150px;
-            margin: 0 auto;
-            width: 100%;
-          }
-          .card-inner {
-            position: relative;
-            width: 100%;
-            height: 100%;
-            transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1);
-            transform-style: preserve-3d;
-          }
-          .card-flipped .card-inner {
-            transform: rotateY(180deg);
-          }
-          .card-front, .card-back {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            backface-visibility: hidden;
-            border-radius: 16px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            text-align: center;
-            padding: 12px;
-            box-sizing: border-box;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-          }
-          .card-front {
-            background: linear-gradient(135deg, #007aff, #5ac8fa);
-            color: white;
-            font-size: 36px;
-            font-weight: 900;
-          }
-          .card-back {
-            background: white;
-            transform: rotateY(180deg);
-            border: 2px solid #e2e8f0;
-          }
-          .card-matched {
-            opacity: 0.3;
-            transform: scale(0.95);
-            transition: all 0.3s ease;
-          }
-          
-          @keyframes pulseHint {
-            0% { transform: translateX(-50%) scale(1); }
-            50% { transform: translateX(-50%) scale(1.05); }
-            100% { transform: translateX(-50%) scale(1); }
-          }
+          .card-container { perspective: 1000px; cursor: pointer; aspect-ratio: 3 / 4; max-width: 150px; margin: 0 auto; width: 100%; }
+          .card-inner { position: relative; width: 100%; height: 100%; transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1); transform-style: preserve-3d; }
+          .card-flipped .card-inner { transform: rotateY(180deg); }
+          .card-front, .card-back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; border-radius: 16px; display: flex; justify-content: center; align-items: center; text-align: center; padding: 12px; box-sizing: border-box; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+          .card-front { background: linear-gradient(135deg, #007aff, #5ac8fa); color: white; font-size: 36px; font-weight: 900; }
+          .card-back { background: white; transform: rotateY(180deg); border: 2px solid #e2e8f0; overflow: hidden; }
+          .card-matched { opacity: 0.3; transform: scale(0.95); transition: all 0.3s ease; }
+          @keyframes pulseHint { 0% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(1.05); } 100% { transform: translateX(-50%) scale(1); } }
         `}
       </style>
 
@@ -301,13 +279,20 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
               현재 교재: {currentBook}
             </div>
           )}
-          <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '12px', marginBottom: '32px', fontSize: '13px', color: '#334155', fontWeight: '700', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <span>🔥 <b>스테이지 숫자가 곧 획득 점수</b>입니다! (2단계=2점)</span>
+          
+          <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '12px', marginBottom: '24px', fontSize: '13px', color: '#334155', fontWeight: '700', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <span>🔥 <b>스테이지 숫자가 곧 획득 점수</b>입니다!</span>
             <span>💖 <b>스테이지를 깨면 하트가 1개 회복</b>됩니다!</span>
           </div>
-          <button onClick={startNewGame} style={{ width: '100%', padding: '18px', background: 'linear-gradient(135deg, #ff3b30, #ff9500)', color: 'white', border: 'none', borderRadius: '16px', fontSize: '18px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 6px 16px rgba(255,59,48,0.2)' }}>
-            🎮 서바이벌 시작
-          </button>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <button onClick={() => startNewGame('normal')} style={{ width: '100%', padding: '18px', background: 'linear-gradient(135deg, #007aff, #5ac8fa)', color: 'white', border: 'none', borderRadius: '16px', fontSize: '18px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 6px 16px rgba(0,122,255,0.2)' }}>
+              📝 일반 단어 모드 (단어 ↔ 뜻)
+            </button>
+            <button onClick={() => startNewGame('phonics')} style={{ width: '100%', padding: '18px', background: 'linear-gradient(135deg, #ff3b30, #ff9500)', color: 'white', border: 'none', borderRadius: '16px', fontSize: '18px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 6px 16px rgba(255,59,48,0.2)' }}>
+              🖼️ 파닉스 그림 모드 (단어 ↔ 그림)
+            </button>
+          </div>
         </div>
       )}
 
@@ -349,16 +334,21 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
                 >
                   <div className="card-inner">
                     <div className="card-front">?</div>
-                    <div className="card-back" style={{ border: isMatched ? '3px solid #4caf50' : '2px solid #e2e8f0', backgroundColor: isMatched ? '#f0fdf4' : 'white' }}>
-                      <span style={{ 
-                        fontSize: card.type === 'eng' ? (card.text.length > 8 ? '18px' : '24px') : '22px', 
-                        fontWeight: '900', 
-                        color: card.type === 'eng' ? '#007aff' : '#111',
-                        wordBreak: 'keep-all',
-                        lineHeight: '1.2'
-                      }}>
-                        {card.text}
-                      </span>
+                    <div className="card-back" style={{ border: isMatched ? '3px solid #4caf50' : '2px solid #e2e8f0', backgroundColor: isMatched ? '#f0fdf4' : 'white', padding: card.type === 'image' ? '4px' : '12px' }}>
+                      {/* 💡 [핵심 구현] 카드 타입이 image면 그림을 띄우고, 아니면 기존처럼 글자를 띄웁니다! */}
+                      {card.type === 'image' ? (
+                        <img src={card.imageUrl} alt={card.text} style={{ width: '90%', height: '90%', objectFit: 'contain' }} onError={(e) => (e.currentTarget.style.display = 'none')} />
+                      ) : (
+                        <span style={{ 
+                          fontSize: card.type === 'eng' ? (card.text.length > 8 ? '18px' : '24px') : '22px', 
+                          fontWeight: '900', 
+                          color: card.type === 'eng' ? '#007aff' : '#111',
+                          wordBreak: 'keep-all',
+                          lineHeight: '1.2'
+                        }}>
+                          {card.text}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -406,7 +396,7 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
             <button onClick={onBack} style={{ flex: 1, padding: '16px', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: '16px', fontSize: '16px', fontWeight: '800', cursor: 'pointer' }}>
               종료
             </button>
-            <button onClick={startNewGame} style={{ flex: 2, padding: '16px', background: '#111', color: 'white', border: 'none', borderRadius: '16px', fontSize: '16px', fontWeight: '800', cursor: 'pointer' }}>
+            <button onClick={() => startNewGame(gameMode)} style={{ flex: 2, padding: '16px', background: '#111', color: 'white', border: 'none', borderRadius: '16px', fontSize: '16px', fontWeight: '800', cursor: 'pointer' }}>
               🔄 다시 도전
             </button>
           </div>
@@ -416,7 +406,7 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
       {gameState === 'result' && (
         <div style={{ textAlign: 'center', background: 'white', padding: '48px 24px', borderRadius: '24px', boxShadow: '0 12px 32px rgba(0,0,0,0.06)', animation: 'fadeIn 0.5s ease' }}>
           <div style={{ fontSize: '56px', marginBottom: '16px' }}>🏆</div>
-          <h2 style={{ fontSize: '28px', fontWeight: '800', margin: '0 0 12px', color: '#111' }}>모든 단어 마스터!</h2>
+          <h2 style={{ fontSize: '28px', fontWeight: '800', margin: '0 0 12px', color: '#111' }}>모든 {gameMode === 'phonics' ? '파닉스' : '단어'} 마스터!</h2>
           <p style={{ fontSize: '15px', color: '#64748b', marginBottom: '24px' }}>준비된 모든 카드를 뒤집었습니다.</p>
           
           <div style={{ backgroundColor: '#f0fdf4', borderRadius: '20px', padding: '24px', marginBottom: '32px', border: '1px solid #e2e8f0' }}>
