@@ -12,7 +12,7 @@ const RAW_PHONICS_DB = [
   { id: 2, day: 1, letter: 'Aa', word: 'apple', sound: 'apple' },
   { id: 3, day: 1, letter: 'Aa', word: 'alligator', sound: 'alligator' },
   { id: 4, day: 1, letter: 'Bb', word: 'ball', sound: 'ball' },
-  { id: 5, day: 1, letter: 'Bb', word: 'backpack', sound: 'backpack' },
+  { id: 5, day: 1, letter: 'Bb', word: 'bag', sound: 'bag' },
   { id: 6, day: 1, letter: 'Bb', word: 'banana', sound: 'banana' },
   { id: 7, day: 1, letter: 'Cc', word: 'cat', sound: 'cat' },
   { id: 8, day: 1, letter: 'Cc', word: 'cup', sound: 'cup' },

@@ -79,7 +79,22 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'en-US';
-      utterance.rate = 0.9;
+      utterance.rate = 0.85; // 💡 파닉스니까 너무 빠르지 않게 속도를 살짝(0.85) 낮춥니다.
+  
+      // 💡 기기에 설치된 모든 목소리를 불러옵니다.
+      const voices = window.speechSynthesis.getVoices();
+      
+      // 💡 안드로이드/크롬의 고품질 구글 음성이나, 아이폰/맥의 자연스러운 원어민 음성(Samantha, Daniel 등)을 최우선으로 찾습니다.
+      const bestVoice = voices.find(v => 
+        v.name.includes('Google US English') || 
+        v.name.includes('Samantha') || 
+        v.name.includes('Daniel')
+      );
+  
+      if (bestVoice) {
+        utterance.voice = bestVoice;
+      }
+  
       window.speechSynthesis.speak(utterance);
     }
   };
