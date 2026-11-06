@@ -87,7 +87,8 @@ export default function ElemManage() {
         .from('students')
         .select('*')
         .like('grade', '%초%')
-        .order('name', { ascending: true }); 
+        .order('name', { ascending: true })
+        .limit(2000); // 💡 [안전장치 1] 학생 수 1,000명 초과를 대비해 2,000명까지 넉넉하게 불러옵니다.
 
       if (studentError) throw studentError;
 
@@ -105,7 +106,8 @@ export default function ElemManage() {
         .select('student_id, task_type, status, book_info, created_at')
         .gte('created_at', gteString) 
         .lte('created_at', lteString) 
-        .eq('status', '완료');
+        .eq('status', '완료')
+        .limit(50000); // 💡 [핵심 해결] 수파베이스의 1,000개 제한을 하루 최대 50,000개로 시원하게 뚫었습니다!
 
       if (logError) throw logError;
 
@@ -286,10 +288,8 @@ export default function ElemManage() {
   return (
     <div style={{ backgroundColor: 'white', color: '#1f2937', padding: '16px', borderRadius: '12px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', width: '100%', boxSizing: 'border-box', margin: '0 auto', fontFamily: 'Pretendard, sans-serif' }}>
       
-      {/* 💡 [핵심] 여기서 flex-wrap: 'wrap' 과 minWidth 설정을 통해 좁은 화면에서도 날짜 컨트롤 영역이 줄바꿈 되며 깨지지 않게 방어합니다. */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
         
-        {/* 상단 좌측: 타이틀 및 날짜 조작부 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#1f2937', margin: 0, whiteSpace: 'nowrap' }}>👑 초등부 관제탑</h2>
           
@@ -313,7 +313,6 @@ export default function ElemManage() {
           </button>
         </div>
 
-        {/* 상단 우측: 학년 필터링 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
             {uniqueGrades.map(grade => {
@@ -432,7 +431,6 @@ export default function ElemManage() {
         </table>
       </div>
 
-      {/* 학생 관리 모달 (기존 동일) */}
       {manageStudent && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 50 }}>
           <div style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', padding: '24px', borderRadius: '16px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', width: '24rem', position: 'relative', margin: '0 16px', maxWidth: '90vw' }}>
