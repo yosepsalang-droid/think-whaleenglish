@@ -18,7 +18,6 @@ interface Word {
   kor: string;
 }
 
-// 💡 [변경] 카드 타입에 'image'와 이미지 주소를 담을 'imageUrl'을 추가했습니다.
 interface Card {
   uid: string; 
   wordId: number; 
@@ -30,7 +29,7 @@ interface Card {
 export default function CardGame({ onBack, studentId, studentName, currentBook, tableName = 'words', onGameComplete }: CardGameProps) {
   const [allWordsDb, setAllWordsDb] = useState<Word[]>([]);
   const [gameState, setGameState] = useState<'intro' | 'playing' | 'stageClear' | 'gameOver' | 'result'>('intro');
-  const [gameMode, setGameMode] = useState<'normal' | 'phonics'>('normal'); // 💡 현재 게임 모드 상태 추가
+  const [gameMode, setGameMode] = useState<'normal' | 'phonics'>('normal'); 
   
   const [cards, setCards] = useState<Card[]>([]);
   const [flippedIndices, setFlippedIndices] = useState<number[]>([]);
@@ -79,22 +78,7 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'en-US';
-      utterance.rate = 0.85; // 💡 파닉스니까 너무 빠르지 않게 속도를 살짝(0.85) 낮춥니다.
-  
-      // 💡 기기에 설치된 모든 목소리를 불러옵니다.
-      const voices = window.speechSynthesis.getVoices();
-      
-      // 💡 안드로이드/크롬의 고품질 구글 음성이나, 아이폰/맥의 자연스러운 원어민 음성(Samantha, Daniel 등)을 최우선으로 찾습니다.
-      const bestVoice = voices.find(v => 
-        v.name.includes('Google US English') || 
-        v.name.includes('Samantha') || 
-        v.name.includes('Daniel')
-      );
-  
-      if (bestVoice) {
-        utterance.voice = bestVoice;
-      }
-  
+      utterance.rate = 0.9;
       window.speechSynthesis.speak(utterance);
     }
   };
@@ -123,7 +107,6 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
     }
   };
 
-  // 💡 [변경] 어떤 모드(normal/phonics)를 눌렀는지 파악해서 게임을 시작합니다.
   const startNewGame = (selectedMode: 'normal' | 'phonics') => {
     setGameMode(selectedMode);
 
@@ -142,10 +125,9 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
   const generateStage = (targetStage: number, currentScore: number, mode: 'normal' | 'phonics') => {
     const wordCountForStage = targetStage;
     
-    // 모드에 따라 데이터 소스를 다르게 가져옵니다.
     const sourceDb = mode === 'normal' 
       ? allWordsDb 
-      : PHONICS_DB.map(p => ({ id: p.id, eng: p.word, kor: p.word })); // 파닉스는 kor 대신 이미지를 쓸 것이므로 임시 처리
+      : PHONICS_DB.map(p => ({ id: p.id, eng: p.word, kor: p.word })); 
 
     if (wordCountForStage > sourceDb.length) {
        setGameState('result');
@@ -157,14 +139,11 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
     const gameCards: Card[] = [];
     
     shuffledWords.forEach((word) => {
-      // 1. 영어 카드는 공통으로 추가
       gameCards.push({ uid: `${word.id}-eng`, wordId: word.id, text: word.eng, type: 'eng' });
       
-      // 2. 모드에 따라 반대쪽 카드를 뜻(kor) 또는 그림(image)으로 추가
       if (mode === 'normal') {
         gameCards.push({ uid: `${word.id}-kor`, wordId: word.id, text: word.kor, type: 'kor' });
       } else {
-        // 💡 [마법의 코드] 원장님이 올리신 긴 파일 이름을 알아서 조합해서 주소를 만듭니다!
         const imageUrl = supabase.storage.from('phonics').getPublicUrl(`${word.eng}-removebg-preview.png`).data.publicUrl;
         gameCards.push({ uid: `${word.id}-image`, wordId: word.id, text: word.eng, type: 'image', imageUrl });
       }
@@ -200,7 +179,6 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
     const newFlipped = [...flippedIndices, index];
     setFlippedIndices(newFlipped);
 
-    // 영어 카드를 누르거나, 파닉스 모드에서 그림 카드를 눌렀을 때도 소리를 내줍니다!
     if (cards[index].type === 'eng' || cards[index].type === 'image') {
       speakText(cards[index].text);
     }
@@ -260,6 +238,17 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
     return 'repeat(4, 1fr)'; 
   };
 
+  // 💡 [핵심 추가] 카드 개수가 많아질수록 글자 크기를 부드럽게 축소하는 함수
+  const getResponsiveFontSize = (type: string, textLength: number) => {
+    const totalCards = cards.length;
+    let baseSize = type === 'eng' ? (textLength > 8 ? 18 : 24) : 22; // 기본 크기
+    
+    if (totalCards >= 10) return `${baseSize * 0.65}px`; // 10장 이상 (아주 작게)
+    if (totalCards >= 8) return `${baseSize * 0.8}px`;   // 8장 (약간 작게)
+    if (totalCards >= 6) return `${baseSize * 0.9}px`;   // 6장 (조금 작게)
+    return `${baseSize}px`; // 2~4장 (기본 크기 유지)
+  };
+
   return (
     <div style={{ padding: '20px', width: '100%', maxWidth: '600px', boxSizing: 'border-box', margin: '0 auto', fontFamily: 'Pretendard, sans-serif' }}>
       
@@ -272,7 +261,7 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
           .card-front { background: linear-gradient(135deg, #007aff, #5ac8fa); color: white; font-size: 36px; font-weight: 900; }
           .card-back { background: white; transform: rotateY(180deg); border: 2px solid #e2e8f0; overflow: hidden; }
           .card-matched { opacity: 0.3; transform: scale(0.95); transition: all 0.3s ease; }
-          @keyframes pulseHint { 0% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(1.05); } 100% { transform: translateX(-50%) scale(1); } }
+          @keyframes pulseHint { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
         `}
       </style>
 
@@ -331,8 +320,10 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
           </div>
 
           {isPeeking && (
-            <div style={{ position: 'absolute', top: '100px', left: '50%', transform: 'translateX(-50%)', backgroundColor: 'rgba(0,0,0,0.8)', color: 'white', padding: '12px 24px', borderRadius: '30px', fontWeight: '800', fontSize: '16px', zIndex: 100, animation: 'pulseHint 1s infinite', whiteSpace: 'nowrap' }}>
-              👀 집중! {peekSeconds}초 동안 위치를 기억하세요!
+            <div style={{ textAlign: 'center', marginBottom: '20px', width: '100%' }}>
+              <div style={{ display: 'inline-block', backgroundColor: 'rgba(0,0,0,0.8)', color: 'white', padding: '12px 24px', borderRadius: '30px', fontWeight: '800', fontSize: '15px', animation: 'pulseHint 1s infinite', whiteSpace: 'nowrap', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+                👀 집중! {peekSeconds}초 동안 위치를 기억하세요!
+              </div>
             </div>
           )}
 
@@ -350,15 +341,18 @@ export default function CardGame({ onBack, studentId, studentName, currentBook, 
                   <div className="card-inner">
                     <div className="card-front">?</div>
                     <div className="card-back" style={{ border: isMatched ? '3px solid #4caf50' : '2px solid #e2e8f0', backgroundColor: isMatched ? '#f0fdf4' : 'white', padding: card.type === 'image' ? '4px' : '12px' }}>
-                      {/* 💡 [핵심 구현] 카드 타입이 image면 그림을 띄우고, 아니면 기존처럼 글자를 띄웁니다! */}
                       {card.type === 'image' ? (
                         <img src={card.imageUrl} alt={card.text} style={{ width: '90%', height: '90%', objectFit: 'contain' }} onError={(e) => (e.currentTarget.style.display = 'none')} />
                       ) : (
                         <span style={{ 
-                          fontSize: card.type === 'eng' ? (card.text.length > 8 ? '18px' : '24px') : '22px', 
+                          /* 💡 [적용 완료] 화면이 좁아지면 글씨도 자동으로 작아지도록 묶어두었습니다! */
+                          fontSize: getResponsiveFontSize(card.type, card.text.length), 
                           fontWeight: '900', 
                           color: card.type === 'eng' ? '#007aff' : '#111',
-                          wordBreak: 'keep-all',
+                          /* 💡 [적용 완료] 긴 단어(alligator 등)가 카드를 뚫고 나가지 않게 두 줄로 접어줍니다. */
+                          wordBreak: 'break-word',
+                          overflowWrap: 'break-word',
+                          width: '100%',
                           lineHeight: '1.2'
                         }}>
                           {card.text}
