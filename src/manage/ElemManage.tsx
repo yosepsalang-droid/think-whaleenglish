@@ -85,32 +85,25 @@ export default function ElemManage() {
 
       if (studentError) throw studentError;
 
-      // 💡 [궁극의 해결 1] 완벽한 하루 치 시간 잡기!
-      const startOfSelectedDay = new Date(selectedDate);
-      startOfSelectedDay.setHours(0, 0, 0, 0);
+      // 💡 [궁극의 해결책] 골치 아픈 시간(시차) 변환을 완전히 버렸습니다.
+      // 그냥 날짜 글자(예: "2026-11-06T00:00:00")로만 필터를 걸어서, 수파베이스가 시차 핑계를 못 대게 만듭니다!
+      const startOfDayStr = `${selectedDateStr}T00:00:00`;
+      const endOfDayStr = `${selectedDateStr}T23:59:59`;
 
-      const endOfSelectedDay = new Date(selectedDate);
-      endOfSelectedDay.setHours(23, 59, 59, 999);
-      
-      // 💡 [궁극의 해결 2] KST(한국 시간)를 수파베이스가 사랑하는 진짜 UTC 시간으로 자동 번역!
-      const startUTC = startOfSelectedDay.toISOString();
-      const endUTC = endOfSelectedDay.toISOString();
-
-      // 💡 [궁극의 해결 3] 조건 복구! 오늘 하루치 데이터만 최대 50,000개 끌어옵니다!
       const { data: logsData, error: logError } = await supabase
         .from('learning_logs')
         .select('student_id, task_type, status, book_info, created_at') 
-        .gte('created_at', startUTC)
-        .lte('created_at', endUTC)
+        .gte('created_at', startOfDayStr) // 이 시간부터~
+        .lte('created_at', endOfDayStr)   // 이 시간까지 (무조건 글자 기준 매칭!)
         .eq('status', '완료')
-        .limit(50000); 
+        .limit(50000); // 데이터 잘림 방지
 
       if (logError) throw logError;
 
       const todayDoneMap = new Map<string, { word: string; sentence: string; verb: string; record: string; ai: string }>();
 
       (logsData || []).forEach(log => {
-        // 💡 [안전장치] 보이지 않는 공백을 .trim()으로 완벽히 제거!
+        // 이미 글자로 정확한 오늘 기록만 가져왔으므로 2차 시간 검증은 과감히 생략!
         const sId = log.student_id ? log.student_id.trim() : '';
         if (!sId) return;
 
