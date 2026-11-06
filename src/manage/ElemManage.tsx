@@ -39,6 +39,17 @@ const appendDetail = (currentStr: string, title: string, newDetail: string) => {
   return `${currentStr}, ${newDetail}`; 
 };
 
+// 💡 1. 꼬임 없는 날짜 필터를 위해 원장님의 원래 함수 복구!
+const getFakeUTCString = (date: Date) => {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mi = String(date.getMinutes()).padStart(2, '0');
+  const ss = String(date.getSeconds()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}+00:00`;
+};
+
 export default function ElemManage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -85,27 +96,39 @@ export default function ElemManage() {
 
       if (studentError) throw studentError;
 
-      // 💡 [궁극의 해결책] 골치 아픈 시간(시차) 변환을 완전히 버렸습니다.
-      // 그냥 날짜 글자(예: "2026-11-06T00:00:00")로만 필터를 걸어서, 수파베이스가 시차 핑계를 못 대게 만듭니다!
-      const startOfDayStr = `${selectedDateStr}T00:00:00`;
-      const endOfDayStr = `${selectedDateStr}T23:59:59`;
+      const startOfSelectedDay = new Date(selectedDate);
+      startOfSelectedDay.setHours(0, 0, 0, 0);
 
+      const endOfSelectedDay = new Date(selectedDate);
+      endOfSelectedDay.setHours(23, 59, 59, 999);
+      
+      const gteString = getFakeUTCString(startOfSelectedDay);
+      const lteString = getFakeUTCString(endOfSelectedDay);
+
+      // 💡 2. 1000개 제한 해제(.limit(50000))와 날짜 필터의 완벽한 조화!
       const { data: logsData, error: logError } = await supabase
         .from('learning_logs')
-        .select('student_id, task_type, status, book_info, created_at') 
-        .gte('created_at', startOfDayStr) // 이 시간부터~
-        .lte('created_at', endOfDayStr)   // 이 시간까지 (무조건 글자 기준 매칭!)
-        .eq('status', '완료')
-        .limit(50000); // 데이터 잘림 방지
+        .select('student_id, task_type, status, book_info, created_at')
+        .gte('created_at', gteString) 
+        .lte('created_at', lteString) 
+        .limit(50000); 
 
       if (logError) throw logError;
 
       const todayDoneMap = new Map<string, { word: string; sentence: string; verb: string; record: string; ai: string }>();
 
       (logsData || []).forEach(log => {
-        // 이미 글자로 정확한 오늘 기록만 가져왔으므로 2차 시간 검증은 과감히 생략!
-        const sId = log.student_id ? log.student_id.trim() : '';
+        // 💡 3. 공백 청소기 탑재! 보이지 않는 스페이스바 에러 원천 차단!
+        const status = log.status ? String(log.status).trim() : '';
+        if (status !== '완료') return;
+
+        const sId = log.student_id ? String(log.student_id).trim() : '';
         if (!sId) return;
+
+        // 💡 4. 시차 계산 없이 가장 무식하고 확실한 글자 매칭!
+        // DB의 created_at(예: "2026-11-06 16:57:07+00") 앞 10자리가 "2026-11-06"이면 무조건 통과!
+        const logDateString = log.created_at ? log.created_at.substring(0, 10) : '';
+        if (logDateString !== selectedDateStr) return;
 
         if (!todayDoneMap.has(sId)) {
           todayDoneMap.set(sId, { word: '', sentence: '', verb: '', record: '', ai: '' });
@@ -113,7 +136,7 @@ export default function ElemManage() {
         
         const record = todayDoneMap.get(sId)!;
         const detail = parseUnitDay(log.book_info); 
-        const task = log.task_type ? log.task_type.trim() : ''; 
+        const task = log.task_type ? String(log.task_type).trim() : ''; 
 
         if (task.includes('단어')) record.word = appendDetail(record.word, '단어', detail);
         if (task.includes('문장')) record.sentence = appendDetail(record.sentence, '문장', detail);
@@ -123,7 +146,7 @@ export default function ElemManage() {
       });
 
       const elemStudents: Student[] = (studentsData || []).map(row => {
-        const rowId = row.student_id ? row.student_id.trim() : '';
+        const rowId = row.student_id ? String(row.student_id).trim() : '';
         const doneStatus = todayDoneMap.get(rowId) || { word: '', sentence: '', verb: '', record: '', ai: '' };
 
         return {
