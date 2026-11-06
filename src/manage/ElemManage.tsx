@@ -33,6 +33,17 @@ const parseUnitDay = (bookInfo: string) => {
   return '';
 };
 
+// 💡 원장님의 원래 완벽했던 시간 변환 함수로 롤백!
+const getFakeUTCString = (date: Date) => {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mi = String(date.getMinutes()).padStart(2, '0');
+  const ss = String(date.getSeconds()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}+00:00`;
+};
+
 const appendDetail = (currentStr: string, title: string, newDetail: string) => {
   if (!currentStr) return `✅ ${title}${newDetail}`; 
   if (currentStr.includes(newDetail)) return currentStr; 
@@ -45,6 +56,7 @@ export default function ElemManage() {
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   
   const [selectedGrade, setSelectedGrade] = useState<string>('전체');
+
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
   const [editSeries, setEditSeries] = useState('240');
@@ -62,58 +74,68 @@ export default function ElemManage() {
     setSelectedDate(newDate);
   };
 
-  // 💡 달력에서 선택한 날짜를 'YYYY-MM-DD' 형식의 깔끔한 글자로 만듭니다. (예: 2026-11-06)
-  const getFormattedDateString = (date: Date) => {
-    const yyyy = date.getFullYear();
-    const mm = String(date.getMonth() + 1).padStart(2, '0');
-    const dd = String(date.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
+  const getFormattedDate = (date: Date) => {
+    const kstOffset = 9 * 60 * 60 * 1000;
+    return new Date(date.getTime() + kstOffset).toISOString().split('T')[0];
   };
 
-  const selectedDateStr = getFormattedDateString(selectedDate);
-  const isToday = selectedDateStr === getFormattedDateString(new Date());
+  const isToday = getFormattedDate(selectedDate) === getFormattedDate(new Date());
 
   const fetchAllLMSData = async () => {
     try {
       setIsLoading(true);
-      
-      // 1. 학생 명단 불러오기 (최대 2000명)
       const { data: studentsData, error: studentError } = await supabase
         .from('students')
         .select('*')
         .like('grade', '%초%')
         .order('name', { ascending: true })
-        .limit(2000); 
+        .limit(2000); // 💡 학생 수 제한 해제
 
       if (studentError) throw studentError;
 
-      // 💡 [핵심 해결 2] 타임존 오류 원천 차단!
-      // 복잡한 시간 계산을 버리고, 그냥 오늘 날짜 글자(예: '2026-11-06')로 시작하는 데이터만 무식하게 다 끌어옵니다.
+      const startOfSelectedDay = new Date(selectedDate);
+      startOfSelectedDay.setHours(0, 0, 0, 0);
+
+      const endOfSelectedDay = new Date(selectedDate);
+      endOfSelectedDay.setHours(23, 59, 59, 999);
+      
+      const gteString = getFakeUTCString(startOfSelectedDay);
+      const lteString = getFakeUTCString(endOfSelectedDay);
+
+      // 💡 [핵심 해결] 원장님의 원래 에러 없던 시간 검색 로직 + 데이터 무제한(50000) 합체!
       const { data: logsData, error: logError } = await supabase
         .from('learning_logs')
-        .select('student_id, task_type, status, book_info, log_date, created_at')
+        .select('student_id, task_type, status, book_info, created_at')
+        .gte('created_at', gteString) 
+        .lte('created_at', lteString) 
         .eq('status', '완료')
-        .like('created_at', `${selectedDateStr}%`) // 💡 '2026-11-06'로 시작하는 모든 시간을 잡아냅니다.
-        .limit(50000); 
+        .limit(50000); // 1000개 락 해제!
 
       if (logError) throw logError;
 
       const todayDoneMap = new Map<string, { word: string; sentence: string; verb: string; record: string; ai: string }>();
 
       (logsData || []).forEach(log => {
-        // 이미 날짜로 싹 다 필터링해서 가져왔으므로, 시간 비교 로직 없이 무조건 화면에 띄웁니다!
-        if (!todayDoneMap.has(log.student_id)) {
-          todayDoneMap.set(log.student_id, { word: '', sentence: '', verb: '', record: '', ai: '' });
-        }
-        const record = todayDoneMap.get(log.student_id)!;
-        const detail = parseUnitDay(log.book_info); 
+        const localTimeString = log.created_at.substring(0, 19); 
+        const [yyyy, mm, dd] = localTimeString.split('T')[0].split('-').map(Number);
+        const [hh, mi, ss] = localTimeString.split('T')[1].split(':').map(Number);
+        
+        const logTime = new Date(yyyy, mm - 1, dd, hh, mi, ss); 
+        const logTimestamp = logTime.getTime();
 
-        // 💡 [안전장치 추가] 이름이 묘하게 달라도 다 낚아채도록 조건을 강화했습니다.
-        if (log.task_type.includes('단어')) record.word = appendDetail(record.word, '단어', detail);
-        if (log.task_type.includes('문장')) record.sentence = appendDetail(record.sentence, '문장', detail);
-        if (log.task_type.includes('동사') || log.task_type.includes('3단')) record.verb = appendDetail(record.verb, '3단동사', detail);
-        if (log.task_type.includes('녹음')) record.record = appendDetail(record.record, '녹음', detail);
-        if (log.task_type.includes('회화') || log.task_type.includes('AI') || log.task_type.includes('고래')) record.ai = appendDetail(record.ai, '회화', detail);
+        if (logTimestamp >= startOfSelectedDay.getTime() && logTimestamp <= endOfSelectedDay.getTime()) {
+          if (!todayDoneMap.has(log.student_id)) {
+            todayDoneMap.set(log.student_id, { word: '', sentence: '', verb: '', record: '', ai: '' });
+          }
+          const record = todayDoneMap.get(log.student_id)!;
+          const detail = parseUnitDay(log.book_info); 
+
+          if (log.task_type.includes('단어')) record.word = appendDetail(record.word, '단어', detail);
+          if (log.task_type.includes('문장')) record.sentence = appendDetail(record.sentence, '문장', detail);
+          if (log.task_type.includes('동사') || log.task_type.includes('3단')) record.verb = appendDetail(record.verb, '3단동사', detail);
+          if (log.task_type.includes('녹음')) record.record = appendDetail(record.record, '녹음', detail);
+          if (log.task_type.includes('회화') || log.task_type.includes('AI') || log.task_type.includes('고래')) record.ai = appendDetail(record.ai, '회화', detail);
+        }
       });
 
       const elemStudents: Student[] = (studentsData || []).map(row => {
@@ -134,9 +156,9 @@ export default function ElemManage() {
 
       setStudents(elemStudents.filter(s => !s.name.includes('body')));
       
-    } catch (error) {
+    } catch (error: any) {
       console.error("수파베이스 데이터 로드 에러", error);
-      alert("데이터를 불러오는데 실패했습니다.");
+      alert("데이터를 불러오는데 실패했습니다: " + (error.message || '알 수 없는 오류'));
     } finally {
       setIsLoading(false);
     }
@@ -144,7 +166,7 @@ export default function ElemManage() {
 
   useEffect(() => {
     fetchAllLMSData();
-  }, [selectedDateStr]); // 💡 날짜 글자가 바뀔 때만 다시 불러옵니다.
+  }, [selectedDate]);
 
   const handleSelectStudent = (student: Student) => {
     if (selectedStudent?.id === student.id) {
@@ -277,7 +299,7 @@ export default function ElemManage() {
           <div style={{ display: 'flex', alignItems: 'center', backgroundColor: '#f3f4f6', borderRadius: '8px', padding: '4px', border: '1px solid #e5e7eb', flexShrink: 0 }}>
             <button onClick={() => changeDate(-1)} style={{ border: 'none', backgroundColor: 'transparent', cursor: 'pointer', padding: '4px 8px', fontSize: '14px', color: '#4b5563', fontWeight: 'bold' }}>◀</button>
             <span style={{ fontSize: '14px', fontWeight: '900', color: isToday ? '#2563eb' : '#374151', padding: '0 8px', minWidth: '90px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-              {selectedDateStr} {isToday && '(오늘)'}
+              {getFormattedDate(selectedDate)} {isToday && '(오늘)'}
             </span>
             <button onClick={() => changeDate(1)} disabled={isToday} style={{ border: 'none', backgroundColor: 'transparent', cursor: isToday ? 'not-allowed' : 'pointer', padding: '4px 8px', fontSize: '14px', color: isToday ? '#d1d5db' : '#4b5563', fontWeight: 'bold' }}>▶</button>
           </div>
@@ -333,7 +355,7 @@ export default function ElemManage() {
               <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '4%' }}>번호</th>
               <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '5%' }}>학년</th>
               <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '8%' }}>이름</th>
-              <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '45%' }}>{selectedDateStr} 학습 현황</th>
+              <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '45%' }}>{getFormattedDate(selectedDate)} 학습 현황</th>
               <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '15%' }}>교재 설정</th>
               <th style={{ border: '1px solid #cbd5e1', padding: '6px 2px', textAlign: 'center', whiteSpace: 'nowrap', width: '7%' }}>관리</th>
             </tr>
