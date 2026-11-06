@@ -85,71 +85,51 @@ export default function ElemManage() {
 
       if (studentError) throw studentError;
 
-      // 💡 [궁극의 해결책 1] 수파베이스의 조건 필터를 싹 지웠습니다! 
-      // 핑계대지 못하게 그냥 있는 데이터 무조건 다 가져오게 명령합니다.
-      const { data: logsData, error: logError } = await supabase
-        .from('learning_logs')
-        .select('student_id, task_type, status, book_info, log_date, created_at') 
-        .limit(50000); 
-
-      if (logError) throw logError;
-
+      // 💡 [궁극의 해결 1] 완벽한 하루 치 시간 잡기!
       const startOfSelectedDay = new Date(selectedDate);
       startOfSelectedDay.setHours(0, 0, 0, 0);
 
       const endOfSelectedDay = new Date(selectedDate);
       endOfSelectedDay.setHours(23, 59, 59, 999);
+      
+      // 💡 [궁극의 해결 2] KST(한국 시간)를 수파베이스가 사랑하는 진짜 UTC 시간으로 자동 번역!
+      const startUTC = startOfSelectedDay.toISOString();
+      const endUTC = endOfSelectedDay.toISOString();
+
+      // 💡 [궁극의 해결 3] 조건 복구! 오늘 하루치 데이터만 최대 50,000개 끌어옵니다!
+      const { data: logsData, error: logError } = await supabase
+        .from('learning_logs')
+        .select('student_id, task_type, status, book_info, created_at') 
+        .gte('created_at', startUTC)
+        .lte('created_at', endUTC)
+        .eq('status', '완료')
+        .limit(50000); 
+
+      if (logError) throw logError;
 
       const todayDoneMap = new Map<string, { word: string; sentence: string; verb: string; record: string; ai: string }>();
 
       (logsData || []).forEach(log => {
-        // 💡 [궁극의 해결책 2] 보이지 않는 공백을 .trim()으로 완벽히 제거합니다!
-        const logStatus = log.status ? log.status.trim() : '';
-        if (logStatus !== '완료') return; // 완료가 아니면 버림
-
-        const logDateStr = log.log_date ? log.log_date.trim() : '';
+        // 💡 [안전장치] 보이지 않는 공백을 .trim()으로 완벽히 제거!
         const sId = log.student_id ? log.student_id.trim() : '';
-        
         if (!sId) return;
 
-        let isTargetDate = false;
-
-        // 1순위: DB에 예쁘게 찍힌 log_date와 오늘 날짜가 똑같으면 합격!
-        if (logDateStr === selectedDateStr) {
-          isTargetDate = true;
-        } 
-        // 2순위: 혹시 log_date가 없는 옛날 게임 기록이라면, 시간으로 역추적해서 합격!
-        else if (!logDateStr && log.created_at) {
-          const localTimeString = log.created_at.substring(0, 19); 
-          const [yyyy, mm, dd] = localTimeString.split('T')[0].split('-').map(Number);
-          const [hh, mi, ss] = localTimeString.split('T')[1].split(':').map(Number);
-          const logTime = new Date(yyyy, mm - 1, dd, hh, mi, ss); 
-          const logTimestamp = logTime.getTime();
-
-          if (logTimestamp >= startOfSelectedDay.getTime() && logTimestamp <= endOfSelectedDay.getTime()) {
-            isTargetDate = true;
-          }
+        if (!todayDoneMap.has(sId)) {
+          todayDoneMap.set(sId, { word: '', sentence: '', verb: '', record: '', ai: '' });
         }
+        
+        const record = todayDoneMap.get(sId)!;
+        const detail = parseUnitDay(log.book_info); 
+        const task = log.task_type ? log.task_type.trim() : ''; 
 
-        // 해당 날짜의 기록이 맞다면 O 표시 준비!
-        if (isTargetDate) {
-          if (!todayDoneMap.has(sId)) {
-            todayDoneMap.set(sId, { word: '', sentence: '', verb: '', record: '', ai: '' });
-          }
-          const record = todayDoneMap.get(sId)!;
-          const detail = parseUnitDay(log.book_info); 
-          const task = log.task_type ? log.task_type.trim() : ''; // 여기서도 공백 제거!
-
-          if (task.includes('단어')) record.word = appendDetail(record.word, '단어', detail);
-          if (task.includes('문장')) record.sentence = appendDetail(record.sentence, '문장', detail);
-          if (task.includes('동사') || task.includes('3단')) record.verb = appendDetail(record.verb, '3단동사', detail);
-          if (task.includes('녹음')) record.record = appendDetail(record.record, '녹음', detail);
-          if (task.includes('회화') || task.includes('AI') || task.includes('고래')) record.ai = appendDetail(record.ai, '회화', detail);
-        }
+        if (task.includes('단어')) record.word = appendDetail(record.word, '단어', detail);
+        if (task.includes('문장')) record.sentence = appendDetail(record.sentence, '문장', detail);
+        if (task.includes('동사') || task.includes('3단')) record.verb = appendDetail(record.verb, '3단동사', detail);
+        if (task.includes('녹음')) record.record = appendDetail(record.record, '녹음', detail);
+        if (task.includes('회화') || task.includes('AI') || task.includes('고래')) record.ai = appendDetail(record.ai, '회화', detail);
       });
 
       const elemStudents: Student[] = (studentsData || []).map(row => {
-        // 💡 [궁극의 해결책 3] 학생 목록의 아이디도 공백을 싹 지우고 매칭합니다!
         const rowId = row.student_id ? row.student_id.trim() : '';
         const doneStatus = todayDoneMap.get(rowId) || { word: '', sentence: '', verb: '', record: '', ai: '' };
 
@@ -170,7 +150,7 @@ export default function ElemManage() {
       
     } catch (error: any) {
       console.error("수파베이스 데이터 로드 에러", error);
-      alert("데이터 로딩 문제 발생: " + error.message);
+      alert("데이터 로딩 문제 발생: " + (error.message || '알 수 없는 오류'));
     } finally {
       setIsLoading(false);
     }
