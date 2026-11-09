@@ -15,13 +15,17 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
   const [allWords, setAllWords] = useState<WordItem[]>([]);
   const [testWords, setTestWords] = useState<WordItem[]>([]); 
   
-  // 💡 [패치] 객관식 상태(playing_mc)를 완전히 삭제하고 타이핑 전용으로 바꿨습니다!
-  const [gameState, setGameState] = useState<'intro' | 'playing_typing' | 'result'>('intro');
+  // 💡 [패치] 'studying' (암기 모드) 상태가 추가되었습니다!
+  const [gameState, setGameState] = useState<'intro' | 'studying' | 'playing_typing' | 'result'>('intro');
   
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [score, setScore] = useState(0);
   const [selectedBook, setSelectedBook] = useState(currentBook || '');
+
+  // 💡 학생의 학년과 학교 정보를 담을 state
+  const [studentGrade, setStudentGrade] = useState('');
+  const [studentSchool, setStudentSchool] = useState('');
 
   const [typingInput, setTypingInput] = useState('');
   const [showTypingFeedback, setShowTypingFeedback] = useState<'O' | 'X' | null>(null);
@@ -50,6 +54,18 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
   const [selectedDate, setSelectedDate] = useState(realTodayStr);
   const [pendingDates, setPendingDates] = useState<string[]>([]);
   const [isDateFinished, setIsDateFinished] = useState(false);
+
+  // 💡 [패치] 접속한 학생의 학년과 학교(progress)를 불러옵니다.
+  useEffect(() => {
+    const fetchStudentInfo = async () => {
+      const { data, error } = await supabase.from('students').select('grade, progress').eq('student_id', studentId).single();
+      if (data && !error) {
+        setStudentGrade(data.grade || '');
+        setStudentSchool(data.progress || '');
+      }
+    };
+    fetchStudentInfo();
+  }, [studentId]);
 
   const refreshPendingDates = useCallback(() => {
     const pending: string[] = [];
@@ -112,7 +128,38 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
     fetchWords();
   }, [tableName]);
 
-  const books = useMemo(() => Array.from(new Set(allWords.map(w => w.book))).sort(), [allWords]);
+  // 💡 [패치] 원장님의 학교 출판사 맵핑 공식 적용
+  const getSchoolBookName = (grade: string, school: string) => {
+    if (grade === '중1') {
+      if (school.includes('금오')) return '금오중-동아(윤)';
+      if (school.includes('신곡')) return '신곡중-동아(이)';
+      if (school.includes('천보')) return '천보중-동아(윤)';
+    } else if (grade === '중2') {
+      if (school.includes('금오')) return '금오중-동아(윤)';
+      if (school.includes('신곡')) return '신곡중-동아(이)';
+      if (school.includes('의정부')) return '의정부중-천재(이)';
+      if (school.includes('천보')) return '천보중-동아(윤)';
+    } else if (grade === '중3') {
+      if (school.includes('회룡')) return '회룡중-동아(윤)';
+      if (school.includes('금오')) return '금오중-동아(윤)';
+      if (school.includes('신곡')) return '신곡중-동아(윤)';
+    }
+    return '교과서 단어'; 
+  };
+
+  // 💡 [패치] 학생의 학년과 학교에 맞는 3개의 교재만 딱 떨어지게 필터링!
+  const studentBooks = useMemo(() => {
+    if (!studentGrade) return [];
+    
+    const numMatch = studentGrade.match(/\d/);
+    const num = numMatch ? numMatch[0] : '1';
+    
+    const wt = `워드타파${num}`;
+    const ess = `중${num}중학필수영단어`; 
+    const sch = getSchoolBookName(studentGrade, studentSchool);
+
+    return [wt, ess, sch];
+  }, [studentGrade, studentSchool]);
 
   const speakText = (text: string) => {
     if ('speechSynthesis' in window) {
@@ -126,7 +173,8 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
     }
   };
 
-  const startGame = () => {
+  // 💡 [패치] 테스트가 아니라 '공부 모드'부터 시작하도록 변경
+  const startStudyMode = () => {
     if (!selectedBook) return alert("교재를 선택해주세요.");
     if (!selectedDate) return alert("학습 날짜를 선택해주세요.");
     
@@ -164,7 +212,6 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
 
     setTestWords(availableWords); 
     
-    // 💡 [패치] 스펠링 타이핑은 시간이 오래 걸리므로 전체 랜덤 시 최대 30개로 락업!
     let maxLimit = availableWords.length;
     if (studyMode === 'random') {
       maxLimit = 30;
@@ -172,7 +219,6 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
 
     const shuffledWords = [...availableWords].sort(() => Math.random() - 0.5).slice(0, maxLimit);
     
-    // 💡 [패치] 모든 문제를 무조건 '뜻(kor)'을 보여주고 '스펠링(eng)'을 적게 만듭니다.
     const generatedQuestions = shuffledWords.map((w, i) => ({
       id: i,
       eng: w.eng,
@@ -180,15 +226,32 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
       answer: w.eng
     }));
 
-    setQuestions(generatedQuestions.sort(() => Math.random() - 0.5));
+    setQuestions(generatedQuestions);
     setTotalQCount(generatedQuestions.length); 
     setWrongQuestions([]);
     setAttemptCount(1);
     setIsRetestMode(false);
     
+    // 🔥 바로 시험 보지 않고 'studying' 모드로 진입!
+    setGameState('studying');
+    setCurrentIndex(0);
+  };
+
+  // 💡 공부 모드에서 단어가 바뀔 때마다 자동으로 읽어주기
+  useEffect(() => {
+    if (gameState === 'studying' && questions.length > 0) {
+      speakText(questions[currentIndex].eng);
+    }
+  }, [currentIndex, gameState, questions]);
+
+  // 💡 공부 완료 후 진짜 테스트 시작!
+  const startTest = () => {
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     setGameState('playing_typing');
     setCurrentIndex(0);
     setScore(0);
+    setTypingInput('');
+    setShowTypingFeedback(null);
   };
 
   const handleStartRetest = () => {
@@ -212,14 +275,12 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
     }
   }, [currentIndex, gameState, showTypingFeedback]);
 
-  // 💡 [패치] 문제가 나타나면 무조건 영어(스펠링) 발음을 읽어줍니다.
   useEffect(() => {
     if (gameState === 'playing_typing' && questions.length > 0 && !showTypingFeedback) {
       speakText(questions[currentIndex].eng);
     }
   }, [currentIndex, gameState, questions, showTypingFeedback]);
 
-  // 💡 [패치] 스펠링이 100% 일치하는지 특수문자를 제거하고 칼같이 검사합니다.
   const isCorrectSpelling = (input: string, correctStr: string) => {
     const inputClean = input.replace(/[^a-z0-9]/gi, '').toLowerCase(); 
     const correctClean = correctStr.replace(/[^a-z0-9]/gi, '').toLowerCase();
@@ -252,7 +313,6 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
 
   const updateCooldownHistory = () => {
     const historyKey = `voca_history_${studentId}`;
-    
     const history = JSON.parse(localStorage.getItem(historyKey) || '{}');
     const now = Date.now();
     testWords.forEach(w => { history[w.eng] = now; }); 
@@ -294,7 +354,7 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
         <div style={{ textAlign: 'center', background: 'white', padding: '40px 24px', borderRadius: '24px', boxShadow: '0 12px 32px rgba(0,0,0,0.05)' }}>
           <div style={{ fontSize: '48px', marginBottom: '16px' }}>📝</div>
           <h2 style={{ margin: '0 0 4px', fontSize: '28px', fontWeight: '800', color: '#111' }}>
-            {tableName === 'words_high' ? '고등 단어 마스터' : '단어 마스터 테스트'}
+            단어 마스터
           </h2>
           <div style={{ fontSize: '14px', color: '#8e8e93', fontWeight: '600', marginBottom: '16px' }}>
             학생 이름: <span style={{ color: '#111', fontWeight: '800' }}>{studentName} ({studentId})</span>
@@ -323,7 +383,10 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
             <label style={{ fontSize: '13px', fontWeight: '700', color: '#8e8e93', marginLeft: '4px', marginBottom: '8px', display: 'block' }}>📚 교재 선택</label>
             <select value={selectedBook} onChange={(e) => setSelectedBook(e.target.value)} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '1px solid #d1d1d6', fontSize: '16px', fontWeight: '600', color: '#333', backgroundColor: '#f9f9f9', outline: 'none', boxSizing: 'border-box' }}>
               <option value="">교재를 선택해주세요</option>
-              {books.map(b => <option key={b} value={b}>{b}</option>)}
+              {/* 💡 [패치] DB에서 가져온 모든 책을 보여주지 않고, 학년/학교에 맞는 3개만 보여줍니다! */}
+              {studentBooks.map((b, idx) => (
+                <option key={idx} value={b}>{b}</option>
+              ))}
             </select>
           </div>
 
@@ -331,10 +394,10 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
             <label style={{ fontSize: '13px', fontWeight: '700', color: '#8e8e93', marginLeft: '4px', marginBottom: '8px', display: 'block' }}>🎯 학습 방식 선택</label>
             <div style={{ display: 'flex', gap: '8px' }}>
               <button onClick={() => setStudyMode('random')} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: studyMode === 'random' ? '2px solid #007aff' : '1px solid #d1d1d6', backgroundColor: studyMode === 'random' ? '#eef6ff' : '#f9f9f9', color: studyMode === 'random' ? '#007aff' : '#8e8e93', fontWeight: '800', cursor: 'pointer', transition: 'all 0.2s' }}>
-                🎲 전체 랜덤 학습
+                🎲 랜덤 학습
               </button>
               <button onClick={() => setStudyMode('range')} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: studyMode === 'range' ? '2px solid #ff9500' : '1px solid #d1d1d6', backgroundColor: studyMode === 'range' ? '#fff5e6' : '#f9f9f9', color: studyMode === 'range' ? '#ff9500' : '#8e8e93', fontWeight: '800', cursor: 'pointer', transition: 'all 0.2s' }}>
-                📏 범위 지정 학습
+                📏 범위 지정
               </button>
             </div>
           </div>
@@ -352,33 +415,87 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
             </div>
           )}
 
-          {/* 💡 [패치] 모든 꼼수(객관식) 버튼을 없애고 100% 타이핑 버튼 하나만 남겼습니다! */}
-          <button onClick={startGame} style={{ width: '100%', padding: '18px', background: 'linear-gradient(135deg, #007aff, #0056b3)', color: 'white', border: 'none', borderRadius: '16px', fontSize: '18px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 6px 16px rgba(0,122,255,0.2)' }}>
-            🔥 스펠링 타이핑 집중 테스트 시작
+          <button onClick={startStudyMode} style={{ width: '100%', padding: '18px', background: 'linear-gradient(135deg, #34d399, #059669)', color: 'white', border: 'none', borderRadius: '16px', fontSize: '18px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 6px 16px rgba(16, 185, 129, 0.3)' }}>
+            📖 단어장 암기 시작하기
           </button>
         </div>
       )}
 
+      {/* 💡 [신규 화면] 테스트 전 무조건 거쳐야 하는 단어 플래시카드(공부) 화면 */}
+      {gameState === 'studying' && questions.length > 0 && (
+        <div style={{ background: 'white', padding: '32px 24px', borderRadius: '24px', width: '100%', boxSizing: 'border-box', boxShadow: '0 12px 32px rgba(0,0,0,0.06)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+            <span style={{ fontSize: '16px', fontWeight: '900', color: '#059669', backgroundColor: '#d1fae5', padding: '6px 12px', borderRadius: '8px' }}>
+              🧠 플래시카드 암기 중
+            </span>
+            <span style={{ fontSize: '16px', fontWeight: '800', color: '#6b7280' }}>
+              {currentIndex + 1} / {questions.length}
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '220px', border: '2px solid #e5e7eb', borderRadius: '20px', backgroundColor: '#f9fafb', marginBottom: '24px', padding: '20px', position: 'relative' }}>
+            <h2 style={{ fontSize: '42px', fontWeight: '900', color: '#1f2937', margin: '0 0 16px 0', textAlign: 'center' }}>
+              {questions[currentIndex].eng}
+            </h2>
+            <h3 style={{ fontSize: '24px', fontWeight: '700', color: '#4b5563', margin: '0 0 24px 0', textAlign: 'center' }}>
+              {questions[currentIndex].kor}
+            </h3>
+            <button 
+              onClick={() => speakText(questions[currentIndex].eng)}
+              style={{ backgroundColor: '#e5e7eb', border: 'none', borderRadius: '50%', width: '50px', height: '50px', fontSize: '24px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              🔊
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+            <button 
+              onClick={() => setCurrentIndex(prev => prev - 1)}
+              disabled={currentIndex === 0}
+              style={{ flex: 1, padding: '16px', backgroundColor: currentIndex === 0 ? '#f3f4f6' : '#eff6ff', color: currentIndex === 0 ? '#9ca3af' : '#2563eb', border: 'none', borderRadius: '16px', fontSize: '16px', fontWeight: '800', cursor: currentIndex === 0 ? 'not-allowed' : 'pointer' }}
+            >
+              ◀ 이전 단어
+            </button>
+            
+            {currentIndex < questions.length - 1 ? (
+              <button 
+                onClick={() => setCurrentIndex(prev => prev + 1)}
+                style={{ flex: 1, padding: '16px', backgroundColor: '#eff6ff', color: '#2563eb', border: 'none', borderRadius: '16px', fontSize: '16px', fontWeight: '800', cursor: 'pointer' }}
+              >
+                다음 단어 ▶
+              </button>
+            ) : (
+              <button 
+                onClick={startTest}
+                style={{ flex: 1, padding: '16px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '16px', fontSize: '16px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)', animation: 'pulse 1.5s infinite' }}
+              >
+                🔥 암기 완료! 테스트 시작
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 💡 [기존 화면] 암기가 끝나고 진행되는 100% 타이핑 테스트 화면 */}
       {gameState === 'playing_typing' && questions.length > 0 && (
         <div style={{ background: 'white', padding: '32px 24px', borderRadius: '24px', width: '100%', boxSizing: 'border-box', boxShadow: '0 12px 32px rgba(0,0,0,0.06)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <span style={{ fontSize: '15px', fontWeight: '800', color: '#007aff' }}>
+            <span style={{ fontSize: '15px', fontWeight: '800', color: '#ef4444' }}>
               {isRetestMode ? `🔥 오답 재시험 (${attemptCount}회차)` : `Question ${currentIndex + 1}`}
             </span>
             <span style={{ fontSize: '15px', fontWeight: '700', color: '#8e8e93' }}>{currentIndex + 1} / {questions.length}</span>
           </div>
           <div style={{ width: '100%', height: '8px', backgroundColor: '#f0f0f5', borderRadius: '4px', marginBottom: '32px', overflow: 'hidden' }}>
-            <div style={{ width: `${((currentIndex + 1) / questions.length) * 100}%`, height: '100%', backgroundColor: '#007aff', borderRadius: '4px', transition: 'width 0.3s ease' }}></div>
+            <div style={{ width: `${((currentIndex + 1) / questions.length) * 100}%`, height: '100%', backgroundColor: '#ef4444', borderRadius: '4px', transition: 'width 0.3s ease' }}></div>
           </div>
           
           <div style={{ textAlign: 'center', height: '160px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', marginBottom: '32px', position: 'relative' }}>
-            <span style={{ display: 'inline-block', padding: '6px 14px', backgroundColor: '#eef6ff', color: '#007aff', borderRadius: '8px', fontSize: '14px', fontWeight: '800', marginBottom: '16px' }}>
+            <span style={{ display: 'inline-block', padding: '6px 14px', backgroundColor: '#fee2e2', color: '#ef4444', borderRadius: '8px', fontSize: '14px', fontWeight: '900', marginBottom: '16px' }}>
               ⌨️ 뜻과 소리를 듣고 영어 스펠링을 적어주세요
             </span>
             <h2 style={{ fontSize: '36px', fontWeight: '900', margin: '0 0 16px 0', color: '#111', wordBreak: 'keep-all', lineHeight: '1.3' }}>
               {questions[currentIndex].kor}
             </h2>
-            {/* 💡 [패치] 아이들이 원할 때 언제든 다시 발음을 들을 수 있는 버튼 추가! */}
             <button 
               onClick={() => speakText(questions[currentIndex].eng)}
               style={{ backgroundColor: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '20px', padding: '8px 20px', fontSize: '16px', fontWeight: 'bold', color: '#4b5563', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
@@ -401,7 +518,7 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
               spellCheck="false"
               style={{ width: '100%', padding: '20px', borderRadius: '16px', border: `2px solid ${showTypingFeedback === 'O' ? '#4caf50' : showTypingFeedback === 'X' ? '#ef5350' : '#d1d5db'}`, fontSize: '24px', fontWeight: '800', textAlign: 'center', boxSizing: 'border-box', outline: 'none', backgroundColor: showTypingFeedback === 'O' ? '#e8f5e9' : showTypingFeedback === 'X' ? '#ffebee' : '#f9f9f9', color: showTypingFeedback === 'X' ? '#c62828' : '#111' }}
             />
-            <button type="submit" disabled={!!showTypingFeedback} style={{ width: '100%', padding: '18px', background: showTypingFeedback ? '#ccc' : '#111', color: 'white', border: 'none', borderRadius: '16px', fontSize: '18px', fontWeight: '800', cursor: showTypingFeedback ? 'default' : 'pointer' }}>
+            <button type="submit" disabled={!!showTypingFeedback} style={{ width: '100%', padding: '18px', background: showTypingFeedback ? '#ccc' : '#111', color: 'white', border: 'none', borderRadius: '16px', fontSize: '18px', fontWeight: '900', cursor: showTypingFeedback ? 'default' : 'pointer' }}>
               정답 제출
             </button>
             
@@ -422,7 +539,7 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
               <h2 style={{ fontSize: '28px', fontWeight: '800', margin: '0 0 12px', color: '#111' }}>완벽하게 통과했습니다!</h2>
               <div style={{ backgroundColor: '#e8f5e9', borderRadius: '20px', padding: '24px', marginBottom: '32px' }}>
                 <span style={{ fontSize: '15px', fontWeight: '800', color: '#2e7d32', display: 'block', marginBottom: '6px' }}>PASS MISSION 🐋</span>
-                <span style={{ fontSize: '24px', fontWeight: '800', color: '#1b5e20' }}>스펠링 100% 마스터!</span>
+                <span style={{ fontSize: '24px', fontWeight: '900', color: '#1b5e20' }}>스펠링 100% 마스터!</span>
               </div>
               <button onClick={handleFinalPass} style={{ width: '100%', padding: '18px', background: '#111', color: 'white', border: 'none', borderRadius: '16px', fontSize: '18px', fontWeight: '700', cursor: 'pointer' }}>
                 처음 화면으로 이동 (기록 저장)
@@ -437,15 +554,15 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
               <div style={{ backgroundColor: '#fff5f5', borderRadius: '20px', padding: '24px', marginBottom: '32px', border: '1px solid #ffebeb' }}>
                 <div style={{ marginBottom: '12px' }}>
                   <span style={{ fontSize: '14px', fontWeight: '800', color: '#8e8e93', display: 'block', marginBottom: '4px' }}>이번 회차 맞춘 문제</span>
-                  <span style={{ fontSize: '36px', fontWeight: '800', color: '#ff3b30' }}>{score}</span>
-                  <span style={{ fontSize: '20px', fontWeight: '800', color: '#111' }}> / {questions.length}</span>
+                  <span style={{ fontSize: '36px', fontWeight: '900', color: '#ff3b30' }}>{score}</span>
+                  <span style={{ fontSize: '20px', fontWeight: '900', color: '#111' }}> / {questions.length}</span>
                 </div>
-                <div style={{ borderTop: '1px solid #ffe5e5', paddingTop: '16px', fontSize: '15px', fontWeight: '800', color: '#e53935' }}>
+                <div style={{ borderTop: '1px solid #ffe5e5', paddingTop: '16px', fontSize: '15px', fontWeight: '900', color: '#e53935' }}>
                   남은 오답 개수: {wrongQuestions.length}개 (현재 {attemptCount}회차 완료)
                 </div>
               </div>
 
-              <button onClick={handleStartRetest} style={{ width: '100%', padding: '18px', background: 'linear-gradient(135deg, #ff3b30, #c62828)', color: 'white', border: 'none', borderRadius: '16px', fontSize: '18px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 6px 16px rgba(255,59,48,0.2)' }}>
+              <button onClick={handleStartRetest} style={{ width: '100%', padding: '18px', background: 'linear-gradient(135deg, #ff3b30, #c62828)', color: 'white', border: 'none', borderRadius: '16px', fontSize: '18px', fontWeight: '900', cursor: 'pointer', boxShadow: '0 6px 16px rgba(255,59,48,0.2)' }}>
                 ❌ 오답 재도전 하기 ({attemptCount + 1}회차)
               </button>
             </>
