@@ -7,7 +7,6 @@ interface BubblePopProps {
 }
 
 export default function PhonicsBubblePop({ day, onComplete }: BubblePopProps) {
-  // 💡 DB에서 그날 배운 알파벳들만 가져옵니다!
   const dayWords = PHONICS_DB.filter((item: any) => item.day === day);
   const uniqueLetters = Array.from(new Set(dayWords.map(w => w.letter)));
 

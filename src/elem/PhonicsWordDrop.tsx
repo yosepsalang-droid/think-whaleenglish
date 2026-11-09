@@ -7,7 +7,6 @@ interface WordDropProps {
 }
 
 export default function PhonicsWordDrop({ day, onComplete }: WordDropProps) {
-  // 💡 DB에서 그날 배운 단어들만 가져옵니다!
   const dayWords = PHONICS_DB.filter((item: any) => item.day === day);
 
   const [step, setStep] = useState(0);
@@ -80,8 +79,12 @@ export default function PhonicsWordDrop({ day, onComplete }: WordDropProps) {
 
   if (gameSequence.length === 0) return null;
 
-  // 화면 아래에 보여줄 버튼들 (중복 없는 알파벳 리스트)
   const uniqueLetters = Array.from(new Set(dayWords.map(w => w.letter)));
+
+  // 💡 [그림 변환기 탑재] 인터넷 주소인지 확인합니다
+  const isImageUrl = (icon: string) => {
+    return icon && (icon.includes('http') || icon.includes('.png') || icon.includes('.jpg'));
+  };
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'linear-gradient(to bottom, #1e3a8a, #3b82f6)', display: 'flex', flexDirection: 'column', zIndex: 2000, fontFamily: 'Pretendard, sans-serif', overflow: 'hidden' }}>
@@ -101,7 +104,14 @@ export default function PhonicsWordDrop({ day, onComplete }: WordDropProps) {
       <div style={{ flex: 1, position: 'relative', animation: isWrong ? 'shake 0.5s' : 'none' }}>
         {currentItem && (
           <div style={{ position: 'absolute', left: '50%', top: `${dropY}vh`, transform: 'translateX(-50%)', fontSize: '100px', animation: isPopping ? 'popAction 0.8s ease-out forwards' : 'none', filter: 'drop-shadow(0 10px 15px rgba(0,0,0,0.3))' }}>
-            {isPopping ? '✨' : currentItem.icon}
+            {isPopping ? '✨' : (
+              // 💡 [핵심 패치] 위에서 떨어지는 아이콘이 주소면 그림으로 보여줍니다!
+              isImageUrl(currentItem.icon) ? (
+                <img src={currentItem.icon} alt="word icon" style={{ width: '150px', height: '150px', objectFit: 'contain' }} draggable={false} />
+              ) : (
+                currentItem.icon
+              )
+            )}
           </div>
         )}
       </div>

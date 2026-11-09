@@ -26,7 +26,6 @@ export default function PhonicsLearn({ day, onBack, onFinish }: PhonicsLearnProp
     setTimeout(() => speakTeacher(), 500);
   }, [currentIndex]);
 
-  // 💡 [핵심 패치 2] attempts 의존성을 끊어내어 마이크가 초기화되는 버그를 고쳤습니다.
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
@@ -45,11 +44,10 @@ export default function PhonicsLearn({ day, onBack, onFinish }: PhonicsLearnProp
         if (transcript.includes(currentItem.word.toLowerCase())) {
           handleSuccess();
         } else {
-          // 실패 횟수를 안전하게 누적시킵니다.
           setAttempts(prev => {
             const newAttempts = prev + 1;
             if (newAttempts >= 3) {
-              setFeedback('giveup'); // 정확히 3번 실패 시 포기 화면 띄우기
+              setFeedback('giveup'); 
             } else {
               setFeedback('fail');
               setTimeout(() => setFeedback(curr => curr === 'fail' ? 'none' : curr), 1500);
@@ -111,6 +109,11 @@ export default function PhonicsLearn({ day, onBack, onFinish }: PhonicsLearnProp
 
   if (!currentItem) return null;
 
+  // 💡 [추가] 그림 파일(png/jpg)인지 진짜 이모지 글자인지 똑똑하게 판단하는 함수
+  const isImageUrl = (icon: string) => {
+    return icon.includes('http') || icon.includes('.png') || icon.includes('.jpg');
+  };
+
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: '#eff6ff', display: 'flex', flexDirection: 'column', zIndex: 2000, fontFamily: 'Pretendard, sans-serif' }}>
       
@@ -140,7 +143,17 @@ export default function PhonicsLearn({ day, onBack, onFinish }: PhonicsLearnProp
         )}
 
         <div style={{ backgroundColor: 'white', padding: '60px', borderRadius: '40px', boxShadow: '0 20px 40px rgba(0,0,0,0.08)', textAlign: 'center', transform: (feedback === 'success') ? 'scale(1.1)' : 'scale(1)', transition: 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}>
-          <div style={{ fontSize: '120px', lineHeight: '1', margin: '0' }}>{currentItem.icon}</div>
+          {/* 💡 [핵심 해결] 인터넷 주소면 <img> 태그로 예쁜 그림을 띄워주고, 예전 방식인 이모지면 그냥 글자로 띄워줍니다! */}
+          {isImageUrl(currentItem.icon) ? (
+            <img 
+              src={currentItem.icon} 
+              alt={currentItem.word} 
+              style={{ width: '150px', height: '150px', objectFit: 'contain', margin: '0 auto', display: 'block' }} 
+            />
+          ) : (
+            <div style={{ fontSize: '120px', lineHeight: '1', margin: '0' }}>{currentItem.icon}</div>
+          )}
+          
           <div style={{ fontSize: '140px', fontWeight: '900', color: '#1e3a8a', margin: '20px 0', lineHeight: '1' }}>{currentItem.letter}</div>
           <div style={{ fontSize: '40px', fontWeight: '800', color: '#64748b' }}>{currentItem.word}</div>
         </div>

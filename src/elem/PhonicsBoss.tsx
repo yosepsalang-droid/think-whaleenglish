@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PHONICS_DB } from './PhonicsData';
 
 interface PhonicsBossProps {
@@ -8,7 +8,6 @@ interface PhonicsBossProps {
 }
 
 export default function PhonicsBoss({ day, onBack, onComplete }: PhonicsBossProps) {
-  // 💡 DB에서 그날 배운 단어들만 가져옵니다!
   const dayWords = PHONICS_DB.filter((item: any) => item.day === day);
   const uniqueLetters = Array.from(new Set(dayWords.map(w => w.letter)));
 
@@ -17,6 +16,9 @@ export default function PhonicsBoss({ day, onBack, onComplete }: PhonicsBossProp
   const [score, setScore] = useState(0);
   const [timeLeft, setTimeLeft] = useState(40); 
   const [moles, setMoles] = useState<any[]>([]);
+
+  // 💡 [핵심 패치 1] 그날 배운 단어를 골고루 뽑기 위한 '카드 뭉치(Deck)' 저장소
+  const wordDeckRef = useRef<any[]>([]);
 
   useEffect(() => {
     if (uniqueLetters.length > 0) {
@@ -38,6 +40,8 @@ export default function PhonicsBoss({ day, onBack, onComplete }: PhonicsBossProp
     setGameState('playing');
     setScore(0);
     setTimeLeft(40); 
+    // 게임 시작 시 카드 뭉치 비우기 (새로 섞기 위함)
+    wordDeckRef.current = []; 
     if ('speechSynthesis' in window) {
       const utterance = new SpeechSynthesisUtterance("Ready, Go!");
       utterance.lang = 'en-US';
@@ -63,12 +67,18 @@ export default function PhonicsBoss({ day, onBack, onComplete }: PhonicsBossProp
     if (gameState !== 'playing') return;
     
     const spawnTimer = setInterval(() => {
-      // 그날 배운 단어들 중에서 무작위로 하나를 뽑아 화면에 띄웁니다.
-      const randomItem = dayWords[Math.floor(Math.random() * dayWords.length)];
+      // 💡 [핵심 패치 2] 무작위 뽑기가 아닌 '카드 덱' 셔플 로직!
+      // 카드 뭉치가 비어있으면 그날 배운 단어를 마구 섞어서 다시 채워 넣습니다.
+      if (wordDeckRef.current.length === 0) {
+        wordDeckRef.current = [...dayWords].sort(() => Math.random() - 0.5);
+      }
+      
+      // 카드 뭉치에서 하나를 뽑습니다. (배운 단어가 무조건 한 번씩 다 나오게 됨)
+      const itemToSpawn = wordDeckRef.current.pop();
       
       const newMole = {
         uid: Math.random(),
-        ...randomItem,
+        ...itemToSpawn,
         left: Math.floor(Math.random() * 70) + 10, 
         top: Math.floor(Math.random() * 60) + 20,  
       };
@@ -82,7 +92,7 @@ export default function PhonicsBoss({ day, onBack, onComplete }: PhonicsBossProp
     }, 1200); 
 
     return () => clearInterval(spawnTimer);
-  }, [gameState]);
+  }, [gameState, dayWords]);
 
   const handlePop = (clickedMole: any, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -95,6 +105,12 @@ export default function PhonicsBoss({ day, onBack, onComplete }: PhonicsBossProp
     }
     
     setMoles(prev => prev.filter(m => m.uid !== clickedMole.uid));
+  };
+
+  // 💡 [추가] 그림 파일(png/jpg)인지 이모지인지 식별하는 똑똑한 함수
+  const isImageUrl = (icon: string) => {
+    if (!icon) return false;
+    return icon.includes('http') || icon.includes('.png') || icon.includes('.jpg');
   };
 
   if (dayWords.length === 0) return null;
@@ -140,11 +156,16 @@ export default function PhonicsBoss({ day, onBack, onComplete }: PhonicsBossProp
                 key={mole.uid} onClick={(e) => handlePop(mole, e)}
                 style={{
                   position: 'absolute', left: `${mole.left}%`, top: `${mole.top}%`, width: '140px', height: '140px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.9)',
-                  border: '6px solid #818cf8', fontSize: '80px', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'crosshair', boxShadow: '0 15px 30px rgba(0,0,0,0.3)',
-                  animation: 'popUp 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards', transform: 'translate(-50%, -50%)'
+                  border: '6px solid #818cf8', fontSize: '60px', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'crosshair', boxShadow: '0 15px 30px rgba(0,0,0,0.3)',
+                  animation: 'popUp 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards', transform: 'translate(-50%, -50%)', padding: '10px'
                 }}
               >
-                {mole.icon}
+                {/* 💡 [핵심 해결] 인터넷 주소면 <img> 태그로 예쁜 그림을 띄워줍니다! */}
+                {isImageUrl(mole.icon) ? (
+                  <img src={mole.icon} alt="monster" style={{ width: '90px', height: '90px', objectFit: 'contain' }} draggable={false} />
+                ) : (
+                  mole.icon
+                )}
               </button>
             ))}
           </div>

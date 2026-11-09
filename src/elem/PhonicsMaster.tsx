@@ -8,7 +8,6 @@ interface PhonicsMasterProps {
 }
 
 export default function PhonicsMaster({ day, onBack, onComplete }: PhonicsMasterProps) {
-  // 💡 DB에서 그날 배운 단어들만 가져옵니다!
   const dayWords = PHONICS_DB.filter((item: any) => item.day === day);
 
   const [step, setStep] = useState(0);
@@ -17,7 +16,6 @@ export default function PhonicsMaster({ day, onBack, onComplete }: PhonicsMaster
   const [isWrong, setIsWrong] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
 
-  // 💡 만약 그날 배운 단어가 5개가 안 되면 있는 개수만큼만 출제!
   const TOTAL_STEPS = Math.min(5, dayWords.length); 
   const [target, setTarget] = useState(dayWords[0]);
 
@@ -76,6 +74,11 @@ export default function PhonicsMaster({ day, onBack, onComplete }: PhonicsMaster
 
   if (quizList.length === 0 || !target) return null;
 
+  // 💡 [그림 변환기 탑재]
+  const isImageUrl = (icon: string) => {
+    return icon && (icon.includes('http') || icon.includes('.png') || icon.includes('.jpg'));
+  };
+
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'linear-gradient(to bottom, #fdf4ff, #e879f9)', display: 'flex', flexDirection: 'column', zIndex: 2000, fontFamily: 'Pretendard, sans-serif' }}>
       
@@ -122,7 +125,12 @@ export default function PhonicsMaster({ day, onBack, onComplete }: PhonicsMaster
             onMouseDown={(e) => { e.currentTarget.style.transform = 'translateY(10px)'; e.currentTarget.style.boxShadow = '0 0 0 #cbd5e1'; }}
             onMouseUp={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 10px 0 #cbd5e1'; }}
           >
-            {item.icon}
+            {/* 💡 [핵심 패치] 아래 객관식 선택지에 예쁜 그림이 출력되도록 변경! */}
+            {isImageUrl(item.icon) ? (
+              <img src={item.icon} alt="choice icon" style={{ width: '100px', height: '100px', objectFit: 'contain' }} draggable={false} />
+            ) : (
+              item.icon
+            )}
             <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#64748b', marginTop: '10px' }}>{item.letter}</span>
           </button>
         ))}
