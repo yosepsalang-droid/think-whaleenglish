@@ -58,15 +58,14 @@ export default function MidManage() {
     try {
       setIsLoading(true);
 
-      // 💡 [수정됨] 중등부와 고등부 학생 모두 불러오기
       const { data: rawStudentsData, error: studentError } = await supabase
         .from('students')
         .select('*')
-        .order('name', { ascending: true }); 
+        .order('name', { ascending: true })
+        .limit(2000); // 💡 [패치 1] 학생 수 데이터 락 해제!
 
       if (studentError) throw studentError;
 
-      // 💡 중학교('중') 또는 고등학교('고') 문자가 포함된 학생만 필터링
       const studentsData = (rawStudentsData || []).filter(s => 
         s.grade && (s.grade.includes('중') || s.grade.includes('고'))
       );
@@ -95,12 +94,13 @@ export default function MidManage() {
       const gteString = getFakeUTCString(oldestDate);
       const lteString = getFakeUTCString(endOfSelectedDay);
 
+      // 💡 [패치 2] 1,000개 제한 해제 및 수파베이스의 깐깐한 공백 필터(eq) 회피
       const { data: logsData, error: logError } = await supabase
         .from('learning_logs')
         .select('student_id, task_type, status, book_info, created_at')
         .gte('created_at', gteString) 
         .lte('created_at', lteString) 
-        .eq('status', '완료');
+        .limit(50000); // .eq('status', '완료')를 지우고 자바스크립트에서 직접 안전하게 필터링합니다.
 
       if (logError) throw logError;
 
@@ -108,6 +108,13 @@ export default function MidManage() {
       const completedDaysMap = new Map<string, Set<string>>();
 
       (logsData || []).forEach(log => {
+        // 💡 [패치 3] 보이지 않는 스페이스바(공백) 완벽 세탁
+        const status = log.status ? String(log.status).trim() : '';
+        if (status !== '완료') return; 
+
+        const sId = log.student_id ? String(log.student_id).trim() : '';
+        if (!sId) return;
+
         const localTimeString = log.created_at.substring(0, 19); 
         const [yyyy, mm, dd] = localTimeString.split('T')[0].split('-').map(Number);
         const [hh, mi, ss] = localTimeString.split('T')[1].split(':').map(Number);
@@ -118,32 +125,35 @@ export default function MidManage() {
         const isLogOnSelectedDay = logTimestamp >= startOfSelectedDay.getTime() && logTimestamp <= endOfSelectedDay.getTime();
 
         if (isLogOnSelectedDay) {
-          if (!selectedDayDoneMap.has(log.student_id)) selectedDayDoneMap.set(log.student_id, { word: '', verb: '' });
-          const record = selectedDayDoneMap.get(log.student_id)!;
+          if (!selectedDayDoneMap.has(sId)) selectedDayDoneMap.set(sId, { word: '', verb: '' });
+          const record = selectedDayDoneMap.get(sId)!;
+          const task = log.task_type ? String(log.task_type).trim() : ''; // 💡 작업 타입도 공백 제거
 
-          if (log.task_type.includes('단어') || log.task_type.includes('워드타파')) {
+          if (task.includes('단어') || task.includes('워드타파')) {
             const hours = String(logTime.getHours()).padStart(2, '0');
             const minutes = String(logTime.getMinutes()).padStart(2, '0');
             const timeStr = `${logTime.getMonth() + 1}/${logTime.getDate()} ${hours}:${minutes}`;
             record.word = `✅ 단어(${timeStr})`;
           }
-          if (log.task_type.includes('동사')) {
+          if (task.includes('동사')) {
             record.verb = `✅ 동사(${log.book_info || '기록없음'})`; 
           }
         }
 
-        if (!completedDaysMap.has(log.student_id)) {
-          completedDaysMap.set(log.student_id, new Set());
+        if (!completedDaysMap.has(sId)) {
+          completedDaysMap.set(sId, new Set());
         }
         
         const dateStr = getFormattedDate(logTime);
-        completedDaysMap.get(log.student_id)!.add(dateStr);
+        completedDaysMap.get(sId)!.add(dateStr);
       });
 
       const midStudents: Student[] = studentsData.map(row => {
-        const doneStatus = selectedDayDoneMap.get(row.student_id) || { word: '', verb: '' };
+        // 💡 [패치 4] 명단에 있는 아이디도 공백을 지우고 매칭
+        const rowId = row.student_id ? String(row.student_id).trim() : '';
+        const doneStatus = selectedDayDoneMap.get(rowId) || { word: '', verb: '' };
         
-        const studentCompleted = completedDaysMap.get(row.student_id) || new Set();
+        const studentCompleted = completedDaysMap.get(rowId) || new Set();
         const missedDates: string[] = [];
         
         pastWeekdays.forEach(pwd => {
@@ -155,7 +165,7 @@ export default function MidManage() {
         missedDates.reverse(); 
 
         return {
-          id: row.student_id,
+          id: rowId,
           name: row.name || '이름없음',
           currentBook: row.currentBook || '',
           progress: row.progress || '',
@@ -169,8 +179,9 @@ export default function MidManage() {
 
       setStudents(midStudents.filter(s => !s.name.includes('body')));
       
-    } catch (error) {
+    } catch (error: any) {
       console.error("수파베이스 데이터 로드 에러", error);
+      alert("데이터를 불러오는데 실패했습니다: " + (error.message || '알 수 없는 오류'));
     } finally {
       setIsLoading(false);
     }
@@ -295,7 +306,6 @@ export default function MidManage() {
     ? students 
     : students.filter(s => s.grade === selectedGrade);
 
-  // 💡 [수정됨] 고1, 고2, 고3 필터 탭 추가
   const uniqueGrades = ['전체', '중1', '중2', '중3', '고1', '고2', '고3'];
 
   return (
@@ -303,7 +313,6 @@ export default function MidManage() {
       
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          {/* 💡 [수정됨] 타이틀 변경 */}
           <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#1f2937', margin: 0 }}>🦅 중·고등부 관제탑</h2>
           
           <div style={{ display: 'flex', alignItems: 'center', backgroundColor: '#f3f4f6', borderRadius: '8px', padding: '4px', border: '1px solid #e5e7eb' }}>
