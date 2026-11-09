@@ -252,6 +252,7 @@ export default function Voca({ onBack, currentBook, studentId, studentName, tabl
 
   const updateCooldownHistory = () => {
     const historyKey = `voca_history_${studentId}`;
+    
     const history = JSON.parse(localStorage.getItem(historyKey) || '{}');
     const now = Date.now();
     testWords.forEach(w => { history[w.eng] = now; }); 
