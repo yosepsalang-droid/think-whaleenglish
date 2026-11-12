@@ -148,6 +148,20 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     cursor: selectedStudentIds.length === 0 ? 'not-allowed' : 'pointer'
   };
 
+  // 💡 인쇄용 옵션 박스 스타일을 안전하게 함수로 분리하여 문법 에러 원천 차단
+  const getPrintOptionsStyle = (isShortOptions: boolean): React.CSSProperties => {
+    return {
+      display: 'flex',
+      flexDirection: isShortOptions ? 'row' : 'column',
+      flexWrap: isShortOptions ? 'wrap' : 'nowrap',
+      justifyContent: isShortOptions ? 'space-between' : 'flex-start',
+      gap: isShortOptions ? '8px' : '5px',
+      fontSize: '9.5pt',
+      paddingLeft: '2px',
+      textAlign: 'left'
+    };
+  };
+
   const formattingGuidelines = `
   [문제 출력 형식 및 텍스트 강조 가이드라인]
   1. 밑줄 사용 절대 금지: 플랫폼 환경상 굵은 글씨(**강조**)를 대신 사용하세요.
@@ -1074,7 +1088,8 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                     <div style={{ border: '1px solid #000', padding: '12px', marginBottom: '10px', fontSize: '10pt', lineHeight: '1.5', wordBreak: 'keep-all', overflowWrap: 'break-word', width: '100%', boxSizing: 'border-box', textAlign: 'left' }}>
                       {renderTextWithFormatting(prob.passage)}
                     </div>
-                    <div className="options-box" style={{ display: 'flex', flexDirection: isShortOptions ? 'row' : 'column', flexWrap: isShortOptions ? 'wrap', justifyContent: isShortOptions ? 'space-between' : 'flex-start', gap: isShortOptions ? '8px' : '5px', fontSize: '9.5pt', paddingLeft: '2px', textAlign: 'left' }}>
+                    {/* 💡 스타일 객체를 함수로 분리하여 문법 에러 완전 해결 */}
+                    <div className="options-box" style={getPrintOptionsStyle(isShortOptions)}>
                       {prob.options && prob.options.length > 0 ? (
                         prob.options.map(opt => (
                           <div key={opt} style={{ width: isShortOptions ? '48%' : '100%', textAlign: 'left', display: 'block', paddingLeft: isShortOptions ? '0' : '0px' }}>
