@@ -92,6 +92,38 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const grades = Array.from(new Set(students.map(s => s.grade))).filter(Boolean).sort();
   const filteredStudents = students.filter(s => s.grade === selectedGrade);
 
+  // 💡 [코드 최적화] 유령 공백 방지를 위한 스타일 분리 함수들
+  const getTabStyle = (tabId: string, activeColor: string): React.CSSProperties => ({
+    padding: '8px 16px', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s',
+    backgroundColor: viewMode === tabId ? 'white' : 'transparent',
+    color: viewMode === tabId ? activeColor : '#64748b',
+    boxShadow: viewMode === tabId ? '0 2px 4px rgba(0,0,0,0.05)' : 'none'
+  });
+
+  const getArchiveItemStyle = (id: number): React.CSSProperties => {
+    const isSelected = selectedExam?.id === id;
+    return {
+      textAlign: 'left', padding: '16px', border: '1px solid #e2e8f0', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.2s',
+      backgroundColor: isSelected ? '#f3e8ff' : 'white',
+      borderColor: isSelected ? '#a855f7' : '#e2e8f0'
+    };
+  };
+
+  const getDbItemStyle = (id: number): React.CSSProperties => {
+    const isSelected = selectedDbQuestionIds.includes(id);
+    return {
+      display: 'flex', gap: '16px', padding: '16px', border: '1px solid', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.1s',
+      borderColor: isSelected ? '#10b981' : '#e2e8f0',
+      backgroundColor: isSelected ? '#f0fdf4' : 'white'
+    };
+  };
+
+  const distributeBtnStyle: React.CSSProperties = {
+    width: '100%', padding: '16px', color: 'white', border: 'none', borderRadius: '12px', fontSize: '18px', fontWeight: '900',
+    backgroundColor: selectedStudentIds.length === 0 ? '#cbd5e1' : '#10b981',
+    cursor: selectedStudentIds.length === 0 ? 'not-allowed' : 'pointer'
+  };
+
   const formattingGuidelines = `
   [문제 출력 형식 및 텍스트 강조 가이드라인]
   1. 밑줄 사용 절대 금지: 플랫폼 환경상 굵은 글씨(**강조**)를 대신 사용하세요.
@@ -603,19 +635,11 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
           <h1 style={{ margin: 0, fontSize: '20px', fontWeight: '900', color: '#1e293b' }}>🤖 AI 문제 연구소</h1>
           
           <div style={{ display: 'flex', backgroundColor: '#f1f5f9', padding: '4px', borderRadius: '12px', gap: '4px' }}>
-            <button onClick={() => setViewMode('studio')} style={{ padding: '8px 16px', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s', backgroundColor: viewMode === 'studio' ? 'white' : 'transparent', color: viewMode === 'studio' ? '#2563eb' : '#64748b', boxShadow: viewMode === 'studio' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none' }}>
-              📝 AI 출제소
-            </button>
-            <button onClick={() => setViewMode('archive')} style={{ padding: '8px 16px', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s', backgroundColor: viewMode === 'archive' ? 'white' : 'transparent', color: viewMode === 'archive' ? '#8b5cf6' : '#64748b', boxShadow: viewMode === 'archive' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none' }}>
-              🗂️ 문제 보관함
-            </button>
+            <button onClick={() => setViewMode('studio')} style={getTabStyle('studio', '#2563eb')}>📝 AI 출제소</button>
+            <button onClick={() => setViewMode('archive')} style={getTabStyle('archive', '#8b5cf6')}>🗂️ 문제 보관함</button>
             <div style={{ width: '2px', backgroundColor: '#cbd5e1', margin: '4px 8px' }}></div>
-            <button onClick={() => setViewMode('db_upload')} style={{ padding: '8px 16px', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s', backgroundColor: viewMode === 'db_upload' ? 'white' : 'transparent', color: viewMode === 'db_upload' ? '#f59e0b' : '#64748b', boxShadow: viewMode === 'db_upload' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none' }}>
-              📥 중등 DB 업로더
-            </button>
-            <button onClick={() => setViewMode('db_distribute')} style={{ padding: '8px 16px', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s', backgroundColor: viewMode === 'db_distribute' ? 'white' : 'transparent', color: viewMode === 'db_distribute' ? '#10b981' : '#64748b', boxShadow: viewMode === 'db_distribute' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none' }}>
-              🎯 중등 DB 배포
-            </button>
+            <button onClick={() => setViewMode('db_upload')} style={getTabStyle('db_upload', '#f59e0b')}>📥 중등 DB 업로더</button>
+            <button onClick={() => setViewMode('db_distribute')} style={getTabStyle('db_distribute', '#10b981')}>🎯 중등 DB 배포</button>
           </div>
         </div>
 
@@ -627,18 +651,11 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                   {isSaving ? '⏳ 저장 중...' : '💾 시험지 저장'}
                 </button>
               )}
-              <button disabled={!canPrintOrDistribute} onClick={handleCopyForReview} style={{ padding: '8px 16px', backgroundColor: '#f1f5f9', color: '#334155', border: '1px solid #cbd5e1', borderRadius: '8px', fontWeight: '700', cursor: !canPrintOrDistribute ? 'not-allowed' : 'pointer' }}>
-                📋 외부 검수 복사
-              </button>
-              <button disabled={!canPrintOrDistribute} onClick={handlePrint} style={{ padding: '8px 16px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: !canPrintOrDistribute ? 'not-allowed' : 'pointer' }}>
-                🖨️ PDF / 인쇄하기
-              </button>
-              <button disabled={!canPrintOrDistribute} onClick={() => setShowDistributeModal(true)} style={{ padding: '8px 16px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: !canPrintOrDistribute ? 'not-allowed' : 'pointer' }}>
-                🚀 학생에게 배포
-              </button>
+              <button disabled={!canPrintOrDistribute} onClick={handleCopyForReview} style={{ padding: '8px 16px', backgroundColor: '#f1f5f9', color: '#334155', border: '1px solid #cbd5e1', borderRadius: '8px', fontWeight: '700', cursor: !canPrintOrDistribute ? 'not-allowed' : 'pointer' }}>📋 외부 검수 복사</button>
+              <button disabled={!canPrintOrDistribute} onClick={handlePrint} style={{ padding: '8px 16px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: !canPrintOrDistribute ? 'not-allowed' : 'pointer' }}>🖨️ PDF / 인쇄하기</button>
+              <button disabled={!canPrintOrDistribute} onClick={() => setShowDistributeModal(true)} style={{ padding: '8px 16px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: !canPrintOrDistribute ? 'not-allowed' : 'pointer' }}>🚀 학생에게 배포</button>
             </>
           )}
-
           {viewMode === 'db_distribute' && (
             <button disabled={selectedDbQuestionIds.length === 0} onClick={() => setShowDistributeModal(true)} style={{ padding: '8px 24px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '900', fontSize: '16px', cursor: selectedDbQuestionIds.length === 0 ? 'not-allowed' : 'pointer' }}>
               선택한 {selectedDbQuestionIds.length}문제 🚀 배포하기
@@ -693,7 +710,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                     <div style={{ fontSize: '13.5px', color: '#111', border: '1px solid #cbd5e1', padding: '16px', borderRadius: '8px', marginBottom: '12px', lineHeight: '1.6' }}>
                       {renderTextWithFormatting(prob.passage)}
                     </div>
-                    
                     {prob.options && prob.options.length > 0 ? (
                       <div style={{ fontSize: '13.5px', color: '#334155', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         {prob.options.map((opt, i) => <span key={i}>{opt}</span>)}
@@ -740,15 +756,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {savedExams.map(exam => (
-                    <button 
-                      key={exam.id} 
-                      onClick={() => setSelectedExam(exam)}
-                      style={{ 
-                        textAlign: 'left', padding: '16px', border: '1px solid #e2e8f0', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.2s',
-                        backgroundColor: selectedExam?.id === exam.id ? '#f3e8ff' : 'white',
-                        borderColor: selectedExam?.id === exam.id ? '#a855f7' : '#e2e8f0'
-                      }}
-                    >
+                    <button key={exam.id} onClick={() => setSelectedExam(exam)} style={getArchiveItemStyle(exam.id)}>
                       <strong style={{ display: 'block', fontSize: '15px', color: selectedExam?.id === exam.id ? '#7e22ce' : '#334155', marginBottom: '8px', wordBreak: 'keep-all' }}>
                         {exam.title}
                       </strong>
@@ -926,7 +934,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {fetchedDbQuestions.map((q) => (
-                    <label key={q.id} style={{ display: 'flex', gap: '16px', padding: '16px', border: '1px solid', borderColor: selectedDbQuestionIds.includes(q.id || 0) ? '#10b981' : '#e2e8f0', backgroundColor: selectedDbQuestionIds.includes(q.id || 0) ? '#f0fdf4' : 'white', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.1s' }}>
+                    <label key={q.id} style={getDbItemStyle(q.id || 0)}>
                       <input 
                         type="checkbox" 
                         checked={selectedDbQuestionIds.includes(q.id || 0)} 
@@ -947,7 +955,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
             </div>
           </div>
         )}
-
       </div>
 
       {editingIndex !== null && editFormData && (
@@ -1119,7 +1126,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                 </div>
               </div>
             )}
-            <button onClick={handleDistribute} disabled={selectedStudentIds.length === 0} style={{ width: '100%', padding: '16px', backgroundColor: selectedStudentIds.length === 0 ? '#cbd5e1' : '#10b981', color: 'white', border: 'none', borderRadius: '12px', fontSize: '18px', fontWeight: '900', cursor: selectedStudentIds.length === 0 ? 'not-allowed' : 'pointer' }}>
+            <button onClick={handleDistribute} disabled={selectedStudentIds.length === 0} style={distributeBtnStyle}>
               선택한 학생들에게 전송
             </button>
           </div>
