@@ -92,7 +92,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const grades = Array.from(new Set(students.map(s => s.grade))).filter(Boolean).sort();
   const filteredStudents = students.filter(s => s.grade === selectedGrade);
 
-  // 💡 [수정] Vercel 배포 에러(TS1005)를 일으키던 인라인 스타일 객체 정의 방식을 100% 안전하게 수정했습니다.
   const getTabStyle = (tabId: string, activeColor: string): React.CSSProperties => {
     return {
       padding: '8px 16px',
