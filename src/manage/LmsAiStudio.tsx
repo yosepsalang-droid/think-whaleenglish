@@ -1016,7 +1016,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
 
             <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'flex-end' }}>
               <button onClick={cancelEditing} disabled={isAutoFixing} style={{ padding: '12px 24px', backgroundColor: '#f1f5f9', color: '#475569', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: isAutoFixing ? 'not-allowed' : 'pointer' }}>취소</button>
-              
               <button onClick={saveEditing} disabled={isAutoFixing} style={{ padding: '12px 32px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: isAutoFixing ? 'not-allowed' : 'pointer' }}>수정된 사항 최종 반영하기</button>
             </div>
           </div>
