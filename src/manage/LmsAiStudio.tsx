@@ -860,4 +860,317 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
             <div style={{ flex: '0 0 350px', backgroundColor: 'white', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
               <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '800', color: '#f59e0b' }}>📥 이그잼포유 HWP 복붙하기</h3>
               <textarea 
-                placeholder="이그잼포유 한글 파일에서 주관식 문제들을 드래그 복사하여 여기에 통
+                placeholder="이그잼포유 한글 파일에서 주관식 문제들을 드래그 복사하여 여기에 통째로 붙여넣으세요."
+                value={uploadText}
+                onChange={(e) => setUploadText(e.target.value)}
+                style={{ width: '100%', height: '300px', padding: '12px', boxSizing: 'border-box', borderRadius: '8px', border: '1px solid #cbd5e1', resize: 'none', marginBottom: '16px' }}
+              />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+                <div>
+                  <label style={{ fontSize: '13px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>학년</label>
+                  <input value={uploadMeta.grade} onChange={e => setUploadMeta({...uploadMeta, grade: e.target.value})} placeholder="예: 중1" style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '13px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>출판사</label>
+                  <input value={uploadMeta.publisher} onChange={e => setUploadMeta({...uploadMeta, publisher: e.target.value})} placeholder="예: 동아(이)" style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '13px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>단원</label>
+                  <input value={uploadMeta.lesson} onChange={e => setUploadMeta({...uploadMeta, lesson: e.target.value})} placeholder="예: 1과" style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '13px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>문법 태그 (분류용 핵심키워드)</label>
+                  <input value={uploadMeta.grammar_tag} onChange={e => setUploadMeta({...uploadMeta, grammar_tag: e.target.value})} placeholder="예: be동사 부정문" style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                </div>
+              </div>
+              <button onClick={handleParseHwpToDB} disabled={isParsing} style={{ width: '100%', padding: '14px', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '900', cursor: isParsing ? 'not-allowed' : 'pointer' }}>
+                {isParsing ? '🧠 AI가 문제를 쪼개고 있습니다... ⏳' : '✨ AI 자동 분리 시작'}
+              </button>
+            </div>
+
+            <div style={{ flex: '1', backgroundColor: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', minHeight: '600px', overflowY: 'auto', maxHeight: '800px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #e2e8f0', paddingBottom: '12px', marginBottom: '20px' }}>
+                <h3 style={{ margin: 0, color: '#f59e0b' }}>👀 AI 분리 결과 미리보기 ({parsedDbQuestions.length}문제)</h3>
+                {parsedDbQuestions.length > 0 && (
+                  <button onClick={handleUploadToSupabase} disabled={isUploadingDB} style={{ padding: '8px 16px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '900', cursor: isUploadingDB ? 'not-allowed' : 'pointer' }}>
+                    {isUploadingDB ? '저장 중...' : '💾 수파베이스에 영구 저장하기'}
+                  </button>
+                )}
+              </div>
+
+              {parsedDbQuestions.length === 0 ? (
+                <div style={{ color: '#94a3b8', textAlign: 'center', marginTop: '100px' }}>AI 분리 시작 버튼을 누르면 결과가 이곳에 표시됩니다.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {parsedDbQuestions.map((q, idx) => (
+                    <div key={idx} style={{ padding: '16px', border: '1px solid #e2e8f0', borderRadius: '12px', backgroundColor: '#f8fafc' }}>
+                      <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '8px', fontWeight: 'bold' }}>
+                        [{q.grade} | {q.publisher} | {q.lesson} | {q.grammar_tag}]
+                      </div>
+                      <div style={{ fontWeight: 'bold', marginBottom: '8px', color: '#1e293b' }}>Q. {q.question}</div>
+                      <div style={{ fontSize: '14px', color: '#ef4444', fontWeight: 'bold', marginBottom: '4px' }}>A. {q.answer}</div>
+                      {q.explanation && <div style={{ fontSize: '13px', color: '#64748b' }}>해설: {q.explanation}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ===================== [모드 4 - 신규] 중등 DB 무제한 배포 ===================== */}
+        {viewMode === 'db_distribute' && (
+          <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
+            <div style={{ flex: '0 0 300px', backgroundColor: 'white', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+              <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '800', color: '#10b981' }}>🔍 보물창고(DB) 검색 필터</h3>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
+                <div>
+                  <label style={{ fontSize: '13px', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>출판사</label>
+                  <input value={dbFilter.publisher} onChange={e => setDbFilter({...dbFilter, publisher: e.target.value})} placeholder="예: 동아(이)" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '13px', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>단원</label>
+                  <input value={dbFilter.lesson} onChange={e => setDbFilter({...dbFilter, lesson: e.target.value})} placeholder="예: 1과" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '13px', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>문법 태그</label>
+                  <input value={dbFilter.grammar_tag} onChange={e => setDbFilter({...dbFilter, grammar_tag: e.target.value})} placeholder="예: be동사" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                </div>
+              </div>
+              
+              <button onClick={handleFetchMiddleDb} disabled={isFetchingDb} style={{ width: '100%', padding: '14px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '900', cursor: isFetchingDb ? 'not-allowed' : 'pointer' }}>
+                {isFetchingDb ? 'DB 불러오는 중... ⏳' : '🔍 필터 적용해서 불러오기'}
+              </button>
+            </div>
+
+            <div style={{ flex: '1', backgroundColor: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', minHeight: '600px', overflowY: 'auto', maxHeight: '800px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #e2e8f0', paddingBottom: '12px', marginBottom: '20px' }}>
+                <h3 style={{ margin: 0, color: '#10b981' }}>🎯 문제 선택 목록 (총 {fetchedDbQuestions.length}건)</h3>
+                {fetchedDbQuestions.length > 0 && (
+                  <label style={{ fontSize: '14px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={selectedDbQuestionIds.length === fetchedDbQuestions.length && fetchedDbQuestions.length > 0} 
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedDbQuestionIds(fetchedDbQuestions.map(q => q.id!));
+                        else setSelectedDbQuestionIds([]);
+                      }} 
+                      style={{ transform: 'scale(1.2)' }}
+                    />
+                    전체 선택 ({selectedDbQuestionIds.length}개 선택됨)
+                  </label>
+                )}
+              </div>
+
+              {fetchedDbQuestions.length === 0 ? (
+                <div style={{ color: '#94a3b8', textAlign: 'center', marginTop: '100px' }}>왼쪽에서 필터를 입력하고 [불러오기]를 눌러주세요.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {fetchedDbQuestions.map((q) => (
+                    <label key={q.id} style={{ display: 'flex', gap: '16px', padding: '16px', border: '1px solid', borderColor: selectedDbQuestionIds.includes(q.id!) ? '#10b981' : '#e2e8f0', backgroundColor: selectedDbQuestionIds.includes(q.id!) ? '#f0fdf4' : 'white', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.1s' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={selectedDbQuestionIds.includes(q.id!)} 
+                        onChange={() => toggleDbQuestionSelect(q.id!)}
+                        style={{ marginTop: '4px', transform: 'scale(1.3)' }}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px', fontWeight: 'bold' }}>
+                          [{q.publisher} | {q.lesson} | {q.grammar_tag}]
+                        </div>
+                        <div style={{ fontWeight: 'bold', marginBottom: '6px', color: '#1e293b' }}>Q. {q.question}</div>
+                        <div style={{ fontSize: '13px', color: '#ef4444', fontWeight: 'bold' }}>A. {q.answer}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+      </div>
+
+      {/* 💡 문항 오류 자동/수동 수정 모달창 (기존 보존) */}
+      {editingIndex !== null && editFormData && (
+        <div className="no-print" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 }}>
+          <div style={{ backgroundColor: 'white', width: '800px', maxHeight: '90vh', overflowY: 'auto', borderRadius: '16px', padding: '32px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #e2e8f0', paddingBottom: '16px', marginBottom: '20px' }}>
+              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '800', color: '#1e293b' }}>🛠️ {editingIndex + 1}번 문항 직접 수정</h2>
+              <button onClick={cancelEditing} style={{ border: 'none', background: 'none', fontSize: '24px', cursor: 'pointer', color: '#94a3b8' }}>&times;</button>
+            </div>
+
+            <div style={{ backgroundColor: '#f0fdf4', padding: '20px', borderRadius: '12px', border: '2px dashed #4ade80', marginBottom: '24px' }}>
+              <label style={{ fontWeight: '900', fontSize: '15px', marginBottom: '8px', display: 'block', color: '#166534' }}>
+                🤖 영어를 직접 고치기 어렵다면? 외부 검수자의 지적을 붙여넣으세요!
+              </label>
+              <textarea
+                placeholder="예: 지문에 빈칸 ( )을 추가해주고, 정답을 4번으로 바꾼 뒤 그에 맞게 해설을 수정해줘."
+                value={aiFeedback}
+                onChange={e => setAiFeedback(e.target.value)}
+                rows={3}
+                style={{ width: '100%', padding: '12px', border: '1px solid #86efac', borderRadius: '8px', boxSizing: 'border-box', marginBottom: '12px', fontSize: '14px' }}
+              />
+              <button
+                onClick={handleAutoFix}
+                disabled={isAutoFixing}
+                style={{ width: '100%', padding: '14px', backgroundColor: '#16a34a', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '900', fontSize: '15px', cursor: isAutoFixing ? 'not-allowed' : 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 6px rgba(22,163,74,0.2)' }}
+              >
+                {isAutoFixing ? '🛠️ AI가 지적 사항을 분석하여 코드를 고치는 중입니다... ⏳' : '✨ 이 피드백대로 AI에게 원터치 자동 수정 맡기기'}
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', opacity: isAutoFixing ? 0.5 : 1 }}>
+              <div>
+                <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block' }}>질문 (Question)</label>
+                <input value={editFormData.question} onChange={e => updateEditForm('question', e.target.value)} style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box' }} />
+              </div>
+              <div>
+                <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block' }}>지문 (Passage)</label>
+                <textarea value={editFormData.passage} onChange={e => updateEditForm('passage', e.target.value)} rows={6} style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box', resize: 'vertical' }} />
+              </div>
+              
+              {editFormData.options && editFormData.options.length > 0 && (
+                <div>
+                  <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block' }}>보기 (Options)</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {editFormData.options.map((opt, i) => (
+                      <input key={i} value={opt} onChange={e => updateOption(i, e.target.value)} style={{ width: '100%', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box' }} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block' }}>정답 (주관식 문장 또는 기호)</label>
+                <input value={editFormData.answer} onChange={e => updateEditForm('answer', e.target.value)} style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box' }} />
+              </div>
+              <hr style={{ borderTop: '1px dashed #cbd5e1', margin: '10px 0' }} />
+              <div>
+                <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block', color: '#10b981' }}>핵심 어휘</label>
+                <textarea value={editFormData.explanation.vocabulary} onChange={e => updateExplanation('vocabulary', e.target.value)} rows={2} style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box' }} />
+              </div>
+              <div>
+                <label style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '6px', display: 'block', color: '#10b981' }}>구조 및 문법 설명</label>
+                <textarea value={editFormData.explanation.grammar} onChange={e => updateExplanation('grammar', e.target.value)} rows={3} style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', boxSizing: 'border-box' }} />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'flex-end' }}>
+              <button onClick={cancelEditing} disabled={isAutoFixing} style={{ padding: '12px 24px', backgroundColor: '#f1f5f9', color: '#475569', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: isAutoFixing ? 'not-allowed' : 'pointer' }}>취소</button>
+              <button onClick={saveEditing} disabled={isAutoFixing} style={{ padding: '12px 32px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: isAutoFixing ? 'not-allowed' : 'pointer' }}>수정된 사항 최종 반영하기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🖨 인쇄 영역 (기존 유지) */}
+      <div className="print-only">
+        {canPrintOrDistribute && (
+          <div>
+            <div style={{ textAlign: 'center', fontSize: '11pt', fontWeight: 'bold', marginBottom: '4px' }}>생각학원</div>
+            <h2 style={{ textAlign: 'center', borderBottom: '2px solid black', paddingBottom: '8px', marginBottom: '16px', fontSize: '15pt' }}>
+              {viewMode === 'archive' && selectedExam ? selectedExam.title : '고래영어 특별 과제'}
+            </h2>
+            
+            <div className="print-col-2">
+              {currentPrintProblems.map((prob, idx) => {
+                const isShortOptions = prob.options.every(opt => opt.length < 16) && prob.options.join('').length < 55;
+                return (
+                  <div key={idx} className="problem-box">
+                    <p style={{ fontWeight: 'bold', fontSize: '10.5pt', marginBottom: '8px', textAlign: 'left' }}>
+                      {idx + 1}. {renderTextWithFormatting(prob.question)}
+                    </p>
+                    <div style={{ border: '1px solid #000', padding: '12px', marginBottom: '10px', fontSize: '10pt', lineHeight: '1.5', wordBreak: 'keep-all', overflowWrap: 'break-word', width: '100%', boxSizing: 'border-box', textAlign: 'left' }}>
+                      {renderTextWithFormatting(prob.passage)}
+                    </div>
+                    <div className="options-box" style={{ display: 'flex', flexDirection: isShortOptions ? 'row' : 'column', flexWrap: isShortOptions ? 'wrap', justifyContent: isShortOptions ? 'space-between' : 'flex-start', gap: isShortOptions ? '8px' : '5px', fontSize: '9.5pt', paddingLeft: '2px', textAlign: 'left' }}>
+                      {prob.options && prob.options.length > 0 ? (
+                        prob.options.map(opt => (
+                          <div key={opt} style={{ width: isShortOptions ? '48%' : '100%', textAlign: 'left', display: 'block', paddingLeft: isShortOptions ? '0' : '0px' }}>
+                            {renderTextWithFormatting(opt)}
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ borderBottom: '1px solid #64748b', width: '100%', height: '40px', marginTop: '15px' }}></div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="print-page-break"></div>
+            
+            <div style={{ textAlign: 'center', fontSize: '11pt', fontWeight: 'bold', marginBottom: '4px' }}>생각학원</div>
+            <h2 style={{ textAlign: 'center', borderBottom: '2px solid black', paddingBottom: '8px', marginBottom: '16px', fontSize: '15pt' }}>
+              정답 및 해설 (교사용)
+            </h2>
+            
+            <div className="print-col-2" style={{ textAlign: 'left' }}>
+              {currentPrintProblems.map((prob, idx) => (
+                <div key={idx} className="problem-box" style={{ marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px dashed #ccc', textAlign: 'left' }}>
+                  <h3 style={{ margin: '0 0 6px 0', fontSize: '11pt', color: '#1e3a8a', textAlign: 'left' }}>{idx + 1}번 해설</h3>
+                  <div style={{ marginBottom: '6px', fontSize: '10pt', textAlign: 'left' }}>
+                    <span style={{ fontWeight: 'bold', backgroundColor: '#e2e8f0', padding: '2px 6px', borderRadius: '4px', marginRight: '6px' }}>정답</span> 
+                    <b style={{ color: '#111' }}>{prob.answer}</b>
+                  </div>
+                  <div style={{ fontSize: '9pt', lineHeight: '1.4', textAlign: 'left' }}>
+                    <p style={{ margin: '0 0 4px 0', textAlign: 'left' }}><b>[핵심 어휘]</b><br/>{prob.explanation.vocabulary}</p>
+                    <p style={{ margin: '0 0 4px 0', backgroundColor: '#f8fafc', padding: '4px', textAlign: 'left' }}><b>[구조 & 문법]</b><br/>{prob.explanation.structure}<br/>{prob.explanation.grammar}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+          </div>
+        )}
+      </div>
+
+      {/* 🚀 학생 배포 모달창 (기존 보존 및 로직 통합) */}
+      {showDistributeModal && (
+        <div className="no-print" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div style={{ backgroundColor: 'white', width: '500px', borderRadius: '24px', padding: '32px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <h2 style={{ margin: 0, fontSize: '24px', fontWeight: '900' }}>🚀 과제 배포하기</h2>
+              <button onClick={() => setShowDistributeModal(false)} style={{ border: 'none', background: 'none', fontSize: '20px', cursor: 'pointer' }}>❌</button>
+            </div>
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ fontSize: '14px', fontWeight: 'bold', display: 'block', marginBottom: '8px' }}>1. 학년 필터 선택</label>
+              <select value={selectedGrade} onChange={e => setSelectedGrade(e.target.value)} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontWeight: 'bold' }}>
+                <option value="">학년을 선택하세요</option>
+                {grades.map(g => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </div>
+            {selectedGrade && (
+              <div style={{ marginBottom: '24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <label style={{ fontSize: '14px', fontWeight: 'bold', display: 'block' }}>2. 학생 선택 ({selectedStudentIds.length}명 선택됨)</label>
+                  <button onClick={handleSelectAllInGrade} style={{ fontSize: '12px', padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', cursor: 'pointer' }}>전체 선택/해제</button>
+                </div>
+                <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px' }}>
+                  {filteredStudents.length === 0 ? (
+                    <div style={{ textAlign: 'center', color: '#94a3b8', padding: '20px 0' }}>해당 학년의 학생이 없습니다.</div>
+                  ) : (
+                    filteredStudents.map(student => (
+                      <label key={student.student_id} style={{ display: 'flex', alignItems: 'center', padding: '8px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer' }}>
+                        <input type="checkbox" checked={selectedStudentIds.includes(student.student_id)} onChange={() => handleToggleStudent(student.student_id)} style={{ marginRight: '12px', transform: 'scale(1.2)' }} />
+                        <span style={{ fontWeight: 'bold', width: '80px' }}>{student.name}</span>
+                        <span style={{ color: '#64748b', fontSize: '13px' }}>({student.student_id})</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+            <button onClick={handleDistribute} disabled={selectedStudentIds.length === 0} style={{ width: '100%', padding: '16px', backgroundColor: selectedStudentIds.length === 0 ? '#cbd5e1' : '#10b981', color: 'white', border: 'none', borderRadius: '12px', fontSize: '18px', fontWeight: '900', cursor: selectedStudentIds.length === 0 ? 'not-allowed' : 'pointer' }}>
+              선택한 학생들에게 전송
+            </button>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
