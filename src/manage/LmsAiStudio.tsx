@@ -92,18 +92,31 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const grades = Array.from(new Set(students.map(s => s.grade))).filter(Boolean).sort();
   const filteredStudents = students.filter(s => s.grade === selectedGrade);
 
-  // 💡 [코드 최적화] 유령 공백 방지를 위한 스타일 분리 함수들
-  const getTabStyle = (tabId: string, activeColor: string): React.CSSProperties => ({
-    padding: '8px 16px', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s',
-    backgroundColor: viewMode === tabId ? 'white' : 'transparent',
-    color: viewMode === tabId ? activeColor : '#64748b',
-    boxShadow: viewMode === tabId ? '0 2px 4px rgba(0,0,0,0.05)' : 'none'
-  });
+  // 💡 [수정] Vercel 배포 에러(TS1005)를 일으키던 인라인 스타일 객체 정의 방식을 100% 안전하게 수정했습니다.
+  const getTabStyle = (tabId: string, activeColor: string): React.CSSProperties => {
+    return {
+      padding: '8px 16px',
+      border: 'none',
+      borderRadius: '8px',
+      fontWeight: 'bold',
+      fontSize: '14px',
+      cursor: 'pointer',
+      transition: 'all 0.2s',
+      backgroundColor: viewMode === tabId ? 'white' : 'transparent',
+      color: viewMode === tabId ? activeColor : '#64748b',
+      boxShadow: viewMode === tabId ? '0 2px 4px rgba(0,0,0,0.05)' : 'none'
+    };
+  };
 
   const getArchiveItemStyle = (id: number): React.CSSProperties => {
     const isSelected = selectedExam?.id === id;
     return {
-      textAlign: 'left', padding: '16px', border: '1px solid #e2e8f0', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.2s',
+      textAlign: 'left',
+      padding: '16px',
+      border: '1px solid',
+      borderRadius: '12px',
+      cursor: 'pointer',
+      transition: 'all 0.2s',
       backgroundColor: isSelected ? '#f3e8ff' : 'white',
       borderColor: isSelected ? '#a855f7' : '#e2e8f0'
     };
@@ -112,14 +125,26 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const getDbItemStyle = (id: number): React.CSSProperties => {
     const isSelected = selectedDbQuestionIds.includes(id);
     return {
-      display: 'flex', gap: '16px', padding: '16px', border: '1px solid', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.1s',
+      display: 'flex',
+      gap: '16px',
+      padding: '16px',
+      border: '1px solid',
+      borderRadius: '12px',
+      cursor: 'pointer',
+      transition: 'all 0.1s',
       borderColor: isSelected ? '#10b981' : '#e2e8f0',
       backgroundColor: isSelected ? '#f0fdf4' : 'white'
     };
   };
 
   const distributeBtnStyle: React.CSSProperties = {
-    width: '100%', padding: '16px', color: 'white', border: 'none', borderRadius: '12px', fontSize: '18px', fontWeight: '900',
+    width: '100%',
+    padding: '16px',
+    color: 'white',
+    border: 'none',
+    borderRadius: '12px',
+    fontSize: '18px',
+    fontWeight: '900',
     backgroundColor: selectedStudentIds.length === 0 ? '#cbd5e1' : '#10b981',
     cursor: selectedStudentIds.length === 0 ? 'not-allowed' : 'pointer'
   };
@@ -710,6 +735,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                     <div style={{ fontSize: '13.5px', color: '#111', border: '1px solid #cbd5e1', padding: '16px', borderRadius: '8px', marginBottom: '12px', lineHeight: '1.6' }}>
                       {renderTextWithFormatting(prob.passage)}
                     </div>
+                    
                     {prob.options && prob.options.length > 0 ? (
                       <div style={{ fontSize: '13.5px', color: '#334155', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         {prob.options.map((opt, i) => <span key={i}>{opt}</span>)}
@@ -955,6 +981,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
             </div>
           </div>
         )}
+
       </div>
 
       {editingIndex !== null && editFormData && (
