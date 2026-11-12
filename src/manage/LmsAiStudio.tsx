@@ -24,7 +24,6 @@ interface SavedExam {
   problems: Problem[];
 }
 
-// 💡 [신규 추가] 수파베이스 middle_questions 테이블용 타입
 interface MiddleQuestion {
   id?: number;
   grade: string;
@@ -37,12 +36,8 @@ interface MiddleQuestion {
 }
 
 export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
-  // 💡 [신규 추가] 탭이 4개로 늘어났습니다. (기존 2개 보존 + DB 업로드 + DB 배포)
   const [viewMode, setViewMode] = useState<'studio' | 'archive' | 'db_upload' | 'db_distribute'>('studio');
 
-  // ==========================================
-  // 기존 상태 변수들 (1%도 건드리지 않음)
-  // ==========================================
   const [sourceText, setSourceText] = useState('');
   const [questionCount, setQuestionCount] = useState(5); 
   const [isGenerated, setIsGenerated] = useState(false);
@@ -63,18 +58,12 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const [isAutoFixing, setIsAutoFixing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // ==========================================
-  // [신규 추가] DB 업로더용 상태 변수
-  // ==========================================
   const [uploadText, setUploadText] = useState('');
   const [uploadMeta, setUploadMeta] = useState({ grade: '중1', publisher: '', lesson: '', grammar_tag: '' });
   const [parsedDbQuestions, setParsedDbQuestions] = useState<MiddleQuestion[]>([]);
   const [isParsing, setIsParsing] = useState(false);
   const [isUploadingDB, setIsUploadingDB] = useState(false);
 
-  // ==========================================
-  // [신규 추가] DB 배포용 상태 변수
-  // ==========================================
   const [dbFilter, setDbFilter] = useState({ publisher: '', lesson: '', grammar_tag: '' });
   const [fetchedDbQuestions, setFetchedDbQuestions] = useState<MiddleQuestion[]>([]);
   const [selectedDbQuestionIds, setSelectedDbQuestionIds] = useState<number[]>([]);
@@ -113,9 +102,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   6. 🚨 JSON 오류 방지: 응답은 반드시 완벽한 JSON Array [ ] 형태여야 하며, 텍스트 내용(Value) 안에 큰따옴표(")를 쓰면 에러가 나므로 반드시 작은따옴표(')로만 대체해서 쓰세요.
   `;
 
-  // --------------------------------------------------------
-  // 기존 AI 출제 로직 (1%도 안 건드림)
-  // --------------------------------------------------------
   const handleGenerateAI = async (type: 'elem' | 'mid' | 'high') => {
     if (!sourceText) return alert("원본 지문이나 문장을 먼저 입력해주세요!");
     
@@ -325,10 +311,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     }
   };
 
-
-  // --------------------------------------------------------
-  // 💡 [신규 기능 1] 한글 파일(HWP) 텍스트 -> AI 자동 분리 (제미나이 버전 고정)
-  // --------------------------------------------------------
   const handleParseHwpToDB = async () => {
     if (!uploadText.trim()) return alert("한글 파일에서 복사한 텍스트를 먼저 붙여넣어 주세요!");
     if (!uploadMeta.publisher || !uploadMeta.lesson || !uploadMeta.grammar_tag) {
@@ -362,7 +344,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     ]
     `;
 
-    // 💡 원장님 약속대로 기존 제미나이 모델 배열을 그대로 사용합니다.
     const modelsToTry = ['gemini-3.7-flash', 'gemini-3.1-pro', 'gemini-3.5-flash-lite'];
     let success = false;
     let textResponse = '';
@@ -395,7 +376,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
       
       const parsedArray = JSON.parse(cleanJson);
       
-      // 메타데이터(학년, 출판사 등)를 강제로 병합
       const finalQuestions: MiddleQuestion[] = parsedArray.map((item: any) => ({
         grade: uploadMeta.grade,
         publisher: uploadMeta.publisher,
@@ -414,7 +394,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     }
   };
 
-  // 💡 [신규 기능 2] 파싱된 문제를 수파베이스 middle_questions 에 영구 저장
   const handleUploadToSupabase = async () => {
     if (parsedDbQuestions.length === 0) return;
     setIsUploadingDB(true);
@@ -433,10 +412,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     }
   };
 
-
-  // --------------------------------------------------------
-  // 💡 [신규 기능 3] 무제한 DB 불러오기 (1000건 제한 우회 로직 포함)
-  // --------------------------------------------------------
   const handleFetchMiddleDb = async () => {
     setIsFetchingDb(true);
     setFetchedDbQuestions([]);
@@ -448,7 +423,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
       const step = 1000;
       let keepFetching = true;
 
-      // 💡 무한 루프 릴레이 기법으로 데이터 짤림 방지
       while (keepFetching) {
         let query = supabase.from('middle_questions').select('*');
         if (dbFilter.publisher) query = query.eq('publisher', dbFilter.publisher);
@@ -464,7 +438,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
         if (data && data.length > 0) {
           allQuestions = [...allQuestions, ...data];
           from += step;
-          if (data.length < step) keepFetching = false; // 마지막 페이지면 중단
+          if (data.length < step) keepFetching = false; 
         } else {
           keepFetching = false;
         }
@@ -483,10 +457,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     setSelectedDbQuestionIds(prev => prev.includes(id) ? prev.filter(qid => qid !== id) : [...prev, id]);
   };
 
-
-  // --------------------------------------------------------
-  // 기존 버튼 로직 및 공용 함수
-  // --------------------------------------------------------
   const currentPrintProblems = viewMode === 'studio' ? generatedProblems : (selectedExam?.problems || []);
   const canPrintOrDistribute = currentPrintProblems.length > 0;
 
@@ -505,11 +475,9 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     window.print();
   };
 
-  // 💡 [수정] DB 문제 배포 기능까지 모두 호환되도록 배포 로직 통합
   const handleDistribute = () => {
     if (selectedStudentIds.length === 0) return alert("과제를 보낼 학생을 1명 이상 선택해주세요.");
     
-    // DB 배포 모드일 경우 선택된 문제 번호(ID) 확인
     if (viewMode === 'db_distribute' && selectedDbQuestionIds.length === 0) {
       return alert("배포할 문제를 먼저 체크박스로 선택해주세요!");
     }
@@ -629,7 +597,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
         `}
       </style>
 
-      {/* 상단 네비게이션 */}
       <div className="no-print" style={{ backgroundColor: 'white', padding: '16px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
           {onBack && <button onClick={onBack} style={{ border: 'none', background: 'none', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', color: '#64748b' }}>← 뒤로</button>}
@@ -643,7 +610,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
               🗂️ 문제 보관함
             </button>
             <div style={{ width: '2px', backgroundColor: '#cbd5e1', margin: '4px 8px' }}></div>
-            {/* 💡 [신규 탭] */}
             <button onClick={() => setViewMode('db_upload')} style={{ padding: '8px 16px', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s', backgroundColor: viewMode === 'db_upload' ? 'white' : 'transparent', color: viewMode === 'db_upload' ? '#f59e0b' : '#64748b', boxShadow: viewMode === 'db_upload' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none' }}>
               📥 중등 DB 업로더
             </button>
@@ -683,10 +649,8 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
 
       <div className="no-print" style={{ padding: '24px', maxWidth: '1600px', margin: '0 auto' }}>
         
-        {/* ===================== [모드 1] AI 출제소 화면 (기존 그대로 보존) ===================== */}
         {viewMode === 'studio' && (
           <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
-            {/* 입력 패널 */}
             <div style={{ flex: '0 0 300px', backgroundColor: 'white', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
               <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '800' }}>원본 소스 입력</h3>
               <textarea 
@@ -714,9 +678,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
               </div>
             </div>
 
-            {/* 듀얼 뷰 (미리보기) */}
             <div style={{ flex: '1', display: 'flex', gap: '20px' }}>
-              {/* 1. 학생용 문제 뷰 */}
               <div style={{ flex: '1', backgroundColor: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', minHeight: '600px', overflowY: 'auto', maxHeight: '800px' }}>
                 <h3 style={{ margin: '0 0 20px 0', paddingBottom: '12px', borderBottom: '2px solid #e2e8f0', color: '#3b82f6' }}>📄 화면 미리보기 (문제)</h3>
                 {!isGenerated && <div style={{ color: '#94a3b8', textAlign: 'center', marginTop: '100px' }}>왼쪽에서 문제를 생성해주세요.</div>}
@@ -743,7 +705,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                 ))}
               </div>
 
-              {/* 2. 교사용 해설지 뷰 */}
               <div style={{ flex: '1', backgroundColor: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', minHeight: '600px', overflowY: 'auto', maxHeight: '800px' }}>
                 <h3 style={{ margin: '0 0 20px 0', paddingBottom: '12px', borderBottom: '2px solid #e2e8f0', color: '#10b981' }}>👩‍🏫 교사용 해설 및 분석지</h3>
                 {!isGenerated && <div style={{ color: '#94a3b8', textAlign: 'center', marginTop: '100px' }}>왼쪽에서 문제를 생성해주세요.</div>}
@@ -770,7 +731,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
           </div>
         )}
 
-        {/* ===================== [모드 2] 문제 보관함 화면 (기존 그대로 보존) ===================== */}
         {viewMode === 'archive' && (
           <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
             <div style={{ flex: '0 0 350px', backgroundColor: 'white', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', maxHeight: '800px', overflowY: 'auto' }}>
@@ -854,7 +814,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
           </div>
         )}
 
-        {/* ===================== [모드 3 - 신규] 중등 DB 쾌속 업로더 ===================== */}
         {viewMode === 'db_upload' && (
           <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
             <div style={{ flex: '0 0 350px', backgroundColor: 'white', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
@@ -918,7 +877,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
           </div>
         )}
 
-        {/* ===================== [모드 4 - 신규] 중등 DB 무제한 배포 ===================== */}
         {viewMode === 'db_distribute' && (
           <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
             <div style={{ flex: '0 0 300px', backgroundColor: 'white', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
@@ -953,7 +911,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                       type="checkbox" 
                       checked={selectedDbQuestionIds.length === fetchedDbQuestions.length && fetchedDbQuestions.length > 0} 
                       onChange={(e) => {
-                        if (e.target.checked) setSelectedDbQuestionIds(fetchedDbQuestions.map(q => q.id!));
+                        if (e.target.checked) setSelectedDbQuestionIds(fetchedDbQuestions.map(q => q.id || 0));
                         else setSelectedDbQuestionIds([]);
                       }} 
                       style={{ transform: 'scale(1.2)' }}
@@ -968,11 +926,11 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {fetchedDbQuestions.map((q) => (
-                    <label key={q.id} style={{ display: 'flex', gap: '16px', padding: '16px', border: '1px solid', borderColor: selectedDbQuestionIds.includes(q.id!) ? '#10b981' : '#e2e8f0', backgroundColor: selectedDbQuestionIds.includes(q.id!) ? '#f0fdf4' : 'white', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.1s' }}>
+                    <label key={q.id} style={{ display: 'flex', gap: '16px', padding: '16px', border: '1px solid', borderColor: selectedDbQuestionIds.includes(q.id || 0) ? '#10b981' : '#e2e8f0', backgroundColor: selectedDbQuestionIds.includes(q.id || 0) ? '#f0fdf4' : 'white', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.1s' }}>
                       <input 
                         type="checkbox" 
-                        checked={selectedDbQuestionIds.includes(q.id!)} 
-                        onChange={() => toggleDbQuestionSelect(q.id!)}
+                        checked={selectedDbQuestionIds.includes(q.id || 0)} 
+                        onChange={() => toggleDbQuestionSelect(q.id || 0)}
                         style={{ marginTop: '4px', transform: 'scale(1.3)' }}
                       />
                       <div style={{ flex: 1 }}>
@@ -992,7 +950,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
 
       </div>
 
-      {/* 💡 문항 오류 자동/수동 수정 모달창 (기존 보존) */}
       {editingIndex !== null && editFormData && (
         <div className="no-print" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 }}>
           <div style={{ backgroundColor: 'white', width: '800px', maxHeight: '90vh', overflowY: 'auto', borderRadius: '16px', padding: '32px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
@@ -1065,7 +1022,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
         </div>
       )}
 
-      {/* 🖨 인쇄 영역 (기존 유지) */}
       <div className="print-only">
         {canPrintOrDistribute && (
           <div>
@@ -1128,7 +1084,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
         )}
       </div>
 
-      {/* 🚀 학생 배포 모달창 (기존 보존 및 로직 통합) */}
       {showDistributeModal && (
         <div className="no-print" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
           <div style={{ backgroundColor: 'white', width: '500px', borderRadius: '24px', padding: '32px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
