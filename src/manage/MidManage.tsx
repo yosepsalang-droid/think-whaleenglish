@@ -42,16 +42,6 @@ export default function MidManage() {
     return new Date(date.getTime() + kstOffset).toISOString().split('T')[0];
   };
 
-  const getFakeUTCString = (date: Date) => {
-    const yyyy = date.getFullYear();
-    const mm = String(date.getMonth() + 1).padStart(2, '0');
-    const dd = String(date.getDate()).padStart(2, '0');
-    const hh = String(date.getHours()).padStart(2, '0');
-    const mi = String(date.getMinutes()).padStart(2, '0');
-    const ss = String(date.getSeconds()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}+00:00`;
-  };
-
   const isToday = getFormattedDate(selectedDate) === getFormattedDate(new Date());
 
   const fetchMiddleLMSData = async () => {
@@ -62,19 +52,13 @@ export default function MidManage() {
         .from('students')
         .select('*')
         .order('name', { ascending: true })
-        .limit(2000); // 💡 [패치 1] 학생 수 데이터 락 해제!
+        .limit(2000); 
 
       if (studentError) throw studentError;
 
       const studentsData = (rawStudentsData || []).filter(s => 
         s.grade && (s.grade.includes('중') || s.grade.includes('고'))
       );
-
-      const startOfSelectedDay = new Date(selectedDate);
-      startOfSelectedDay.setHours(0, 0, 0, 0);
-      
-      const endOfSelectedDay = new Date(selectedDate);
-      endOfSelectedDay.setHours(23, 59, 59, 999);
 
       const pastWeekdays: Date[] = [];
       let tempDate = new Date(selectedDate);
@@ -88,68 +72,58 @@ export default function MidManage() {
         tempDate.setDate(tempDate.getDate() - 1);
       }
       
-      const oldestDate = new Date(pastWeekdays[pastWeekdays.length - 1]);
-      oldestDate.setHours(0, 0, 0, 0);
+      // 💡 [핵심 패치 1] 복잡한 UTC 계산 버리고 안전하게 넉넉한 14일 치 데이터를 한 번에 가져옵니다.
+      const bufferStart = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000); 
 
-      const gteString = getFakeUTCString(oldestDate);
-      const lteString = getFakeUTCString(endOfSelectedDay);
-
-      // 💡 [패치 2] 1,000개 제한 해제 및 수파베이스의 깐깐한 공백 필터(eq) 회피
       const { data: logsData, error: logError } = await supabase
         .from('learning_logs')
-        .select('student_id, task_type, status, book_info, created_at')
-        .gte('created_at', gteString) 
-        .lte('created_at', lteString) 
-        .limit(50000); // .eq('status', '완료')를 지우고 자바스크립트에서 직접 안전하게 필터링합니다.
+        .select('student_id, task_type, status, book_info, created_at, log_date')
+        .gte('created_at', bufferStart.toISOString()) 
+        .limit(50000); 
 
       if (logError) throw logError;
 
       const selectedDayDoneMap = new Map<string, { word: string; verb: string }>();
       const completedDaysMap = new Map<string, Set<string>>();
+      const selectedDateStr = getFormattedDate(selectedDate);
 
       (logsData || []).forEach(log => {
-        // 💡 [패치 3] 보이지 않는 스페이스바(공백) 완벽 세탁
         const status = log.status ? String(log.status).trim() : '';
         if (status !== '완료') return; 
 
         const sId = log.student_id ? String(log.student_id).trim() : '';
         if (!sId) return;
 
-        const localTimeString = log.created_at.substring(0, 19); 
-        const [yyyy, mm, dd] = localTimeString.split('T')[0].split('-').map(Number);
-        const [hh, mi, ss] = localTimeString.split('T')[1].split(':').map(Number);
+        // 💡 [핵심 패치 2] 시간차 꼬임 방지를 위해 앱이 기록한 '정확한 날짜(log_date)'를 최우선으로 사용합니다.
+        let logDateStr = log.log_date;
+        if (!logDateStr) {
+          // 혹시 예전 기록이라 log_date가 없다면 강제로 KST 변환
+          const kstOffset = 9 * 60 * 60 * 1000;
+          const utcDate = new Date(log.created_at);
+          logDateStr = new Date(utcDate.getTime() + kstOffset).toISOString().split('T')[0];
+        }
         
-        const logTime = new Date(yyyy, mm - 1, dd, hh, mi, ss); 
-        const logTimestamp = logTime.getTime();
-        
-        const isLogOnSelectedDay = logTimestamp >= startOfSelectedDay.getTime() && logTimestamp <= endOfSelectedDay.getTime();
-
-        if (isLogOnSelectedDay) {
+        if (logDateStr === selectedDateStr) {
           if (!selectedDayDoneMap.has(sId)) selectedDayDoneMap.set(sId, { word: '', verb: '' });
           const record = selectedDayDoneMap.get(sId)!;
-          const task = log.task_type ? String(log.task_type).trim() : ''; // 💡 작업 타입도 공백 제거
+          const task = log.task_type ? String(log.task_type).trim() : ''; 
 
-          if (task.includes('단어') || task.includes('워드타파')) {
-            const hours = String(logTime.getHours()).padStart(2, '0');
-            const minutes = String(logTime.getMinutes()).padStart(2, '0');
-            const timeStr = `${logTime.getMonth() + 1}/${logTime.getDate()} ${hours}:${minutes}`;
-            record.word = `✅ 단어(${timeStr})`;
+          // 💡 [핵심 패치 3] '중등단어', '고등단어' 등 앱에서 보내는 모든 신호를 잡아냅니다.
+          if (task.includes('단어') || task.includes('워드타파') || task.includes('중등') || task.includes('고등')) {
+            record.word = `✅ ${log.book_info || '완료'}`;
           }
           if (task.includes('동사')) {
-            record.verb = `✅ 동사(${log.book_info || '기록없음'})`; 
+            record.verb = `✅ ${log.book_info || '완료'}`; 
           }
         }
 
         if (!completedDaysMap.has(sId)) {
           completedDaysMap.set(sId, new Set());
         }
-        
-        const dateStr = getFormattedDate(logTime);
-        completedDaysMap.get(sId)!.add(dateStr);
+        completedDaysMap.get(sId)!.add(logDateStr);
       });
 
       const midStudents: Student[] = studentsData.map(row => {
-        // 💡 [패치 4] 명단에 있는 아이디도 공백을 지우고 매칭
         const rowId = row.student_id ? String(row.student_id).trim() : '';
         const doneStatus = selectedDayDoneMap.get(rowId) || { word: '', verb: '' };
         
