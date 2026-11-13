@@ -17,7 +17,6 @@ export default function PhonicsBoss({ day, onBack, onComplete }: PhonicsBossProp
   const [timeLeft, setTimeLeft] = useState(40); 
   const [moles, setMoles] = useState<any[]>([]);
 
-  // 💡 [핵심 패치 1] 그날 배운 단어를 골고루 뽑기 위한 '카드 뭉치(Deck)' 저장소
   const wordDeckRef = useRef<any[]>([]);
 
   useEffect(() => {
@@ -40,7 +39,6 @@ export default function PhonicsBoss({ day, onBack, onComplete }: PhonicsBossProp
     setGameState('playing');
     setScore(0);
     setTimeLeft(40); 
-    // 게임 시작 시 카드 뭉치 비우기 (새로 섞기 위함)
     wordDeckRef.current = []; 
     if ('speechSynthesis' in window) {
       const utterance = new SpeechSynthesisUtterance("Ready, Go!");
@@ -67,13 +65,10 @@ export default function PhonicsBoss({ day, onBack, onComplete }: PhonicsBossProp
     if (gameState !== 'playing') return;
     
     const spawnTimer = setInterval(() => {
-      // 💡 [핵심 패치 2] 무작위 뽑기가 아닌 '카드 덱' 셔플 로직!
-      // 카드 뭉치가 비어있으면 그날 배운 단어를 마구 섞어서 다시 채워 넣습니다.
       if (wordDeckRef.current.length === 0) {
         wordDeckRef.current = [...dayWords].sort(() => Math.random() - 0.5);
       }
       
-      // 카드 뭉치에서 하나를 뽑습니다. (배운 단어가 무조건 한 번씩 다 나오게 됨)
       const itemToSpawn = wordDeckRef.current.pop();
       
       const newMole = {
@@ -99,7 +94,7 @@ export default function PhonicsBoss({ day, onBack, onComplete }: PhonicsBossProp
     
     if (clickedMole.letter === targetLetter) {
       setScore(prev => prev + 10);
-      speakWord(clickedMole.sound);
+      speakWord(clickedMole.sound || clickedMole.word); // sound가 없으면 word라도 읽어주기
     } else {
       setScore(prev => Math.max(0, prev - 5));
     }
@@ -107,7 +102,6 @@ export default function PhonicsBoss({ day, onBack, onComplete }: PhonicsBossProp
     setMoles(prev => prev.filter(m => m.uid !== clickedMole.uid));
   };
 
-  // 💡 [추가] 그림 파일(png/jpg)인지 이모지인지 식별하는 똑똑한 함수
   const isImageUrl = (icon: string) => {
     if (!icon) return false;
     return icon.includes('http') || icon.includes('.png') || icon.includes('.jpg');
@@ -134,7 +128,7 @@ export default function PhonicsBoss({ day, onBack, onComplete }: PhonicsBossProp
           <div style={{ fontSize: '80px', marginBottom: '20px' }}>👾</div>
           <h1 style={{ fontSize: '48px', color: '#fde047', fontWeight: '900', margin: '0 0 20px 0', textShadow: '0 4px 10px rgba(0,0,0,0.5)' }}>미니 보스전!</h1>
           <p style={{ fontSize: '24px', color: '#e0e7ff', marginBottom: '40px' }}>
-            목표: <strong style={{ color: '#f472b6', fontSize: '32px' }}>{targetLetter}</strong> 로 시작하는 그림만 모두 터트리세요!
+            목표: <strong style={{ color: '#f472b6', fontSize: '32px' }}>{targetLetter}</strong> 로 시작하는 단어만 모두 터트리세요!
           </p>
           <button onClick={startGame} style={{ padding: '20px 60px', fontSize: '28px', fontWeight: '900', backgroundColor: '#ec4899', color: 'white', border: 'none', borderRadius: '40px', cursor: 'pointer', boxShadow: '0 10px 20px rgba(236, 72, 153, 0.4)' }} onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'} onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}>
             게임 시작 🚀
@@ -155,17 +149,22 @@ export default function PhonicsBoss({ day, onBack, onComplete }: PhonicsBossProp
               <button
                 key={mole.uid} onClick={(e) => handlePop(mole, e)}
                 style={{
-                  position: 'absolute', left: `${mole.left}%`, top: `${mole.top}%`, width: '140px', height: '140px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.9)',
-                  border: '6px solid #818cf8', fontSize: '60px', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'crosshair', boxShadow: '0 15px 30px rgba(0,0,0,0.3)',
+                  position: 'absolute', left: `${mole.left}%`, top: `${mole.top}%`, width: '150px', height: '150px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.95)',
+                  border: '6px solid #818cf8', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', cursor: 'crosshair', boxShadow: '0 15px 30px rgba(0,0,0,0.3)',
                   animation: 'popUp 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards', transform: 'translate(-50%, -50%)', padding: '10px'
                 }}
               >
-                {/* 💡 [핵심 해결] 인터넷 주소면 <img> 태그로 예쁜 그림을 띄워줍니다! */}
-                {isImageUrl(mole.icon) ? (
-                  <img src={mole.icon} alt="monster" style={{ width: '90px', height: '90px', objectFit: 'contain' }} draggable={false} />
-                ) : (
-                  mole.icon
-                )}
+                {/* 💡 [핵심 버그 수정] 아이콘(이미지/이모지)과 영단어를 함께 확실하게 출력합니다! */}
+                {mole.icon && isImageUrl(mole.icon) ? (
+                  <img src={mole.icon} alt="word-icon" style={{ width: '45px', height: '45px', objectFit: 'contain', marginBottom: '4px' }} draggable={false} />
+                ) : mole.icon ? (
+                  <div style={{ fontSize: '36px', marginBottom: '4px' }}>{mole.icon}</div>
+                ) : null}
+                
+                {/* 단어 텍스트 출력 영역 추가 */}
+                <div style={{ fontSize: '24px', fontWeight: '900', color: '#1e293b', wordBreak: 'keep-all', lineHeight: '1.1' }}>
+                  {mole.word || "단어없음"}
+                </div>
               </button>
             ))}
           </div>

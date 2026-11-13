@@ -109,7 +109,6 @@ export default function PhonicsTrace({ day, onBack, onComplete }: PhonicsTracePr
   };
 
   const clearCanvas = () => {
-    // 💡 화면의 선만 지우는 게 아니라, 메모리에 누적된 거리/면적 기록도 무조건 0으로 폭파!
     setStrokeLength(0); 
     setBounds({ minX: 9999, maxX: 0, minY: 9999, maxY: 0 }); 
 
@@ -118,7 +117,7 @@ export default function PhonicsTrace({ day, onBack, onComplete }: PhonicsTracePr
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.beginPath(); // 💡 캔버스 내부의 보이지 않는 선 찌꺼기까지 완벽 차단
+        ctx.beginPath(); 
       }
     }
   };
@@ -127,21 +126,28 @@ export default function PhonicsTrace({ day, onBack, onComplete }: PhonicsTracePr
     const width = bounds.maxX === 0 ? 0 : bounds.maxX - bounds.minX;
     const height = bounds.maxY === 0 ? 0 : bounds.maxY - bounds.minY;
 
-    if (strokeLength < 800 || width < 100 || height < 100) {
-      alert("알파벳을 너무 작게 쓰거나 대충 쓴 것 같아요! ✏️\n빈칸을 가득 채워서 다시 예쁘게 써주세요!");
+    // 💡 [핵심 버그 수정] 아이들 꼼수 낙서 완벽 차단 로직
+    // 1. 점 하나 찍고 넘어가려는 꼼수 차단
+    if (strokeLength < 300 || width < 80 || height < 80) {
+      alert("알파벳을 너무 작게 쓰거나 덜 쓴 것 같아요! ✏️\n선에 맞춰서 조금 더 크고 예쁘게 써주세요!");
+      return;
+    }
+
+    // 2. 화면 전체를 마구잡이로 색칠해서 넘어가려는 꼼수 차단
+    if (strokeLength > 4500) {
+      alert("너무 많이 색칠했어요! 😅\n알파벳 모양에 맞춰서 깔끔하게 한 번씩만 써주세요!");
+      clearCanvas(); // 낙서한 거 얄짤없이 싹 지워버림
       return;
     }
 
     setIsFinished(true); 
     
-    // 💡 [핵심 버그 수정] 통과 판정이 나는 즉시, 상태값을 0으로 싹 비워버립니다. 
-    // 이렇게 해야 2번째, 3번째 글자로 이전 기록이 넘어가지 않습니다!
     setStrokeLength(0);
     setBounds({ minX: 9999, maxX: 0, minY: 9999, maxY: 0 });
 
     setTimeout(() => {
       setIsFinished(false);
-      clearCanvas(); // 혹시나 해서 한 번 더 지우기
+      clearCanvas(); 
       
       if (step + 1 < targets.length) {
         setStep(prev => prev + 1);
