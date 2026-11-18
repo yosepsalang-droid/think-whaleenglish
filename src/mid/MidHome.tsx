@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import MidGrammar from './MidGrammar'; 
+import MidPassage from './MidPassage'; // 💡 방금 만든 본문 암기 화면 가져오기
 
 interface Student {
   id: string;
@@ -13,14 +14,20 @@ interface MidHomeProps {
   student: Student;
   onNavigate: (menu: string) => void;
   onLogout: () => void;
-  onBackToSelect?: () => void; // ⭐️ 이 부분이 꼭 있어야 합니다!
+  onBackToSelect?: () => void; 
 }
 
 export default function MidHome({ student, onNavigate, onLogout, onBackToSelect }: MidHomeProps) {
-  const [currentView, setCurrentView] = useState<'HOME' | 'GRAMMAR'>('HOME');
+  // 💡 상태에 'PASSAGE' 모드를 추가합니다.
+  const [currentView, setCurrentView] = useState<'HOME' | 'GRAMMAR' | 'PASSAGE'>('HOME');
 
   if (currentView === 'GRAMMAR') {
     return <MidGrammar student={student} onBack={() => setCurrentView('HOME')} />;
+  }
+
+  // 💡 본문 암기 화면 렌더링
+  if (currentView === 'PASSAGE') {
+    return <MidPassage student={student} onBack={() => setCurrentView('HOME')} />;
   }
 
   // 📺 메인 홈 화면 렌더링
@@ -35,7 +42,6 @@ export default function MidHome({ student, onNavigate, onLogout, onBackToSelect 
             <h2 style={{ margin: '4px 0 0', fontSize: '22px', fontWeight: '800' }}>{student.name} 학생</h2>
           </div>
           
-          {/* ⭐️ 이 부분에 뒤로가기 버튼과 로그아웃 버튼이 나란히 들어갑니다 ⭐️ */}
           <div style={{ display: 'flex', gap: '8px' }}>
             {onBackToSelect && (
               <button onClick={onBackToSelect} style={{ backgroundColor: '#8e8e93', color: 'white', border: 'none', padding: '8px 14px', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}>
@@ -46,8 +52,6 @@ export default function MidHome({ student, onNavigate, onLogout, onBackToSelect 
               로그아웃
             </button>
           </div>
-          {/* ========================================================= */}
-          
         </div>
 
         {/* 미션 현황 카드 */}
@@ -93,8 +97,17 @@ export default function MidHome({ student, onNavigate, onLogout, onBackToSelect 
             </div>
             <span style={{ fontSize: '12px', color: '#007aff', fontWeight: '700', textAlign: 'right' }}>입장하기 →</span>
           </div>
-        </div>
 
+          {/* 💡 새로 추가된 교과서 본문 암기 메뉴 */}
+          <div onClick={() => setCurrentView('PASSAGE')} style={{ gridColumn: 'span 2', background: 'linear-gradient(to right, #fdf2f8, #fbcfe8)', padding: '16px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(236, 72, 153, 0.15)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '2px solid #ec4899' }}>
+            <div>
+              <span style={{ fontSize: '18px', fontWeight: '900', color: '#be185d' }}>📖 교과서 본문 암기</span>
+              <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#9d174d', fontWeight: 'bold' }}>원하는 범위를 설정하고 100% 영작 테스트에 도전하세요!</p>
+            </div>
+            <span style={{ fontSize: '24px' }}>🔥</span>
+          </div>
+
+        </div>
       </div>
     </div>
   );
