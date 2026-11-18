@@ -19,16 +19,13 @@ interface MidPassageProps {
 export default function MidPassage({ student, onBack }: MidPassageProps) {
   const [phase, setPhase] = useState<'SELECT_LESSON' | 'SELECT_RANGE' | 'TESTING' | 'RESULT'>('SELECT_LESSON');
   
-  // 1. 단원 선택 상태
   const [availableLessons, setAvailableLessons] = useState<{publisher: string, lesson: string, grade: string}[]>([]);
   const [selectedLesson, setSelectedLesson] = useState<{publisher: string, lesson: string, grade: string} | null>(null);
   
-  // 2. 범위 선택 상태
   const [maxSentences, setMaxSentences] = useState(0);
   const [startNum, setStartNum] = useState(1);
   const [endNum, setEndNum] = useState(10);
   
-  // 3. 테스트 상태
   const [testQueue, setTestQueue] = useState<MiddleSentence[]>([]);
   const [wrongQueue, setWrongQueue] = useState<MiddleSentence[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -38,7 +35,6 @@ export default function MidPassage({ student, onBack }: MidPassageProps) {
   
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // 현재 문제 타겟
   const activeQuestions = isHellMode ? wrongQueue : testQueue;
   const currentQuestion = activeQuestions[currentIndex];
 
@@ -52,7 +48,6 @@ export default function MidPassage({ student, onBack }: MidPassageProps) {
     }
   }, [currentIndex, feedback, isHellMode, phase]);
 
-  // DB에 저장된 교과서 목록 불러오기 (중복 제거)
   const fetchAvailableLessons = async () => {
     try {
       const { data, error } = await supabase.from('middle_sentences').select('grade, publisher, lesson');
@@ -75,7 +70,6 @@ export default function MidPassage({ student, onBack }: MidPassageProps) {
     }
   };
 
-  // 특정 단원 클릭 시, 총 문장 갯수 파악하기
   const handleLessonSelect = async (lessonObj: {publisher: string, lesson: string, grade: string}) => {
     setSelectedLesson(lessonObj);
     try {
@@ -92,7 +86,7 @@ export default function MidPassage({ student, onBack }: MidPassageProps) {
         const max = data[0].sentence_num;
         setMaxSentences(max);
         setStartNum(1);
-        setEndNum(max > 10 ? 10 : max); // 기본적으로 1~10번 세팅
+        setEndNum(max > 10 ? 10 : max);
         setPhase('SELECT_RANGE');
       }
     } catch (error) {
@@ -100,7 +94,6 @@ export default function MidPassage({ student, onBack }: MidPassageProps) {
     }
   };
 
-  // 지정한 범위의 문제 DB에서 가져와서 테스트 시작
   const handleStartTest = async () => {
     if (startNum > endNum) return alert("시작 번호가 끝 번호보다 클 수 없습니다.");
     if (startNum < 1 || endNum > maxSentences) return alert("올바른 범위를 입력해주세요.");
@@ -127,11 +120,10 @@ export default function MidPassage({ student, onBack }: MidPassageProps) {
     }
   };
 
-  // 특수문자, 대소문자, 다중공백 무시하는 강력한 정규화 함수
   const normalizeText = (text: string) => {
     return text
       .toLowerCase()
-      .replace(/[.,!?\"\'\u2018\u2019\u201C\u201D]/g, '') // 구두점 및 따옴표 완벽 제거
+      .replace(/[.,!?\"\'\u2018\u2019\u201C\u201D]/g, '') 
       .replace(/\s+/g, ' ')   
       .trim();
   };
@@ -171,13 +163,11 @@ export default function MidPassage({ student, onBack }: MidPassageProps) {
     }
   };
 
-  // --- 화면 렌더링 ---
-
   if (phase === 'SELECT_LESSON') {
     return (
       <div style={{ backgroundColor: '#f8fafc', minHeight: '100vh', padding: '24px', fontFamily: 'Pretendard, sans-serif' }}>
         <div style={{ maxWidth: '600px', margin: '0 auto' }}>
-          <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '16px', fontWeight: '800', cursor: 'pointer', marginBottom: '20px' }}>← 홈으로</button>
+          <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '16px', fontWeight: '800', cursor: 'pointer', marginBottom: '20px' }}>← 홈으로 돌아가기</button>
           <h2 style={{ fontSize: '24px', fontWeight: '900', color: '#0f172a', marginBottom: '24px' }}>📖 교과서 본문 암기</h2>
           
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
@@ -249,19 +239,26 @@ export default function MidPassage({ student, onBack }: MidPassageProps) {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: isHellMode ? '#fef2f2' : '#f8fafc', display: 'flex', flexDirection: 'column', fontFamily: 'Pretendard, sans-serif' }}>
       
-      <div style={{ padding: '24px', backgroundColor: 'white', borderBottom: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', maxWidth: '800px', margin: '0 auto' }}>
-          <div>
-            <div style={{ fontSize: '14px', color: '#64748b', fontWeight: 'bold', marginBottom: '4px' }}>
-              {isHellMode ? '🔥 오답 지옥 탈출 중...' : '📖 교과서 본문 암기'}
-            </div>
-            <div style={{ fontSize: '16px', fontWeight: '900', color: isHellMode ? '#ef4444' : '#0f172a' }}>
-              {currentQuestion.publisher} | {currentQuestion.lesson}
-            </div>
+      {/* 💡 상단 헤더: 뒤로가기 버튼 완벽하게 추가 */}
+      <div style={{ padding: '16px 24px', backgroundColor: 'white', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
+        <button 
+          onClick={onBack} 
+          style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#f1f5f9', border: 'none', color: '#475569', fontSize: '14px', fontWeight: '800', cursor: 'pointer', padding: '10px 16px', borderRadius: '12px', transition: 'all 0.2s' }}
+        >
+          <span>←</span> 중단하고 나가기
+        </button>
+
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 'bold', marginBottom: '2px' }}>
+            {isHellMode ? '🔥 오답 지옥 탈출 중...' : '📖 교과서 본문 암기'}
           </div>
-          <div style={{ fontSize: '24px', fontWeight: '900', color: '#ec4899', backgroundColor: '#fdf2f8', padding: '8px 20px', borderRadius: '20px' }}>
-            {currentIndex + 1} / {activeQuestions.length}
+          <div style={{ fontSize: '15px', fontWeight: '900', color: isHellMode ? '#ef4444' : '#0f172a' }}>
+            {currentQuestion.publisher} | {currentQuestion.lesson}
           </div>
+        </div>
+
+        <div style={{ fontSize: '20px', fontWeight: '900', color: '#ec4899', backgroundColor: '#fdf2f8', padding: '6px 16px', borderRadius: '20px' }}>
+          {currentIndex + 1} / {activeQuestions.length}
         </div>
       </div>
 
