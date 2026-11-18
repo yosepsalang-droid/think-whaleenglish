@@ -35,9 +35,21 @@ interface MiddleQuestion {
   explanation: string;
 }
 
-export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
-  const [viewMode, setViewMode] = useState<'studio' | 'archive' | 'db_upload' | 'db_distribute'>('studio');
+// 💡 새로 추가된 본문 문장 구조 인터페이스
+interface MiddleSentence {
+  grade: string;
+  publisher: string;
+  lesson: string;
+  sentence_num: number;
+  eng: string;
+  kor: string;
+}
 
+export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
+  // 💡 viewMode에 'passage_upload' (본문 업로더) 탭 추가
+  const [viewMode, setViewMode] = useState<'studio' | 'archive' | 'db_upload' | 'db_distribute' | 'passage_upload'>('studio');
+
+  // --- 기존 상태들 ---
   const [sourceText, setSourceText] = useState('');
   const [questionCount, setQuestionCount] = useState(5); 
   const [isGenerated, setIsGenerated] = useState(false);
@@ -68,6 +80,13 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   const [fetchedDbQuestions, setFetchedDbQuestions] = useState<MiddleQuestion[]>([]);
   const [selectedDbQuestionIds, setSelectedDbQuestionIds] = useState<number[]>([]);
   const [isFetchingDb, setIsFetchingDb] = useState(false);
+
+  // 💡 본문 업로더 전용 상태들 추가
+  const [passageText, setPassageText] = useState('');
+  const [passageMeta, setPassageMeta] = useState({ grade: '중2', publisher: '동아(이)', lesson: '1과' });
+  const [parsedSentences, setParsedSentences] = useState<MiddleSentence[]>([]);
+  const [isParsingPassage, setIsParsingPassage] = useState(false);
+  const [isUploadingPassage, setIsUploadingPassage] = useState(false);
 
   useEffect(() => {
     const fetchStudents = async () => {
@@ -148,7 +167,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     cursor: selectedStudentIds.length === 0 ? 'not-allowed' : 'pointer'
   };
 
-  // 💡 인쇄용 옵션 박스 스타일을 안전하게 함수로 분리하여 문법 에러 원천 차단
   const getPrintOptionsStyle = (isShortOptions: boolean): React.CSSProperties => {
     return {
       display: 'flex',
@@ -172,6 +190,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   6. 🚨 JSON 오류 방지: 응답은 반드시 완벽한 JSON Array [ ] 형태여야 하며, 텍스트 내용(Value) 안에 큰따옴표(")를 쓰면 에러가 나므로 반드시 작은따옴표(')로만 대체해서 쓰세요.
   `;
 
+  // --- 기존 AI 문제 생성 로직 ---
   const handleGenerateAI = async (type: 'elem' | 'mid' | 'high') => {
     if (!sourceText) return alert("원본 지문이나 문장을 먼저 입력해주세요!");
     
@@ -381,6 +400,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
     }
   };
 
+  // --- 기존 문법 족보 HWP 파싱 업로더 ---
   const handleParseHwpToDB = async () => {
     if (!uploadText.trim()) return alert("한글 파일에서 복사한 텍스트를 먼저 붙여넣어 주세요!");
     if (!uploadMeta.publisher || !uploadMeta.lesson || !uploadMeta.grammar_tag) {
@@ -525,6 +545,114 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
 
   const toggleDbQuestionSelect = (id: number) => {
     setSelectedDbQuestionIds(prev => prev.includes(id) ? prev.filter(qid => qid !== id) : [...prev, id]);
+  };
+
+  // 💡 [새 기능] 교과서 본문 1:1 매칭 파싱 로직
+  const handleParsePassageText = async () => {
+    if (!passageText.trim()) return alert("교과서 본문 텍스트를 입력해주세요!");
+    if (!passageMeta.publisher || !passageMeta.lesson) {
+      return alert("출판사와 단원을 모두 입력해주세요!");
+    }
+
+    const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || (CONFIG as any)?.GEMINI?.API_KEY || (CONFIG as any)?.GEMINI_API_KEY;
+    setIsParsingPassage(true);
+    setParsedSentences([]);
+
+    const prompt = `
+    당신은 교과서 본문 데이터 구축 전문가입니다.
+    제공된 [본문 원본 텍스트] 안에는 영어 단락들과 한글 해석 단락들이 섞여 있거나 분리되어 있습니다.
+    당신의 임무는 이 텍스트를 읽고, **영어 문장과 그에 정확히 대응하는 한글 해석을 1:1로 짝지어 문장 단위로 분리**하는 것입니다.
+
+    [본문 원본 텍스트]
+    ${passageText}
+
+    [출력 필수 조건]
+    1. 텍스트 흐름 순서대로 문장 번호(sentence_num)를 1부터 순차적으로 부여하세요.
+    2. 영어 문장 하나당 정확히 일치하는 한글 해석 하나를 짝지어주세요.
+    3. 절대 텍스트의 내용을 임의로 생략하거나 지어내지 마세요.
+    4. 반드시 아래의 JSON 배열(Array) 양식으로만 대답하고 마크다운 기호나 다른 말은 절대 넣지 마세요.
+
+    [출력 JSON 양식]
+    [
+      {
+        "sentence_num": 1,
+        "eng": "Hello, friends! My name is Monica, and I live in Venice.",
+        "kor": "안녕, 친구들! 내 이름은 Monica이고, 나는 베네치아에서 살고 있어."
+      },
+      {
+        "sentence_num": 2,
+        "eng": "Have you heard of Venice?",
+        "kor": "베네치아에 대해 들어 본 적 있니?"
+      }
+    ]
+    `;
+
+    const modelsToTry = ['gemini-3.7-flash', 'gemini-3.1-pro', 'gemini-3.5-flash-lite'];
+    let success = false;
+    let textResponse = '';
+
+    for (const model of modelsToTry) {
+      try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.1, maxOutputTokens: 8192, responseMimeType: "application/json" } 
+          })
+        });
+
+        const data = await response.json();
+        if (data.error) throw new Error(data.error.message);
+
+        textResponse = data.candidates[0].content.parts[0].text;
+        success = true; 
+        break; 
+      } catch (error) {
+        console.warn(`본문 파싱 실패: ${model}`);
+      }
+    }
+
+    try {
+      if (!success) throw new Error("API 호출 실패");
+      let cleanJson = textResponse.replace(/```json/gi, '').replace(/```/g, '').trim();
+      
+      const parsedArray = JSON.parse(cleanJson);
+      
+      const finalSentences: MiddleSentence[] = parsedArray.map((item: any) => ({
+        grade: passageMeta.grade,
+        publisher: passageMeta.publisher,
+        lesson: passageMeta.lesson,
+        sentence_num: item.sentence_num,
+        eng: item.eng,
+        kor: item.kor
+      }));
+
+      setParsedSentences(finalSentences);
+    } catch (err) {
+      alert("본문을 분석하는 중 오류가 발생했습니다. 원본 텍스트 형태를 조금 다듬은 뒤 다시 시도해주세요.");
+    } finally {
+      setIsParsingPassage(false);
+    }
+  };
+
+  // 💡 [새 기능] 교과서 본문을 middle_sentences DB에 저장
+  const handleUploadPassageToDB = async () => {
+    if (parsedSentences.length === 0) return;
+    setIsUploadingPassage(true);
+    
+    try {
+      const { error } = await supabase.from('middle_sentences').insert(parsedSentences);
+      if (error) throw error;
+      
+      alert(`🎉 총 ${parsedSentences.length}개의 본문 문장이 수파베이스 보물창고에 영구 저장되었습니다!`);
+      setParsedSentences([]);
+      setPassageText('');
+    } catch (err: any) {
+      alert(`업로드 실패: ${err.message}`);
+    } finally {
+      setIsUploadingPassage(false);
+    }
   };
 
   const currentPrintProblems = viewMode === 'studio' ? generatedProblems : (selectedExam?.problems || []);
@@ -678,6 +806,8 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
             <div style={{ width: '2px', backgroundColor: '#cbd5e1', margin: '4px 8px' }}></div>
             <button onClick={() => setViewMode('db_upload')} style={getTabStyle('db_upload', '#f59e0b')}>📥 중등 DB 업로더</button>
             <button onClick={() => setViewMode('db_distribute')} style={getTabStyle('db_distribute', '#10b981')}>🎯 중등 DB 배포</button>
+            <div style={{ width: '2px', backgroundColor: '#cbd5e1', margin: '4px 8px' }}></div>
+            <button onClick={() => setViewMode('passage_upload')} style={getTabStyle('passage_upload', '#ec4899')}>📖 본문 업로더</button>
           </div>
         </div>
 
@@ -704,6 +834,68 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
 
       <div className="no-print" style={{ padding: '24px', maxWidth: '1600px', margin: '0 auto' }}>
         
+        {/* 💡 새로 추가된 본문 업로더 화면 */}
+        {viewMode === 'passage_upload' && (
+          <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
+            <div style={{ flex: '0 0 350px', backgroundColor: 'white', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+              <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '800', color: '#ec4899' }}>📖 교과서 본문 복붙하기</h3>
+              <textarea 
+                placeholder="영어 단락과 한글 해석 단락이 섞여있어도 괜찮습니다! 그대로 복사해서 붙여넣으세요."
+                value={passageText}
+                onChange={(e) => setPassageText(e.target.value)}
+                style={{ width: '100%', height: '300px', padding: '12px', boxSizing: 'border-box', borderRadius: '8px', border: '1px solid #cbd5e1', resize: 'none', marginBottom: '16px' }}
+              />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+                <div>
+                  <label style={{ fontSize: '13px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>학년</label>
+                  <input value={passageMeta.grade} onChange={e => setPassageMeta({...passageMeta, grade: e.target.value})} placeholder="예: 중2" style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '13px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>출판사</label>
+                  <input value={passageMeta.publisher} onChange={e => setPassageMeta({...passageMeta, publisher: e.target.value})} placeholder="예: 동아(이)" style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '13px', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>단원</label>
+                  <input value={passageMeta.lesson} onChange={e => setPassageMeta({...passageMeta, lesson: e.target.value})} placeholder="예: 1과" style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
+                </div>
+              </div>
+              <button onClick={handleParsePassageText} disabled={isParsingPassage} style={{ width: '100%', padding: '14px', backgroundColor: '#ec4899', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '900', cursor: isParsingPassage ? 'not-allowed' : 'pointer' }}>
+                {isParsingPassage ? '🧠 AI가 한글-영어 짝을 맞추는 중... ⏳' : '✨ AI 문장 분리 및 짝맞추기 시작'}
+              </button>
+            </div>
+
+            <div style={{ flex: '1', backgroundColor: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', minHeight: '600px', overflowY: 'auto', maxHeight: '800px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #e2e8f0', paddingBottom: '12px', marginBottom: '20px' }}>
+                <h3 style={{ margin: 0, color: '#ec4899' }}>👀 1:1 매칭 결과 미리보기 ({parsedSentences.length}문장)</h3>
+                {parsedSentences.length > 0 && (
+                  <button onClick={handleUploadPassageToDB} disabled={isUploadingPassage} style={{ padding: '8px 16px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '900', cursor: isUploadingPassage ? 'not-allowed' : 'pointer' }}>
+                    {isUploadingPassage ? '저장 중...' : '💾 수파베이스에 본문 영구 저장하기'}
+                  </button>
+                )}
+              </div>
+
+              {parsedSentences.length === 0 ? (
+                <div style={{ color: '#94a3b8', textAlign: 'center', marginTop: '100px' }}>AI 짝맞추기 시작 버튼을 누르면 문장별 매칭 결과가 이곳에 표시됩니다.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {parsedSentences.map((s, idx) => (
+                    <div key={idx} style={{ padding: '16px', border: '1px solid #e2e8f0', borderRadius: '12px', backgroundColor: '#fdf2f8', display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+                      <div style={{ width: '40px', height: '40px', backgroundColor: '#ec4899', color: 'white', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: '900', fontSize: '18px', flexShrink: 0 }}>
+                        {s.sentence_num}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: '900', color: '#be185d', marginBottom: '8px', fontSize: '18px' }}>E. {s.eng}</div>
+                        <div style={{ fontSize: '15px', color: '#475569', fontWeight: 'bold' }}>K. {s.kor}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* --- 아래는 기존 화면들 (스튜디오, 보관함, 업로더, 배포) --- */}
         {viewMode === 'studio' && (
           <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
             <div style={{ flex: '0 0 300px', backgroundColor: 'white', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
@@ -1088,7 +1280,6 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
                     <div style={{ border: '1px solid #000', padding: '12px', marginBottom: '10px', fontSize: '10pt', lineHeight: '1.5', wordBreak: 'keep-all', overflowWrap: 'break-word', width: '100%', boxSizing: 'border-box', textAlign: 'left' }}>
                       {renderTextWithFormatting(prob.passage)}
                     </div>
-                    {/* 💡 스타일 객체를 함수로 분리하여 문법 에러 완전 해결 */}
                     <div className="options-box" style={getPrintOptionsStyle(isShortOptions)}>
                       {prob.options && prob.options.length > 0 ? (
                         prob.options.map(opt => (
