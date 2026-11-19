@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase'; 
 import { CONFIG } from '../config'; 
+import WrongAnswerReport from './WrongAnswerReport';
 
 interface Problem {
   question: string;
@@ -47,7 +48,7 @@ interface MiddleSentence {
 
 export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
   // 💡 viewMode에 'passage_upload' (본문 업로더) 탭 추가
-  const [viewMode, setViewMode] = useState<'studio' | 'archive' | 'db_upload' | 'db_distribute' | 'passage_upload'>('studio');
+  const [viewMode, setViewMode] = useState<'studio' | 'archive' | 'db_upload' | 'db_distribute' | 'passage_upload' | 'wrong_report'>('studio');
 
   // --- 기존 상태들 ---
   const [sourceText, setSourceText] = useState('');
@@ -808,6 +809,7 @@ export default function LmsAiStudio({ onBack }: { onBack?: () => void }) {
             <button onClick={() => setViewMode('db_distribute')} style={getTabStyle('db_distribute', '#10b981')}>🎯 중등 DB 배포</button>
             <div style={{ width: '2px', backgroundColor: '#cbd5e1', margin: '4px 8px' }}></div>
             <button onClick={() => setViewMode('passage_upload')} style={getTabStyle('passage_upload', '#ec4899')}>📖 본문 업로더</button>
+            <button onClick={() => setViewMode('wrong_report')} style={getTabStyle('wrong_report', '#ef4444')}>📊 오답 분석</button>
           </div>
         </div>
 
